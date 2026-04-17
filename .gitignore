@@ -1,0 +1,7 @@
+# Keep the repository focused on the selected sync files for now.
+/*
+!/.gitignore
+!/.gitattributes
+!/algorithm.md
+!/simulation.md
+!/计划书.docx
