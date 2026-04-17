@@ -1,0 +1,980 @@
+function results = run_project(selectedCases, cfg)
+%RUN_PROJECT Run the MATLAB manifold-calibration experiments.
+%
+% Usage:
+%   run_project()              % run all 10 cases
+%   run_project([1 3 7])       % run selected cases
+%
+% The code follows the project documents:
+%   1) HFSS data are always treated as the truth manifold.
+%   2) Sparse calibration angles are used only to reconstruct the manifold.
+%   3) DOA snapshots are always generated from the HFSS truth manifold.
+
+if nargin < 1 || isempty(selectedCases)
+    selectedCases = 1:10;
+end
+
+rootDir = fileparts(mfilename('fullpath'));
+setup_paths(rootDir);
+
+if nargin < 2 || isempty(cfg)
+    cfg = default_config(rootDir);
+else
+    cfg.rootDir = rootDir;
+    if ~isfield(cfg, 'outputDir') || isempty(cfg.outputDir)
+        cfg.outputDir = fullfile(rootDir, 'results');
+    end
+end
+
+if ~exist(cfg.outputDir, 'dir')
+    mkdir(cfg.outputDir);
+end
+
+ctx = build_project_context(cfg);
+caseRunners = { ...
+    @case01_problem_validation, ...
+    @case02_dominant_mismatch, ...
+    @case03_unseen_generalization, ...
+    @case04_calibration_count_sensitivity, ...
+    @case05_sampling_strategy_sensitivity, ...
+    @case06_model_sensitivity, ...
+    @case07_single_source_snr, ...
+    @case08_single_source_snapshots, ...
+    @case09_two_source_resolution, ...
+    @case10_random_split_robustness};
+
+results = struct();
+
+for runIdx = 1:numel(selectedCases)
+    caseId = selectedCases(runIdx);
+    if caseId < 1 || caseId > numel(caseRunners)
+        error('Case id must be an integer in [1, 10].');
+    end
+
+    fprintf('\n=== Running Case %02d ===\n', caseId);
+    fieldName = sprintf('case%02d', caseId);
+    results.(fieldName) = caseRunners{caseId}(cfg, ctx);
+end
+end
+
+function caseResult = case01_problem_validation(cfg, ctx)
+rng(cfg.randomSeed + 1, 'twister');
+outDir = local_case_output_dir(cfg, 'case01_problem_validation');
+
+metrics = compute_manifold_metrics(ctx.AH, ctx.AI);
+phaseResidualDeg = rad2deg(unwrap(angle(ctx.AH .* conj(ctx.AI)), [], 2));
+amplitudeResidual = abs(ctx.AH) ./ max(abs(ctx.AI), eps) - 1;
+
+fig = figure('Visible', 'off', 'Position', [100 100 1200 760]);
+tiledlayout(2, 1, 'Padding', 'compact', 'TileSpacing', 'compact');
+nexttile;
+plot(ctx.thetaDeg, phaseResidualDeg.', 'LineWidth', 1.2);
+grid on;
+xlabel('Angle (deg)');
+ylabel('Phase residual (deg)');
+title('Case 1: element-wise phase residual');
+legend(compose('Element %d', 1:ctx.numElements), 'Location', 'eastoutside');
+nexttile;
+plot(ctx.thetaDeg, amplitudeResidual.', 'LineWidth', 1.2);
+grid on;
+xlabel('Angle (deg)');
+ylabel('Amplitude residual');
+title('Case 1: element-wise amplitude residual');
+save_figure(fig, fullfile(outDir, 'residual_components.png'));
+
+fig = figure('Visible', 'off', 'Position', [120 120 1100 700]);
+tiledlayout(2, 1, 'Padding', 'compact', 'TileSpacing', 'compact');
+nexttile;
+plot(ctx.thetaDeg, metrics.correlation, 'o-', 'LineWidth', 1.4, 'MarkerSize', 5);
+grid on;
+xlabel('Angle (deg)');
+ylabel('Complex correlation');
+title('Case 1: steering-vector similarity');
+nexttile;
+plot(ctx.thetaDeg, metrics.relativeError, 'o-', 'LineWidth', 1.4, 'MarkerSize', 5);
+grid on;
+xlabel('Angle (deg)');
+ylabel('Relative error');
+title('Case 1: ideal-vs-HFSS manifold mismatch');
+save_figure(fig, fullfile(outDir, 'similarity_curves.png'));
+
+exampleAngle = cfg.case1.exampleAngleDeg;
+methods = [ ...
+    local_method('ideal', 'Ideal', ctx.AI), ...
+    local_method('oracle', 'HFSS Oracle', ctx.AH)];
+
+evalCfg = struct();
+evalCfg.mode = 'single';
+evalCfg.trueAngles = exampleAngle;
+evalCfg.snrDb = cfg.case1.highSNRDb;
+evalCfg.snapshots = cfg.case1.snapshots;
+evalCfg.monteCarlo = 1;
+evalCfg.toleranceDeg = cfg.case1.toleranceDeg;
+evalCfg.collectRepresentativeSpectrum = true;
+exampleSpectrum = benchmark_music(ctx, methods, evalCfg);
+
+fig = figure('Visible', 'off', 'Position', [140 140 1100 500]);
+hold on;
+for methodIdx = 1:numel(exampleSpectrum.methods)
+    plot(ctx.thetaDeg, 10 * log10(exampleSpectrum.methods(methodIdx).representativeSpectrum), ...
+        'LineWidth', 1.6);
+end
+grid on;
+xlabel('Scan angle (deg)');
+ylabel('Pseudo-spectrum (dB)');
+title(sprintf('Case 1: MUSIC spectrum at %.1f deg, SNR = %g dB', exampleAngle, cfg.case1.highSNRDb));
+legend({exampleSpectrum.methods.label}, 'Location', 'best');
+save_figure(fig, fullfile(outDir, 'example_music_spectrum.png'));
+
+evalCfg.trueAngles = ctx.thetaDeg(:);
+evalCfg.monteCarlo = cfg.case1.monteCarlo;
+evalCfg.collectRepresentativeSpectrum = false;
+highSnrSweep = benchmark_music(ctx, methods, evalCfg);
+
+fig = figure('Visible', 'off', 'Position', [160 160 1100 500]);
+hold on;
+for methodIdx = 1:numel(highSnrSweep.methods)
+    plot(ctx.thetaDeg, highSnrSweep.methods(methodIdx).perTargetRmse, ...
+        'o-', 'LineWidth', 1.4, 'MarkerSize', 5);
+end
+grid on;
+xlabel('True angle (deg)');
+ylabel('DOA RMSE (deg)');
+title(sprintf('Case 1: high-SNR angle error, SNR = %g dB', cfg.case1.highSNRDb));
+legend({highSnrSweep.methods.label}, 'Location', 'best');
+save_figure(fig, fullfile(outDir, 'high_snr_angle_bias.png'));
+
+caseResult = struct();
+caseResult.outputDir = outDir;
+caseResult.metrics = metrics;
+caseResult.exampleSpectrum = exampleSpectrum;
+caseResult.highSnrSweep = highSnrSweep;
+save(fullfile(outDir, 'case01_results.mat'), 'caseResult');
+end
+
+function caseResult = case02_dominant_mismatch(cfg, ctx)
+rng(cfg.randomSeed + 2, 'twister');
+outDir = local_case_output_dir(cfg, 'case02_dominant_mismatch');
+
+amplitudeRatio = abs(ctx.AH) ./ max(abs(ctx.AI), eps);
+phaseResidual = angle(ctx.AH .* conj(ctx.AI));
+
+aPhaseOnly = local_normalize_columns(exp(1i * phaseResidual) .* ctx.AI);
+aAmplitudeOnly = local_normalize_columns(amplitudeRatio .* ctx.AI);
+aAmpPhase = local_normalize_columns(amplitudeRatio .* exp(1i * phaseResidual) .* ctx.AI);
+
+metricsIdeal = compute_manifold_metrics(ctx.AH, ctx.AI);
+metricsPhase = compute_manifold_metrics(ctx.AH, aPhaseOnly);
+metricsAmplitude = compute_manifold_metrics(ctx.AH, aAmplitudeOnly);
+metricsAmpPhase = compute_manifold_metrics(ctx.AH, aAmpPhase);
+
+phaseEnergy = sum(abs(exp(1i * phaseResidual) - 1) .^ 2, 'all');
+amplitudeEnergy = sum(abs(amplitudeRatio - 1) .^ 2, 'all');
+energyShare = 100 * [phaseEnergy, amplitudeEnergy] / (phaseEnergy + amplitudeEnergy);
+
+methods = [ ...
+    local_method('ideal', 'Ideal', ctx.AI), ...
+    local_method('phase_only', 'Phase-only', aPhaseOnly), ...
+    local_method('amplitude_only', 'Amplitude-only', aAmplitudeOnly), ...
+    local_method('amp_phase', 'Amp+Phase', aAmpPhase)];
+
+evalCfg = struct();
+evalCfg.mode = 'single';
+evalCfg.trueAngles = ctx.thetaDeg(:);
+evalCfg.snrDb = cfg.case2.evalSNRDb;
+evalCfg.snapshots = cfg.case2.snapshots;
+evalCfg.monteCarlo = cfg.case2.monteCarlo;
+evalCfg.toleranceDeg = cfg.case2.toleranceDeg;
+evalCfg.collectRepresentativeSpectrum = false;
+bench = benchmark_music(ctx, methods, evalCfg);
+
+fig = figure('Visible', 'off', 'Position', [120 120 1300 480]);
+tiledlayout(1, 3, 'Padding', 'compact', 'TileSpacing', 'compact');
+
+nexttile;
+bar(energyShare);
+grid on;
+set(gca, 'XTickLabel', {'Phase', 'Amplitude'});
+ylabel('Energy share (%)');
+title('Case 2: mismatch energy share');
+
+nexttile;
+bar([ ...
+    mean(metricsIdeal.relativeError), ...
+    mean(metricsPhase.relativeError), ...
+    mean(metricsAmplitude.relativeError), ...
+    mean(metricsAmpPhase.relativeError)]);
+grid on;
+set(gca, 'XTickLabel', {'Ideal', 'Phase', 'Amplitude', 'Amp+Phase'});
+ylabel('Mean manifold relative error');
+title('Case 2: manifold approximation error');
+
+nexttile;
+bar(arrayfun(@(s) s.rmse, bench.methods));
+grid on;
+set(gca, 'XTickLabel', {bench.methods.label});
+ylabel('Single-source DOA RMSE (deg)');
+title(sprintf('Case 2: DOA RMSE at %g dB', cfg.case2.evalSNRDb));
+xtickangle(20);
+save_figure(fig, fullfile(outDir, 'mismatch_dominance.png'));
+
+caseResult = struct();
+caseResult.outputDir = outDir;
+caseResult.energySharePercent = energyShare;
+caseResult.manifoldMetrics = struct( ...
+    'ideal', metricsIdeal, ...
+    'phaseOnly', metricsPhase, ...
+    'amplitudeOnly', metricsAmplitude, ...
+    'ampPhase', metricsAmpPhase);
+caseResult.benchmark = bench;
+save(fullfile(outDir, 'case02_results.mat'), 'caseResult');
+end
+
+function caseResult = case03_unseen_generalization(cfg, ctx)
+rng(cfg.randomSeed + 3, 'twister');
+outDir = local_case_output_dir(cfg, 'case03_unseen_generalization');
+
+lValues = cfg.case3.lValues;
+methodNames = {'Ideal', 'Interpolation', 'Proposed', 'HFSS Oracle'};
+meanUnseenError = zeros(numel(lValues), numel(methodNames));
+storedModels = cell(1, numel(lValues));
+
+for lIdx = 1:numel(lValues)
+    calIdx = select_calibration_indices(ctx.thetaDeg, lValues(lIdx), 'uniform');
+    storedModels{lIdx} = build_sparse_models(ctx, calIdx, cfg.model);
+    models = storedModels{lIdx};
+
+    metricsIdeal = compute_manifold_metrics(ctx.AH(:, models.testIdx), ctx.AI(:, models.testIdx));
+    metricsInterp = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AInterp(:, models.testIdx));
+    metricsProposed = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposed(:, models.testIdx));
+
+    meanUnseenError(lIdx, :) = [ ...
+        mean(metricsIdeal.relativeError), ...
+        mean(metricsInterp.relativeError), ...
+        mean(metricsProposed.relativeError), ...
+        0];
+end
+
+repL = cfg.case3.representativeL;
+repMatch = find(lValues == repL, 1, 'first');
+if isempty(repMatch)
+    repCalIdx = select_calibration_indices(ctx.thetaDeg, repL, 'uniform');
+    repModels = build_sparse_models(ctx, repCalIdx, cfg.model);
+else
+    repModels = storedModels{repMatch};
+end
+
+fig = figure('Visible', 'off', 'Position', [120 120 1050 500]);
+hold on;
+for methodIdx = 1:numel(methodNames)
+    plot(lValues, meanUnseenError(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+xlabel('Number of calibration angles L');
+ylabel('Mean unseen relative error');
+title('Case 3: unseen-direction manifold generalization');
+legend(methodNames, 'Location', 'best');
+save_figure(fig, fullfile(outDir, 'unseen_error_vs_L.png'));
+
+fig = figure('Visible', 'off', 'Position', [140 140 1200 700]);
+tiledlayout(numel(cfg.case3.representativeElements), 1, 'Padding', 'compact', 'TileSpacing', 'compact');
+for plotIdx = 1:numel(cfg.case3.representativeElements)
+    elementIdx = cfg.case3.representativeElements(plotIdx);
+    nexttile;
+    hold on;
+    plot(ctx.thetaDeg, rad2deg(repModels.phaseTruthFull(elementIdx, :)), 'k-', 'LineWidth', 1.6);
+    plot(ctx.thetaDeg, rad2deg(repModels.phaseInterpFull(elementIdx, :)), '--', 'LineWidth', 1.4);
+    plot(ctx.thetaDeg, rad2deg(repModels.phaseFitFull(elementIdx, :)), '-.', 'LineWidth', 1.6);
+    scatter(repModels.calAnglesDeg, rad2deg(repModels.phaseTruthFull(elementIdx, repModels.calIdx)), ...
+        36, 'filled');
+    grid on;
+    ylabel(sprintf('Element %d (deg)', elementIdx));
+    title(sprintf('Case 3: phase reconstruction for element %d', elementIdx));
+end
+xlabel('Angle (deg)');
+legend({'HFSS truth', 'Interpolation', 'Proposed fit', 'Calibration samples'}, 'Location', 'eastoutside');
+save_figure(fig, fullfile(outDir, 'phase_reconstruction.png'));
+
+fig = figure('Visible', 'off', 'Position', [150 150 1250 820]);
+numRepAngles = numel(cfg.case3.representativeAnglesDeg);
+tiledlayout(numRepAngles, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
+
+for angleIdx = 1:numRepAngles
+    queryAngle = cfg.case3.representativeAnglesDeg(angleIdx);
+    gridIdx = local_angle_index(ctx.thetaDeg, queryAngle);
+    elemAxis = 1:ctx.numElements;
+
+    nexttile;
+    hold on;
+    plot(elemAxis, abs(ctx.AH(:, gridIdx)), 'ko-', 'LineWidth', 1.4);
+    plot(elemAxis, abs(ctx.AI(:, gridIdx)), 's-', 'LineWidth', 1.2);
+    plot(elemAxis, abs(repModels.AInterp(:, gridIdx)), 'd--', 'LineWidth', 1.2);
+    plot(elemAxis, abs(repModels.AProposed(:, gridIdx)), '^-', 'LineWidth', 1.4);
+    grid on;
+    xlabel('Element index');
+    ylabel('Magnitude');
+    title(sprintf('Magnitude at %.1f deg', queryAngle));
+
+    nexttile;
+    hold on;
+    plot(elemAxis, rad2deg(unwrap(angle(ctx.AH(:, gridIdx)))), 'ko-', 'LineWidth', 1.4);
+    plot(elemAxis, rad2deg(unwrap(angle(ctx.AI(:, gridIdx)))), 's-', 'LineWidth', 1.2);
+    plot(elemAxis, rad2deg(unwrap(angle(repModels.AInterp(:, gridIdx)))), 'd--', 'LineWidth', 1.2);
+    plot(elemAxis, rad2deg(unwrap(angle(repModels.AProposed(:, gridIdx)))), '^-', 'LineWidth', 1.4);
+    grid on;
+    xlabel('Element index');
+    ylabel('Phase (deg)');
+    title(sprintf('Phase at %.1f deg', queryAngle));
+end
+legend({'HFSS truth', 'Ideal', 'Interpolation', 'Proposed'}, 'Location', 'eastoutside');
+save_figure(fig, fullfile(outDir, 'steering_vector_comparison.png'));
+
+caseResult = struct();
+caseResult.outputDir = outDir;
+caseResult.lValues = lValues;
+caseResult.meanUnseenError = meanUnseenError;
+caseResult.representativeModels = repModels;
+save(fullfile(outDir, 'case03_results.mat'), 'caseResult');
+end
+
+function caseResult = case04_calibration_count_sensitivity(cfg, ctx)
+rng(cfg.randomSeed + 4, 'twister');
+outDir = local_case_output_dir(cfg, 'case04_calibration_count_sensitivity');
+
+lValues = cfg.case4.lValues;
+methodKeys = {'ideal', 'interp', 'proposed', 'oracle'};
+methodsLegend = {'Ideal', 'Interpolation', 'Proposed', 'HFSS Oracle'};
+
+manifoldError = zeros(numel(lValues), numel(methodKeys));
+singleRmse = zeros(numel(lValues), numel(methodKeys));
+resolutionProb = zeros(numel(lValues), numel(methodKeys));
+perL = cell(1, numel(lValues));
+
+for lIdx = 1:numel(lValues)
+    fprintf('Case 4: L = %d\n', lValues(lIdx));
+    calIdx = select_calibration_indices(ctx.thetaDeg, lValues(lIdx), 'uniform');
+    models = build_sparse_models(ctx, calIdx, cfg.model);
+    perL{lIdx}.models = models;
+
+    metricsIdeal = compute_manifold_metrics(ctx.AH(:, models.testIdx), ctx.AI(:, models.testIdx));
+    metricsInterp = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AInterp(:, models.testIdx));
+    metricsProposed = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposed(:, models.testIdx));
+    manifoldError(lIdx, :) = [ ...
+        mean(metricsIdeal.relativeError), ...
+        mean(metricsInterp.relativeError), ...
+        mean(metricsProposed.relativeError), ...
+        0];
+
+    methods = local_named_methods(ctx, models, methodKeys);
+    evalCfg = struct();
+    evalCfg.mode = 'single';
+    evalCfg.trueAngles = models.testAnglesDeg(:);
+    evalCfg.snrDb = cfg.case4.evalSNRDb;
+    evalCfg.snapshots = cfg.case4.snapshots;
+    evalCfg.monteCarlo = cfg.case4.monteCarlo;
+    evalCfg.toleranceDeg = cfg.case4.toleranceDeg;
+    evalCfg.collectRepresentativeSpectrum = false;
+    singleBench = benchmark_music(ctx, methods, evalCfg);
+
+    for methodIdx = 1:numel(methodKeys)
+        singleRmse(lIdx, methodIdx) = singleBench.methods(methodIdx).rmse;
+    end
+    perL{lIdx}.singleBenchmark = singleBench;
+
+    validPairs = local_filter_pairs(cfg.case4.sourcePairsDeg, ctx.thetaDeg, models.calAnglesDeg);
+    if isempty(validPairs)
+        validPairs = cfg.case4.sourcePairsDeg;
+    end
+    evalCfg.mode = 'double';
+    evalCfg.trueAngles = validPairs;
+    doubleBench = benchmark_music(ctx, methods, evalCfg);
+    for methodIdx = 1:numel(methodKeys)
+        resolutionProb(lIdx, methodIdx) = doubleBench.methods(methodIdx).successRate;
+    end
+    perL{lIdx}.doubleBenchmark = doubleBench;
+end
+
+fig = figure('Visible', 'off', 'Position', [120 120 1300 480]);
+tiledlayout(1, 3, 'Padding', 'compact', 'TileSpacing', 'compact');
+
+nexttile;
+hold on;
+for methodIdx = 1:numel(methodKeys)
+    plot(lValues, manifoldError(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+xlabel('Calibration count L');
+ylabel('Mean unseen relative error');
+title('Case 4: manifold error vs L');
+
+nexttile;
+hold on;
+for methodIdx = 1:numel(methodKeys)
+    plot(lValues, singleRmse(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+xlabel('Calibration count L');
+ylabel('Single-source DOA RMSE (deg)');
+title(sprintf('Case 4: DOA RMSE vs L at %g dB', cfg.case4.evalSNRDb));
+
+nexttile;
+hold on;
+for methodIdx = 1:numel(methodKeys)
+    plot(lValues, resolutionProb(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+ylim([0 1]);
+xlabel('Calibration count L');
+ylabel('Resolution probability');
+title('Case 4: two-source resolution vs L');
+legend(methodsLegend, 'Location', 'best');
+save_figure(fig, fullfile(outDir, 'calibration_count_sensitivity.png'));
+
+caseResult = struct();
+caseResult.outputDir = outDir;
+caseResult.lValues = lValues;
+caseResult.manifoldError = manifoldError;
+caseResult.singleRmse = singleRmse;
+caseResult.resolutionProb = resolutionProb;
+caseResult.perL = perL;
+save(fullfile(outDir, 'case04_results.mat'), 'caseResult');
+end
+
+function caseResult = case05_sampling_strategy_sensitivity(cfg, ctx)
+rng(cfg.randomSeed + 5, 'twister');
+outDir = local_case_output_dir(cfg, 'case05_sampling_strategy_sensitivity');
+
+strategyNames = cfg.case5.strategyNames;
+snrSweep = cfg.case5.snrSweepDb;
+
+meanUnseenError = zeros(1, numel(strategyNames));
+stdUnseenError = zeros(1, numel(strategyNames));
+meanRmse = zeros(numel(strategyNames), numel(snrSweep));
+stdRmse = zeros(numel(strategyNames), numel(snrSweep));
+details = cell(1, numel(strategyNames));
+
+for strategyIdx = 1:numel(strategyNames)
+    strategyName = strategyNames{strategyIdx};
+    fprintf('Case 5: strategy = %s\n', strategyName);
+    if strcmpi(strategyName, 'random')
+        numTrials = cfg.case5.randomTrials;
+    else
+        numTrials = 1;
+    end
+
+    unseenTrials = zeros(numTrials, 1);
+    rmseTrials = zeros(numTrials, numel(snrSweep));
+    details{strategyIdx} = cell(numTrials, 1);
+
+    for trialIdx = 1:numTrials
+        seed = cfg.randomSeed + 500 + strategyIdx * 100 + trialIdx;
+        calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case5.l, strategyName, seed);
+        models = build_sparse_models(ctx, calIdx, cfg.model);
+
+        metricsProposed = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposed(:, models.testIdx));
+        unseenTrials(trialIdx) = mean(metricsProposed.relativeError);
+
+        methods = local_named_methods(ctx, models, {'proposed'});
+        for snrIdx = 1:numel(snrSweep)
+            rng(cfg.randomSeed + 900 + strategyIdx * 100 + trialIdx * 10 + snrIdx, 'twister');
+            evalCfg = struct();
+            evalCfg.mode = 'single';
+            evalCfg.trueAngles = models.testAnglesDeg(:);
+            evalCfg.snrDb = snrSweep(snrIdx);
+            evalCfg.snapshots = cfg.case5.snapshots;
+            evalCfg.monteCarlo = cfg.case5.monteCarlo;
+            evalCfg.toleranceDeg = cfg.case5.toleranceDeg;
+            evalCfg.collectRepresentativeSpectrum = false;
+            bench = benchmark_music(ctx, methods, evalCfg);
+            rmseTrials(trialIdx, snrIdx) = bench.methods(1).rmse;
+            details{strategyIdx}{trialIdx}.(['snr_' strrep(num2str(snrSweep(snrIdx)), '-', 'm')]) = bench;
+        end
+    end
+
+    meanUnseenError(strategyIdx) = mean(unseenTrials);
+    stdUnseenError(strategyIdx) = std(unseenTrials);
+    meanRmse(strategyIdx, :) = mean(rmseTrials, 1);
+    stdRmse(strategyIdx, :) = std(rmseTrials, 0, 1);
+    details{strategyIdx} = struct('unseenTrials', unseenTrials, 'rmseTrials', rmseTrials);
+end
+
+fig = figure('Visible', 'off', 'Position', [140 140 1200 500]);
+tiledlayout(1, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
+
+nexttile;
+bar(meanUnseenError);
+hold on;
+errorbar(1:numel(strategyNames), meanUnseenError, stdUnseenError, '.k', 'LineWidth', 1.2);
+grid on;
+set(gca, 'XTick', 1:numel(strategyNames), 'XTickLabel', strategyNames);
+xtickangle(20);
+ylabel('Mean unseen relative error');
+title(sprintf('Case 5: sampling strategy, L = %d', cfg.case5.l));
+
+nexttile;
+hold on;
+for strategyIdx = 1:numel(strategyNames)
+    errorbar(snrSweep, meanRmse(strategyIdx, :), stdRmse(strategyIdx, :), ...
+        'o-', 'LineWidth', 1.4, 'MarkerSize', 6);
+end
+grid on;
+xlabel('SNR (dB)');
+ylabel('DOA RMSE (deg)');
+title('Case 5: strategy sensitivity on DOA RMSE');
+legend(strategyNames, 'Location', 'best');
+save_figure(fig, fullfile(outDir, 'sampling_strategy_sensitivity.png'));
+
+caseResult = struct();
+caseResult.outputDir = outDir;
+caseResult.strategyNames = strategyNames;
+caseResult.meanUnseenError = meanUnseenError;
+caseResult.stdUnseenError = stdUnseenError;
+caseResult.meanRmse = meanRmse;
+caseResult.stdRmse = stdRmse;
+caseResult.details = details;
+save(fullfile(outDir, 'case05_results.mat'), 'caseResult');
+end
+
+function caseResult = case06_model_sensitivity(cfg, ctx)
+rng(cfg.randomSeed + 6, 'twister');
+outDir = local_case_output_dir(cfg, 'case06_model_sensitivity');
+
+calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case6.l, 'uniform');
+basisTypes = cfg.case6.basisTypes;
+orders = cfg.case6.orders;
+lambdas = cfg.case6.lambdas;
+
+errorCube = zeros(numel(orders), numel(lambdas), numel(basisTypes));
+
+for basisIdx = 1:numel(basisTypes)
+    for orderIdx = 1:numel(orders)
+        for lambdaIdx = 1:numel(lambdas)
+            modelCfg = cfg.model;
+            modelCfg.basisType = basisTypes{basisIdx};
+            modelCfg.order = orders(orderIdx);
+            modelCfg.lambda = lambdas(lambdaIdx);
+
+            models = build_sparse_models(ctx, calIdx, modelCfg);
+            metrics = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposed(:, models.testIdx));
+            errorCube(orderIdx, lambdaIdx, basisIdx) = mean(metrics.relativeError);
+        end
+    end
+end
+
+bestCurve = squeeze(min(errorCube, [], 2));
+
+fig = figure('Visible', 'off', 'Position', [120 120 1300 820]);
+tiledlayout(2, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
+
+for basisIdx = 1:numel(basisTypes)
+    nexttile;
+    imagesc(errorCube(:, :, basisIdx));
+    colorbar;
+    set(gca, 'XTick', 1:numel(lambdas), ...
+        'XTickLabel', arrayfun(@num2str, lambdas, 'UniformOutput', false), ...
+        'YTick', 1:numel(orders), ...
+        'YTickLabel', arrayfun(@num2str, orders, 'UniformOutput', false));
+    xlabel('\lambda');
+    ylabel('Order P');
+    title(sprintf('Case 6: %s basis', basisTypes{basisIdx}));
+end
+
+nexttile([1 2]);
+hold on;
+for basisIdx = 1:numel(basisTypes)
+    plot(orders, bestCurve(:, basisIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+xlabel('Model order P');
+ylabel('Best unseen relative error over \lambda');
+title(sprintf('Case 6: best error curve at L = %d', cfg.case6.l));
+legend(basisTypes, 'Location', 'best');
+save_figure(fig, fullfile(outDir, 'model_sensitivity.png'));
+
+caseResult = struct();
+caseResult.outputDir = outDir;
+caseResult.orders = orders;
+caseResult.lambdas = lambdas;
+caseResult.basisTypes = basisTypes;
+caseResult.errorCube = errorCube;
+caseResult.bestCurve = bestCurve;
+save(fullfile(outDir, 'case06_results.mat'), 'caseResult');
+end
+
+function caseResult = case07_single_source_snr(cfg, ctx)
+rng(cfg.randomSeed + 7, 'twister');
+outDir = local_case_output_dir(cfg, 'case07_single_source_snr');
+
+calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'uniform');
+models = build_sparse_models(ctx, calIdx, cfg.model);
+methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed', 'oracle'});
+snrSweep = cfg.case7.snrSweepDb;
+
+rmse = zeros(numel(snrSweep), numel(methods));
+successRate = zeros(numel(snrSweep), numel(methods));
+details = cell(1, numel(snrSweep));
+
+for snrIdx = 1:numel(snrSweep)
+    fprintf('Case 7: SNR = %g dB\n', snrSweep(snrIdx));
+    evalCfg = struct();
+    evalCfg.mode = 'single';
+    evalCfg.trueAngles = models.testAnglesDeg(:);
+    evalCfg.snrDb = snrSweep(snrIdx);
+    evalCfg.snapshots = cfg.case7.snapshots;
+    evalCfg.monteCarlo = cfg.case7.monteCarlo;
+    evalCfg.toleranceDeg = cfg.case7.toleranceDeg;
+    evalCfg.collectRepresentativeSpectrum = false;
+    bench = benchmark_music(ctx, methods, evalCfg);
+    details{snrIdx} = bench;
+    for methodIdx = 1:numel(methods)
+        rmse(snrIdx, methodIdx) = bench.methods(methodIdx).rmse;
+        successRate(snrIdx, methodIdx) = bench.methods(methodIdx).successRate;
+    end
+end
+
+fig = figure('Visible', 'off', 'Position', [130 130 1200 500]);
+tiledlayout(1, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
+
+nexttile;
+hold on;
+for methodIdx = 1:numel(methods)
+    plot(snrSweep, rmse(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+xlabel('SNR (dB)');
+ylabel('RMSE (deg)');
+title('Case 7: single-source RMSE vs SNR');
+
+nexttile;
+hold on;
+for methodIdx = 1:numel(methods)
+    plot(snrSweep, successRate(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+ylim([0 1]);
+xlabel('SNR (dB)');
+ylabel('Success rate');
+title('Case 7: success rate vs SNR');
+legend({methods.label}, 'Location', 'best');
+save_figure(fig, fullfile(outDir, 'rmse_and_success_vs_snr.png'));
+
+exampleAngle = cfg.case7.exampleAngleDeg;
+if ~ismember(exampleAngle, models.testAnglesDeg)
+    exampleAngle = models.testAnglesDeg(1);
+end
+
+fig = figure('Visible', 'off', 'Position', [150 150 1200 760]);
+tiledlayout(numel(cfg.case7.spectrumSnrDb), 1, 'Padding', 'compact', 'TileSpacing', 'compact');
+for snrIdx = 1:numel(cfg.case7.spectrumSnrDb)
+    evalCfg = struct();
+    evalCfg.mode = 'single';
+    evalCfg.trueAngles = exampleAngle;
+    evalCfg.snrDb = cfg.case7.spectrumSnrDb(snrIdx);
+    evalCfg.snapshots = cfg.case7.snapshots;
+    evalCfg.monteCarlo = 1;
+    evalCfg.toleranceDeg = cfg.case7.toleranceDeg;
+    evalCfg.collectRepresentativeSpectrum = true;
+    spectrumBench = benchmark_music(ctx, methods, evalCfg);
+
+    nexttile;
+    hold on;
+    for methodIdx = 1:numel(methods)
+        plot(ctx.thetaDeg, 10 * log10(spectrumBench.methods(methodIdx).representativeSpectrum), ...
+            'LineWidth', 1.4);
+    end
+    grid on;
+    xlabel('Scan angle (deg)');
+    ylabel('Pseudo-spectrum (dB)');
+    title(sprintf('Case 7: example spectrum, true angle = %.1f deg, SNR = %g dB', ...
+        exampleAngle, cfg.case7.spectrumSnrDb(snrIdx)));
+end
+legend({methods.label}, 'Location', 'eastoutside');
+save_figure(fig, fullfile(outDir, 'representative_spectra.png'));
+
+caseResult = struct();
+caseResult.outputDir = outDir;
+caseResult.models = models;
+caseResult.snrSweep = snrSweep;
+caseResult.rmse = rmse;
+caseResult.successRate = successRate;
+caseResult.details = details;
+save(fullfile(outDir, 'case07_results.mat'), 'caseResult');
+end
+
+function caseResult = case08_single_source_snapshots(cfg, ctx)
+rng(cfg.randomSeed + 8, 'twister');
+outDir = local_case_output_dir(cfg, 'case08_single_source_snapshots');
+
+calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'uniform');
+models = build_sparse_models(ctx, calIdx, cfg.model);
+methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed', 'oracle'});
+
+snapshotSweep = cfg.case8.snapshotSweep;
+snrValues = cfg.case8.snrValuesDb;
+rmse = zeros(numel(snapshotSweep), numel(methods), numel(snrValues));
+details = cell(numel(snrValues), numel(snapshotSweep));
+
+for snrIdx = 1:numel(snrValues)
+    for snapIdx = 1:numel(snapshotSweep)
+        fprintf('Case 8: SNR = %g dB, snapshots = %d\n', snrValues(snrIdx), snapshotSweep(snapIdx));
+        evalCfg = struct();
+        evalCfg.mode = 'single';
+        evalCfg.trueAngles = models.testAnglesDeg(:);
+        evalCfg.snrDb = snrValues(snrIdx);
+        evalCfg.snapshots = snapshotSweep(snapIdx);
+        evalCfg.monteCarlo = cfg.case8.monteCarlo;
+        evalCfg.toleranceDeg = cfg.case8.toleranceDeg;
+        evalCfg.collectRepresentativeSpectrum = false;
+        bench = benchmark_music(ctx, methods, evalCfg);
+        details{snrIdx, snapIdx} = bench;
+        for methodIdx = 1:numel(methods)
+            rmse(snapIdx, methodIdx, snrIdx) = bench.methods(methodIdx).rmse;
+        end
+    end
+end
+
+fig = figure('Visible', 'off', 'Position', [140 140 1200 520]);
+tiledlayout(1, numel(snrValues), 'Padding', 'compact', 'TileSpacing', 'compact');
+
+for snrIdx = 1:numel(snrValues)
+    nexttile;
+    hold on;
+    for methodIdx = 1:numel(methods)
+        plot(snapshotSweep, rmse(:, methodIdx, snrIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+    end
+    grid on;
+    xlabel('Snapshots');
+    ylabel('RMSE (deg)');
+    title(sprintf('Case 8: SNR = %g dB', snrValues(snrIdx)));
+end
+legend({methods.label}, 'Location', 'eastoutside');
+save_figure(fig, fullfile(outDir, 'rmse_vs_snapshots.png'));
+
+caseResult = struct();
+caseResult.outputDir = outDir;
+caseResult.models = models;
+caseResult.snapshotSweep = snapshotSweep;
+caseResult.snrValues = snrValues;
+caseResult.rmse = rmse;
+caseResult.details = details;
+save(fullfile(outDir, 'case08_results.mat'), 'caseResult');
+end
+
+function caseResult = case09_two_source_resolution(cfg, ctx)
+rng(cfg.randomSeed + 9, 'twister');
+outDir = local_case_output_dir(cfg, 'case09_two_source_resolution');
+
+calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'uniform');
+models = build_sparse_models(ctx, calIdx, cfg.model);
+methods = local_named_methods(ctx, models, {'ideal', 'proposed', 'oracle'});
+
+sourcePairs = local_filter_pairs(cfg.case9.sourcePairsDeg, ctx.thetaDeg, models.calAnglesDeg);
+if isempty(sourcePairs)
+    sourcePairs = cfg.case9.sourcePairsDeg;
+end
+
+evalCfg = struct();
+evalCfg.mode = 'double';
+evalCfg.trueAngles = sourcePairs;
+evalCfg.snrDb = cfg.case9.evalSNRDb;
+evalCfg.snapshots = cfg.case9.snapshots;
+evalCfg.monteCarlo = cfg.case9.monteCarlo;
+evalCfg.toleranceDeg = cfg.case9.toleranceDeg;
+evalCfg.collectRepresentativeSpectrum = false;
+bench = benchmark_music(ctx, methods, evalCfg);
+
+separationDeg = sourcePairs(:, 2) - sourcePairs(:, 1);
+resolutionProb = zeros(numel(separationDeg), numel(methods));
+pairRmse = zeros(numel(separationDeg), numel(methods));
+for methodIdx = 1:numel(methods)
+    resolutionProb(:, methodIdx) = bench.methods(methodIdx).perTargetSuccess;
+    pairRmse(:, methodIdx) = bench.methods(methodIdx).perTargetRmse;
+end
+
+examplePair = cfg.case9.examplePairDeg;
+if ~ismember(examplePair, sourcePairs, 'rows')
+    examplePair = sourcePairs(1, :);
+end
+
+exampleEval = evalCfg;
+exampleEval.trueAngles = examplePair;
+exampleEval.monteCarlo = 1;
+exampleEval.collectRepresentativeSpectrum = true;
+exampleBench = benchmark_music(ctx, methods, exampleEval);
+
+fig = figure('Visible', 'off', 'Position', [140 140 1300 470]);
+tiledlayout(1, 3, 'Padding', 'compact', 'TileSpacing', 'compact');
+
+nexttile;
+hold on;
+for methodIdx = 1:numel(methods)
+    plot(separationDeg, resolutionProb(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+ylim([0 1]);
+xlabel('Source separation (deg)');
+ylabel('Resolution probability');
+title('Case 9: resolution probability');
+
+nexttile;
+hold on;
+for methodIdx = 1:numel(methods)
+    plot(separationDeg, pairRmse(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+xlabel('Source separation (deg)');
+ylabel('Pair RMSE (deg)');
+title('Case 9: peak bias statistics');
+
+nexttile;
+hold on;
+for methodIdx = 1:numel(methods)
+    plot(ctx.thetaDeg, 10 * log10(exampleBench.methods(methodIdx).representativeSpectrum), ...
+        'LineWidth', 1.4);
+end
+grid on;
+xlabel('Scan angle (deg)');
+ylabel('Pseudo-spectrum (dB)');
+title(sprintf('Case 9: example spectrum at [%g, %g] deg', examplePair(1), examplePair(2)));
+legend({methods.label}, 'Location', 'best');
+save_figure(fig, fullfile(outDir, 'two_source_resolution.png'));
+
+caseResult = struct();
+caseResult.outputDir = outDir;
+caseResult.models = models;
+caseResult.sourcePairsDeg = sourcePairs;
+caseResult.separationDeg = separationDeg;
+caseResult.benchmark = bench;
+caseResult.exampleBenchmark = exampleBench;
+save(fullfile(outDir, 'case09_results.mat'), 'caseResult');
+end
+
+function caseResult = case10_random_split_robustness(cfg, ctx)
+rng(cfg.randomSeed + 10, 'twister');
+outDir = local_case_output_dir(cfg, 'case10_random_split_robustness');
+
+numSplits = cfg.case10.numSplits;
+manifoldError = zeros(numSplits, 3);
+singleRmse = zeros(numSplits, 3);
+splitAngles = cell(numSplits, 1);
+
+for splitIdx = 1:numSplits
+    fprintf('Case 10: random split %d/%d\n', splitIdx, numSplits);
+    calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case10.l, 'random', cfg.randomSeed + 2000 + splitIdx);
+    models = build_sparse_models(ctx, calIdx, cfg.model);
+    splitAngles{splitIdx} = models.calAnglesDeg;
+
+    metricsIdeal = compute_manifold_metrics(ctx.AH(:, models.testIdx), ctx.AI(:, models.testIdx));
+    metricsInterp = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AInterp(:, models.testIdx));
+    metricsProposed = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposed(:, models.testIdx));
+    manifoldError(splitIdx, :) = [ ...
+        mean(metricsIdeal.relativeError), ...
+        mean(metricsInterp.relativeError), ...
+        mean(metricsProposed.relativeError)];
+
+    methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed'});
+    evalCfg = struct();
+    evalCfg.mode = 'single';
+    evalCfg.trueAngles = models.testAnglesDeg(:);
+    evalCfg.snrDb = cfg.case10.evalSNRDb;
+    evalCfg.snapshots = cfg.case10.snapshots;
+    evalCfg.monteCarlo = cfg.case10.monteCarlo;
+    evalCfg.toleranceDeg = cfg.case10.toleranceDeg;
+    evalCfg.collectRepresentativeSpectrum = false;
+    bench = benchmark_music(ctx, methods, evalCfg);
+    for methodIdx = 1:numel(methods)
+        singleRmse(splitIdx, methodIdx) = bench.methods(methodIdx).rmse;
+    end
+end
+
+[xErr, yErr] = local_box_inputs(manifoldError, {'Ideal', 'Interp', 'Proposed'});
+[xRmse, yRmse] = local_box_inputs(singleRmse, {'Ideal', 'Interp', 'Proposed'});
+
+fig = figure('Visible', 'off', 'Position', [130 130 1100 500]);
+tiledlayout(1, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
+nexttile;
+boxchart(xErr, yErr);
+grid on;
+ylabel('Mean unseen relative error');
+title(sprintf('Case 10: manifold error over %d random splits', numSplits));
+
+nexttile;
+boxchart(xRmse, yRmse);
+grid on;
+ylabel('Single-source DOA RMSE (deg)');
+title(sprintf('Case 10: DOA RMSE over %d random splits', numSplits));
+save_figure(fig, fullfile(outDir, 'random_split_robustness.png'));
+
+caseResult = struct();
+caseResult.outputDir = outDir;
+caseResult.manifoldError = manifoldError;
+caseResult.singleRmse = singleRmse;
+caseResult.calibrationAnglesDeg = splitAngles;
+save(fullfile(outDir, 'case10_results.mat'), 'caseResult');
+end
+
+function outDir = local_case_output_dir(cfg, caseFolderName)
+outDir = fullfile(cfg.outputDir, caseFolderName);
+if ~exist(outDir, 'dir')
+    mkdir(outDir);
+end
+end
+
+function method = local_method(name, label, manifold)
+method = struct('name', name, 'label', label, 'manifold', manifold);
+end
+
+function methods = local_named_methods(ctx, models, methodKeys)
+methods = repmat(struct('name', '', 'label', '', 'manifold', []), 1, numel(methodKeys));
+
+for methodIdx = 1:numel(methodKeys)
+    key = lower(strtrim(methodKeys{methodIdx}));
+    switch key
+        case 'ideal'
+            methods(methodIdx) = local_method('ideal', 'Ideal', ctx.AI);
+        case 'interp'
+            methods(methodIdx) = local_method('interp', 'Interpolation', models.AInterp);
+        case 'proposed'
+            methods(methodIdx) = local_method('proposed', 'Proposed', models.AProposed);
+        case 'oracle'
+            methods(methodIdx) = local_method('oracle', 'HFSS Oracle', ctx.AH);
+        otherwise
+            error('Unknown method key: %s', methodKeys{methodIdx});
+    end
+end
+end
+
+function idx = local_angle_index(thetaDeg, queryAngle)
+idx = find(abs(thetaDeg - queryAngle) < 1e-9, 1, 'first');
+if isempty(idx)
+    error('Angle %.6f deg is not available in the current grid.', queryAngle);
+end
+end
+
+function manifold = local_normalize_columns(manifold)
+refPhase = exp(-1i * angle(manifold(1, :)));
+manifold = manifold .* refPhase;
+colNorm = vecnorm(manifold, 2, 1);
+colNorm(colNorm < eps) = 1;
+manifold = manifold ./ colNorm;
+end
+
+function validPairs = local_filter_pairs(candidatePairs, thetaGrid, calAnglesDeg)
+availableMask = ismember(candidatePairs(:, 1), thetaGrid) & ismember(candidatePairs(:, 2), thetaGrid);
+validPairs = candidatePairs(availableMask, :);
+
+if nargin >= 3 && ~isempty(calAnglesDeg)
+    unseenMask = ~ismember(validPairs(:, 1), calAnglesDeg) & ~ismember(validPairs(:, 2), calAnglesDeg);
+    if any(unseenMask)
+        validPairs = validPairs(unseenMask, :);
+    end
+end
+end
+
+function [xValues, yValues] = local_box_inputs(dataMatrix, labels)
+numMethods = size(dataMatrix, 2);
+numSamples = size(dataMatrix, 1);
+
+xValues = categorical(repelem(labels, numSamples));
+yValues = reshape(dataMatrix, [], 1);
+end

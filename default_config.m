@@ -1,0 +1,99 @@
+function cfg = default_config(rootDir)
+%DEFAULT_CONFIG Create the default MATLAB configuration for the project.
+
+if nargin < 1 || isempty(rootDir)
+    rootDir = fileparts(mfilename('fullpath'));
+end
+
+cfg = struct();
+cfg.rootDir = rootDir;
+cfg.outputDir = fullfile(rootDir, 'results');
+cfg.randomSeed = 20260417;
+
+cfg.data = struct();
+cfg.data.csvPath = fullfile(rootDir, 'data', 'hfss', 'port1-8_E.csv');
+
+cfg.array = struct();
+cfg.array.numElements = 8;
+cfg.array.frequencyHz = 2.36e9;
+cfg.array.elementSpacingLambda = 0.5;
+
+cfg.model = struct();
+cfg.model.basisType = 'chebyshev';
+cfg.model.order = 3;
+cfg.model.lambda = 1e-3;
+cfg.model.interpMethod = 'spline';
+cfg.model.regularization = 'order-weighted';
+
+cfg.case1 = struct();
+cfg.case1.exampleAngleDeg = 25;
+cfg.case1.highSNRDb = 20;
+cfg.case1.snapshots = 500;
+cfg.case1.monteCarlo = 40;
+cfg.case1.toleranceDeg = 2;
+
+cfg.case2 = struct();
+cfg.case2.evalSNRDb = 10;
+cfg.case2.snapshots = 500;
+cfg.case2.monteCarlo = 60;
+cfg.case2.toleranceDeg = 2;
+
+cfg.case3 = struct();
+cfg.case3.lValues = [5 9 13];
+cfg.case3.representativeL = 9;
+cfg.case3.representativeElements = [1 4 8];
+cfg.case3.representativeAnglesDeg = [-35 0 35];
+
+cfg.case4 = struct();
+cfg.case4.lValues = [3 5 7 9 13 17];
+cfg.case4.evalSNRDb = 10;
+cfg.case4.snapshots = 500;
+cfg.case4.monteCarlo = 60;
+cfg.case4.toleranceDeg = 2;
+cfg.case4.sourcePairsDeg = [-5 5; -10 10; -15 15; -20 20];
+
+cfg.case5 = struct();
+cfg.case5.l = 9;
+cfg.case5.strategyNames = {'uniform', 'center_dense', 'edge_enhanced', 'random'};
+cfg.case5.randomTrials = 20;
+cfg.case5.snrSweepDb = -10:5:15;
+cfg.case5.snapshots = 300;
+cfg.case5.monteCarlo = 40;
+cfg.case5.toleranceDeg = 2;
+
+cfg.case6 = struct();
+cfg.case6.l = 9;
+cfg.case6.orders = 1:5;
+cfg.case6.lambdas = [0 1e-4 1e-3 1e-2 1e-1];
+cfg.case6.basisTypes = {'polynomial', 'chebyshev'};
+
+cfg.case7 = struct();
+cfg.case7.snrSweepDb = -15:5:20;
+cfg.case7.snapshots = 500;
+cfg.case7.monteCarlo = 80;
+cfg.case7.toleranceDeg = 2;
+cfg.case7.exampleAngleDeg = 10;
+cfg.case7.spectrumSnrDb = [-10 0 10];
+
+cfg.case8 = struct();
+cfg.case8.snapshotSweep = [50 100 200 500 1000];
+cfg.case8.snrValuesDb = [0 10];
+cfg.case8.monteCarlo = 80;
+cfg.case8.toleranceDeg = 2;
+
+cfg.case9 = struct();
+cfg.case9.evalSNRDb = 5;
+cfg.case9.snapshots = 500;
+cfg.case9.monteCarlo = 80;
+cfg.case9.toleranceDeg = 2;
+cfg.case9.sourcePairsDeg = [-5 5; -10 10; -15 15; -20 20];
+cfg.case9.examplePairDeg = [-10 10];
+
+cfg.case10 = struct();
+cfg.case10.l = 9;
+cfg.case10.numSplits = 40;
+cfg.case10.evalSNRDb = 10;
+cfg.case10.snapshots = 500;
+cfg.case10.monteCarlo = 40;
+cfg.case10.toleranceDeg = 2;
+end
