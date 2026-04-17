@@ -768,10 +768,10 @@ calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'un
 models = build_sparse_models(ctx, calIdx, cfg.model);
 methods = local_named_methods(ctx, models, {'ideal', 'proposed', 'oracle'});
 
-sourcePairs = local_filter_pairs(cfg.case9.sourcePairsDeg, ctx.thetaDeg, models.calAnglesDeg);
-if isempty(sourcePairs)
-    sourcePairs = cfg.case9.sourcePairsDeg;
-end
+sourcePairs = local_case9_source_pairs(cfg.case9, ctx.thetaDeg, models.calAnglesDeg);
+pairLabels = local_case9_pair_labels(sourcePairs);
+separationDeg = sourcePairs(:, 2) - sourcePairs(:, 1);
+pairCenterDeg = mean(sourcePairs, 2);
 
 evalCfg = struct();
 evalCfg.mode = 'double';
@@ -780,20 +780,39 @@ evalCfg.snrDb = cfg.case9.evalSNRDb;
 evalCfg.snapshots = cfg.case9.snapshots;
 evalCfg.monteCarlo = cfg.case9.monteCarlo;
 evalCfg.toleranceDeg = cfg.case9.toleranceDeg;
+evalCfg.biasedToleranceDeg = cfg.case9.biasedToleranceDeg;
+evalCfg.marginalToleranceDeg = cfg.case9.marginalToleranceDeg;
 evalCfg.collectRepresentativeSpectrum = false;
 bench = benchmark_music(ctx, methods, evalCfg);
 
-separationDeg = sourcePairs(:, 2) - sourcePairs(:, 1);
 resolutionProb = zeros(numel(separationDeg), numel(methods));
 pairRmse = zeros(numel(separationDeg), numel(methods));
+marginalRate = zeros(numel(separationDeg), numel(methods));
+biasedRate = zeros(numel(separationDeg), numel(methods));
+stableRate = zeros(numel(separationDeg), numel(methods));
+unresolvedRate = zeros(numel(separationDeg), numel(methods));
 for methodIdx = 1:numel(methods)
-    resolutionProb(:, methodIdx) = bench.methods(methodIdx).perTargetSuccess;
+    resolutionProb(:, methodIdx) = bench.methods(methodIdx).perTargetResolutionRate;
     pairRmse(:, methodIdx) = bench.methods(methodIdx).perTargetRmse;
+    marginalRate(:, methodIdx) = bench.methods(methodIdx).perTargetMarginalRate;
+    biasedRate(:, methodIdx) = bench.methods(methodIdx).perTargetBiasedRate;
+    stableRate(:, methodIdx) = bench.methods(methodIdx).perTargetStableRate;
+    unresolvedRate(:, methodIdx) = bench.methods(methodIdx).perTargetUnresolvedRate;
 end
 
-examplePair = cfg.case9.examplePairDeg;
-if ~ismember(examplePair, sourcePairs, 'rows')
-    examplePair = sourcePairs(1, :);
+[uniqueSep, resolutionMean, resolutionStd] = local_case9_group_metric(separationDeg, resolutionProb);
+[~, pairRmseMean, pairRmseStd] = local_case9_group_metric(separationDeg, pairRmse);
+
+exampleIdx = local_case9_select_example_pair(bench, methods, separationDeg, ...
+    cfg.case9.exampleTargetResolutionProb);
+examplePair = sourcePairs(exampleIdx, :);
+exampleStateMatrix = zeros(numel(methods), 4);
+for methodIdx = 1:numel(methods)
+    exampleStateMatrix(methodIdx, :) = [ ...
+        unresolvedRate(exampleIdx, methodIdx), ...
+        marginalRate(exampleIdx, methodIdx), ...
+        biasedRate(exampleIdx, methodIdx), ...
+        stableRate(exampleIdx, methodIdx)];
 end
 
 exampleEval = evalCfg;
@@ -802,29 +821,41 @@ exampleEval.monteCarlo = 1;
 exampleEval.collectRepresentativeSpectrum = true;
 exampleBench = benchmark_music(ctx, methods, exampleEval);
 
-fig = figure('Visible', 'off', 'Position', [140 140 1300 470]);
-tiledlayout(1, 3, 'Padding', 'compact', 'TileSpacing', 'compact');
+fig = figure('Visible', 'off', 'Position', [140 140 1380 900]);
+tiledlayout(2, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
 
 nexttile;
 hold on;
 for methodIdx = 1:numel(methods)
-    plot(separationDeg, resolutionProb(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+    errorbar(uniqueSep, resolutionMean(:, methodIdx), resolutionStd(:, methodIdx), ...
+        'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
 end
 grid on;
 ylim([0 1]);
 xlabel('Source separation (deg)');
 ylabel('Resolution probability');
-title('Case 9: resolution probability');
+title('Case 9: near-threshold resolution probability');
+legend({methods.label}, 'Location', 'best');
 
 nexttile;
 hold on;
 for methodIdx = 1:numel(methods)
-    plot(separationDeg, pairRmse(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+    errorbar(uniqueSep, pairRmseMean(:, methodIdx), pairRmseStd(:, methodIdx), ...
+        'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
 end
 grid on;
 xlabel('Source separation (deg)');
 ylabel('Pair RMSE (deg)');
-title('Case 9: peak bias statistics');
+title('Case 9: pair RMSE in the hard interval');
+
+nexttile;
+bar(categorical({methods.label}), exampleStateMatrix, 'stacked');
+grid on;
+ylim([0 1]);
+xlabel('Method');
+ylabel('Probability');
+title(sprintf('Case 9: state breakdown at [%g, %g] deg', examplePair(1), examplePair(2)));
+legend({'Unresolved', 'Marginal', 'Biased', 'Stable'}, 'Location', 'bestoutside');
 
 nexttile;
 hold on;
@@ -835,7 +866,8 @@ end
 grid on;
 xlabel('Scan angle (deg)');
 ylabel('Pseudo-spectrum (dB)');
-title(sprintf('Case 9: example spectrum at [%g, %g] deg', examplePair(1), examplePair(2)));
+title(sprintf('Case 9: representative hard spectrum at [%g, %g] deg', ...
+    examplePair(1), examplePair(2)));
 legend({methods.label}, 'Location', 'best');
 save_figure(fig, fullfile(outDir, 'two_source_resolution.png'));
 
@@ -843,7 +875,21 @@ caseResult = struct();
 caseResult.outputDir = outDir;
 caseResult.models = models;
 caseResult.sourcePairsDeg = sourcePairs;
+caseResult.sourcePairLabels = pairLabels;
 caseResult.separationDeg = separationDeg;
+caseResult.pairCenterDeg = pairCenterDeg;
+caseResult.resolutionProb = resolutionProb;
+caseResult.pairRmse = pairRmse;
+caseResult.marginalRate = marginalRate;
+caseResult.biasedRate = biasedRate;
+caseResult.stableRate = stableRate;
+caseResult.unresolvedRate = unresolvedRate;
+caseResult.groupedSeparationDeg = uniqueSep;
+caseResult.groupedResolutionMean = resolutionMean;
+caseResult.groupedResolutionStd = resolutionStd;
+caseResult.groupedPairRmseMean = pairRmseMean;
+caseResult.groupedPairRmseStd = pairRmseStd;
+caseResult.examplePairIndex = exampleIdx;
 caseResult.benchmark = bench;
 caseResult.exampleBenchmark = exampleBench;
 save(fullfile(outDir, 'case09_results.mat'), 'caseResult');
@@ -969,6 +1015,89 @@ if nargin >= 3 && ~isempty(calAnglesDeg)
         validPairs = validPairs(unseenMask, :);
     end
 end
+end
+
+function sourcePairs = local_case9_source_pairs(caseCfg, thetaGrid, calAnglesDeg)
+if isfield(caseCfg, 'sourcePairsDeg') && ~isempty(caseCfg.sourcePairsDeg)
+    candidatePairs = caseCfg.sourcePairsDeg;
+else
+    candidatePairs = local_case9_generate_pairs(thetaGrid, caseCfg.separationSweepDeg);
+end
+
+sourcePairs = local_filter_pairs(candidatePairs, thetaGrid, calAnglesDeg);
+if isempty(sourcePairs)
+    sourcePairs = local_filter_pairs(candidatePairs, thetaGrid);
+end
+
+sourcePairs = sort(sourcePairs, 2);
+sourcePairs = unique(sourcePairs, 'rows', 'stable');
+separationDeg = sourcePairs(:, 2) - sourcePairs(:, 1);
+pairCenterDeg = mean(sourcePairs, 2);
+sourcePairs = sortrows([sourcePairs, separationDeg, pairCenterDeg], [3 4 1 2]);
+sourcePairs = sourcePairs(:, 1:2);
+end
+
+function candidatePairs = local_case9_generate_pairs(thetaGrid, separationSweepDeg)
+candidatePairs = zeros(0, 2);
+
+for sepDeg = reshape(separationSweepDeg, 1, [])
+    for angleIdx = 1:numel(thetaGrid)
+        partnerAngle = thetaGrid(angleIdx) + sepDeg;
+        if any(abs(thetaGrid - partnerAngle) < 1e-9)
+            candidatePairs(end+1, :) = [thetaGrid(angleIdx), partnerAngle]; %#ok<AGROW>
+        end
+    end
+end
+end
+
+function pairLabels = local_case9_pair_labels(sourcePairs)
+pairLabels = arrayfun(@(rowIdx) sprintf('[%g,%g]', sourcePairs(rowIdx, 1), sourcePairs(rowIdx, 2)), ...
+    1:size(sourcePairs, 1), 'UniformOutput', false);
+end
+
+function [uniqueSep, meanMetric, stdMetric] = local_case9_group_metric(separationDeg, metricMatrix)
+uniqueSep = unique(separationDeg, 'sorted');
+meanMetric = zeros(numel(uniqueSep), size(metricMatrix, 2));
+stdMetric = zeros(numel(uniqueSep), size(metricMatrix, 2));
+
+for sepIdx = 1:numel(uniqueSep)
+    pairMask = abs(separationDeg - uniqueSep(sepIdx)) < 1e-9;
+    meanMetric(sepIdx, :) = mean(metricMatrix(pairMask, :), 1);
+    stdMetric(sepIdx, :) = std(metricMatrix(pairMask, :), 0, 1);
+end
+end
+
+function exampleIdx = local_case9_select_example_pair(bench, methods, separationDeg, targetResolutionProb)
+methodIdx = find(strcmp({methods.name}, 'proposed'), 1, 'first');
+if isempty(methodIdx)
+    methodIdx = 1;
+end
+
+proposed = bench.methods(methodIdx);
+stateMatrix = [ ...
+    proposed.perTargetUnresolvedRate(:), ...
+    proposed.perTargetMarginalRate(:), ...
+    proposed.perTargetBiasedRate(:), ...
+    proposed.perTargetStableRate(:)];
+stateEntropy = -sum(stateMatrix .* log(max(stateMatrix, eps)), 2);
+
+candidateMask = proposed.perTargetResolutionRate > 0.2 & ...
+    proposed.perTargetResolutionRate < 0.98 & ...
+    (proposed.perTargetMarginalRate + proposed.perTargetBiasedRate) > 0.05;
+if ~any(candidateMask)
+    candidateMask = proposed.perTargetResolutionRate > 0.05 & ...
+        proposed.perTargetResolutionRate < 1;
+end
+if ~any(candidateMask)
+    candidateMask = true(size(proposed.perTargetResolutionRate));
+end
+
+candidateIdx = find(candidateMask);
+score = abs(proposed.perTargetResolutionRate(candidateIdx) - targetResolutionProb) ...
+    - 0.6 * stateEntropy(candidateIdx) ...
+    + 0.01 * separationDeg(candidateIdx);
+[~, bestLocalIdx] = min(score);
+exampleIdx = candidateIdx(bestLocalIdx);
 end
 
 function [xValues, yValues] = local_box_inputs(dataMatrix, labels)

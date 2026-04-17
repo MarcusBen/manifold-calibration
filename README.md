@@ -20,11 +20,12 @@
 
 截至 2026-04-17，当前整理结论是：
 
-- 方法框架方向基本正确。
-- 主要问题不在总框架，而在 benchmark 难度偏低。
-- `case01`、`case04`、`case08`、`case09` 仍需重构，才能真正支撑论文主张。
-- `Proposed` 与 `Interpolation` 的差异还需要在更困难设置下重新验证。
-- `Amp+Phase` 应作为 oracle 上界处理，不应当成同预算可实现基线。
+- `case09` 已经从“容易分开的双源演示”改成“近阈值 separation sweep”，并加入了 `unresolved / marginal / biased / stable` 状态分级。
+- 这说明实验正在从“能跑”转向“能检验论文主张”的方向收紧。
+- 当前 `case09` 仍然受 HFSS `5 deg` 粗网格限制，更准确的说法是 coarse-grid near-threshold benchmark，而不是连续角域下的理论分辨率极限。
+- `case01`、`case04`、`case08` 仍需继续重构，才能把整条证据链补齐。
+- `Proposed` 与 `Interpolation` 的差异仍需在更困难设置下重新验证。
+- `Amp+Phase` 仍应作为 oracle 上界处理，不应当成同预算可实现基线。
 
 详细记录见：
 - [docs/research-log.md](docs/research-log.md)

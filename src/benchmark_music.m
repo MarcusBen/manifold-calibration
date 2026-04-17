@@ -3,6 +3,7 @@ function result = benchmark_music(ctx, methods, evalCfg)
 
 modeName = lower(strtrim(evalCfg.mode));
 collectSpectrum = isfield(evalCfg, 'collectRepresentativeSpectrum') && evalCfg.collectRepresentativeSpectrum;
+doubleStateCfg = local_double_state_config(evalCfg);
 
 switch modeName
     case 'single'
@@ -31,8 +32,18 @@ for methodIdx = 1:numMethods
     result.methods(methodIdx).rmse = NaN;
     result.methods(methodIdx).perTargetRmse = NaN(numTargets, 1);
     result.methods(methodIdx).perTargetSuccess = NaN(numTargets, 1);
+    result.methods(methodIdx).resolutionRate = NaN;
+    result.methods(methodIdx).marginalRate = NaN;
+    result.methods(methodIdx).biasedRate = NaN;
+    result.methods(methodIdx).stableRate = NaN;
+    result.methods(methodIdx).perTargetResolutionRate = NaN(numTargets, 1);
+    result.methods(methodIdx).perTargetMarginalRate = NaN(numTargets, 1);
+    result.methods(methodIdx).perTargetBiasedRate = NaN(numTargets, 1);
+    result.methods(methodIdx).perTargetStableRate = NaN(numTargets, 1);
+    result.methods(methodIdx).perTargetUnresolvedRate = NaN(numTargets, 1);
     result.methods(methodIdx).representativeSpectrum = [];
     result.methods(methodIdx).representativeEstAnglesDeg = [];
+    result.methods(methodIdx).representativeResolutionState = '';
 end
 
 for methodIdx = 1:numMethods
@@ -43,6 +54,10 @@ for methodIdx = 1:numMethods
             trialErrors = zeros(numTargets, evalCfg.monteCarlo);
     end
     trialSuccess = false(numTargets, evalCfg.monteCarlo);
+    trialResolution = false(numTargets, evalCfg.monteCarlo);
+    trialMarginal = false(numTargets, evalCfg.monteCarlo);
+    trialBiased = false(numTargets, evalCfg.monteCarlo);
+    trialStable = false(numTargets, evalCfg.monteCarlo);
 
     for targetIdx = 1:numTargets
         trueAngles = trueAngleSets(targetIdx, :);
@@ -60,12 +75,20 @@ for methodIdx = 1:numMethods
                 estAngles = sort(estAngles(:).');
                 trueAngles = sort(trueAngles(:).');
                 trialErrors(targetIdx, mcIdx) = sqrt(mean((estAngles - trueAngles) .^ 2));
-                trialSuccess(targetIdx, mcIdx) = all(abs(estAngles - trueAngles) <= toleranceDeg);
+                state = local_classify_double_resolution(estAngles, trueAngles, doubleStateCfg);
+                trialSuccess(targetIdx, mcIdx) = state.isStable;
+                trialResolution(targetIdx, mcIdx) = state.isResolved;
+                trialMarginal(targetIdx, mcIdx) = state.isMarginal;
+                trialBiased(targetIdx, mcIdx) = state.isBiased;
+                trialStable(targetIdx, mcIdx) = state.isStable;
             end
 
             if collectSpectrum && targetIdx == 1 && mcIdx == 1
                 result.methods(methodIdx).representativeSpectrum = spectrum;
                 result.methods(methodIdx).representativeEstAnglesDeg = estAngles;
+                if strcmp(modeName, 'double')
+                    result.methods(methodIdx).representativeResolutionState = state.name;
+                end
             end
         end
     end
@@ -76,6 +99,15 @@ for methodIdx = 1:numMethods
     else
         result.methods(methodIdx).rmse = mean(trialErrors(:));
         result.methods(methodIdx).perTargetRmse = mean(trialErrors, 2);
+        result.methods(methodIdx).resolutionRate = mean(trialResolution(:));
+        result.methods(methodIdx).marginalRate = mean(trialMarginal(:));
+        result.methods(methodIdx).biasedRate = mean(trialBiased(:));
+        result.methods(methodIdx).stableRate = mean(trialStable(:));
+        result.methods(methodIdx).perTargetResolutionRate = mean(trialResolution, 2);
+        result.methods(methodIdx).perTargetMarginalRate = mean(trialMarginal, 2);
+        result.methods(methodIdx).perTargetBiasedRate = mean(trialBiased, 2);
+        result.methods(methodIdx).perTargetStableRate = mean(trialStable, 2);
+        result.methods(methodIdx).perTargetUnresolvedRate = 1 - mean(trialResolution, 2);
     end
 
     result.methods(methodIdx).successRate = mean(trialSuccess(:));
@@ -142,13 +174,14 @@ peakIdx = find(isPeak);
 if isempty(peakIdx)
     [~, peakIdx] = maxk(spectrum, k);
 else
+    peakIdx = local_reduce_plateau_peaks(peakIdx, spectrum);
     [~, order] = sort(spectrum(peakIdx), 'descend');
     peakIdx = peakIdx(order);
 end
 
 selected = zeros(1, 0);
 for candidate = peakIdx
-    if isempty(selected) || all(abs(candidate - selected) > 1)
+    if ~ismember(candidate, selected)
         selected(end+1) = candidate; %#ok<AGROW>
     end
     if numel(selected) == k
@@ -169,4 +202,74 @@ if numel(selected) < k
 end
 
 estAngles = sort(scanAngles(selected(1:k)));
+end
+
+function peakIdx = local_reduce_plateau_peaks(peakIdx, spectrum)
+if isempty(peakIdx)
+    return;
+end
+
+groupStart = [1, find(diff(peakIdx) > 1) + 1];
+groupEnd = [groupStart(2:end) - 1, numel(peakIdx)];
+reduced = zeros(1, numel(groupStart));
+
+for groupIdx = 1:numel(groupStart)
+    block = peakIdx(groupStart(groupIdx):groupEnd(groupIdx));
+    blockValues = spectrum(block);
+    maxValue = max(blockValues);
+    tied = block(blockValues == maxValue);
+    reduced(groupIdx) = tied(ceil(numel(tied) / 2));
+end
+
+peakIdx = reduced;
+end
+
+function stateCfg = local_double_state_config(evalCfg)
+stateCfg = struct();
+stateCfg.stableToleranceDeg = evalCfg.toleranceDeg;
+stateCfg.biasedToleranceDeg = local_optional_field(evalCfg, ...
+    'biasedToleranceDeg', 2 * evalCfg.toleranceDeg);
+stateCfg.marginalToleranceDeg = local_optional_field(evalCfg, ...
+    'marginalToleranceDeg', 4 * evalCfg.toleranceDeg);
+end
+
+function state = local_classify_double_resolution(estAngles, trueAngles, stateCfg)
+pairRmse = sqrt(mean((estAngles - trueAngles) .^ 2));
+absError = abs(estAngles - trueAngles);
+midpoint = mean(trueAngles);
+straddlesMidpoint = estAngles(1) < midpoint && estAngles(2) > midpoint;
+maxAbsError = max(absError);
+
+state = struct();
+state.name = 'unresolved';
+state.isResolved = false;
+state.isMarginal = false;
+state.isBiased = false;
+state.isStable = false;
+
+if ~straddlesMidpoint
+    return;
+end
+
+if maxAbsError <= stateCfg.stableToleranceDeg
+    state.name = 'stable';
+    state.isResolved = true;
+    state.isStable = true;
+elseif pairRmse <= stateCfg.biasedToleranceDeg
+    state.name = 'biased';
+    state.isResolved = true;
+    state.isBiased = true;
+elseif pairRmse <= stateCfg.marginalToleranceDeg
+    state.name = 'marginal';
+    state.isResolved = true;
+    state.isMarginal = true;
+end
+end
+
+function value = local_optional_field(inputStruct, fieldName, defaultValue)
+if isfield(inputStruct, fieldName) && ~isempty(inputStruct.(fieldName))
+    value = inputStruct.(fieldName);
+else
+    value = defaultValue;
+end
 end

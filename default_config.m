@@ -86,8 +86,11 @@ cfg.case9.evalSNRDb = 5;
 cfg.case9.snapshots = 500;
 cfg.case9.monteCarlo = 80;
 cfg.case9.toleranceDeg = 2;
-cfg.case9.sourcePairsDeg = [-5 5; -10 10; -15 15; -20 20];
-cfg.case9.examplePairDeg = [-10 10];
+cfg.case9.biasedToleranceDeg = 5;
+cfg.case9.marginalToleranceDeg = 20;
+cfg.case9.separationSweepDeg = [5 10 15];
+cfg.case9.sourcePairsDeg = [];
+cfg.case9.exampleTargetResolutionProb = 0.5;
 
 cfg.case10 = struct();
 cfg.case10.l = 9;
