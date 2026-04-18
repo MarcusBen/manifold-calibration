@@ -33,6 +33,7 @@ $$
 然后分别用：
 
 - 理想流形做估计
+- 插值重构流形做估计
 - 你的修正流形做估计
 - HFSS 真值流形做估计（oracle 上界）
 
@@ -76,6 +77,8 @@ $$
 - 角域用你当前 HFSS 可稳定扫描的范围，例如 $[-60^\circ,60^\circ]$ 或你现在已有的有效范围
 - 对每个角度比较 8 个阵元的幅度/相位差
 - 再做单源 MUSIC，对比 ideal-manifold estimator 和 HFSS-oracle estimator
+- 当前默认代码使用 `2.5GHz / 0.2^\circ / \lambda/4` 基线，并把 high-SNR stress 设置为 `SNR = 40 dB`、`snapshots = 2000`，用于压低统计噪声、显露结构性失配地板
+- 代表性谱图角度不再写死，而是从 high-SNR 逐角 bias/RMSE 结果中自动选择失配压力最大的未见角
 
 **输出图**
 
@@ -83,7 +86,7 @@ $$
 - 幅度残差随角度变化图
 - steering vector 相似度曲线
 - 单源伪谱对比图
-- 高 SNR 下的角度偏差图
+- 高 SNR 下的 signed bias 与 RMSE 逐角图，且图中标记代表性谱图使用的同一个角度
 
 **你要得到的结论**
 
@@ -316,17 +319,22 @@ $$
 - 或固定中心角，改变间隔 $\Delta=2^\circ,4^\circ,6^\circ,8^\circ$
 - SNR 固定为 0 或 5 dB
 - snapshots 固定为 500
+- 当前默认 separation sweep 为 `[1 2 3 4 5 6 8 10]`
+- 默认从 0.2 度 HFSS 网格中生成未见角 pair，并优先覆盖边缘区、高失配区、远离校准角和近阈值困难组合
+- 默认比较对象必须包含 `Ideal / Interpolation / Proposed / HFSS Oracle`
+- 状态分级使用 `unresolved / marginal / biased / stable`，当前细网格阈值为 `0.6 / 2 / 5` 度
 
 **输出图**
 
 - 分辨概率 vs 角间隔
 - 典型伪谱图
 - 峰值偏差统计
+- 稳定分开、偏差分开、边缘分开和未分开的状态比例
 
 **你要得到的结论**
 
 - ideal 流形下主瓣会更宽、峰更偏
-- proposed 下双峰更容易分开
+- proposed 下双峰更容易分开；若 proposed 不能稳定优于 interpolation，论文主张要据实收窄
 - 说明你的方法提升的不只是“平均 RMSE”，还提升了谱质量
 
 你计划书里明确提到了“MUSIC 伪谱质量”应作为考察对象，这个 case 正好落实。

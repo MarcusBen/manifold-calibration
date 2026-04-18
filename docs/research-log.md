@@ -16,6 +16,63 @@
 
 ## 最新整理
 
+### 2026-04-18：`local-074e912a` 加固 Case 1/9 与可追溯运行目录
+
+- Version hash: `local-074e912a`
+- Base HEAD: `81eaaf4`
+- Worktree state: uncommitted code/docs changes; existing `.codex/skills/*` and `docs/comments.md` edits were preserved.
+- Result paths:
+  - `results/case01_problem_validation/20260418-101955-local-074e912a/`
+  - `results/case09_two_source_resolution/20260418-101955-local-074e912a/`
+- Comment/review status: no hash-matched reviewed Git commit yet.
+
+#### 一句话结论
+
+本轮不是普通调参，而是在 `2.5GHz / 0.2 deg / lambda/4` 默认基线上继续收紧证据链：Case 1 开始显式寻找 high-SNR mismatch floor，Case 9 补回 `Interpolation` 并把 source pair 选择从均匀裁剪升级为研究问题导向覆盖。
+
+#### 代码与行为变化
+
+- `default_config` 保持旧调用兼容，同时新增 `default_config(rootDir, 'paper')`，用于正式图的更厚 Monte Carlo 配置；日常默认 `case09.monteCarlo = 80` 不变。
+- 新增 `cfg.run` 可追溯输出配置。启用 `cfg.run.useTraceableDirs = true` 后，结果写入 `results/<case-name>/<runId>/`，并自动生成 `RUN_NOTES.md`。
+- Case 1 默认 stress 设置改为 `SNR = 40 dB`、`snapshots = 2000`、`monteCarlo = 80`、`toleranceDeg = 0.4`。逐角 high-SNR sweep 先运行，再自动选择 Ideal 相对 HFSS Oracle 压力最大的角度作为代表性谱图角度。
+- `benchmark_music` 对单源任务新增 `perTargetMeanError`、`perTargetAbsBias`、`trialErrorStd`，用于区分统计波动和 signed bias。
+- Case 9 方法列表改为 `Ideal / Interpolation / Proposed / HFSS Oracle`。source pair 仍按 `[1 2 3 4 5 6 8 10]` 分离度组织，但每档最多 21 个 pair 时优先覆盖边缘区、高失配区、远离校准角和中心角多样性。
+- Case 9 代表性 hard spectrum 优先选择 `Proposed` 相比 `Interpolation` 在 stable/resolution 行为上有优势、且仍处在混合困难状态的 pair；若没有这种 pair，会退回高失配困难 pair，并记录原因。
+
+#### Smoke 验证
+
+已跑低 Monte Carlo traceable smoke：
+
+```matlab
+run_project([1 9], cfgSmoke)
+```
+
+该 smoke 只验证链路和字段，不作为最终论文统计强度。已确认：
+
+- `case01_results.mat` 包含 `highSnrSweep.methods(...).perTargetMeanError`、`stressExampleAngleDeg`、`exampleSelectionReason`。
+- Case 1 代表性谱图角度来自逐角 bias/RMSE sweep，本轮 smoke 自动选中 `-52 deg`。
+- `case09_results.mat` 的方法标签为 `Ideal / Interpolation / Proposed / HFSS Oracle`。
+- Case 9 分离度分组为 `[1 2 3 4 5 6 8 10]`，每档 pair 数量不超过 21，且 source pair 不触碰校准角。
+- Case 9 本轮 smoke 自动选中 `[-45.6, -35.6] deg` 作为代表性困难 pair，原因是 `Proposed` 相比 `Interpolation` 在 stable/resolution 行为上有优势，同时仍是混合困难 pair。
+
+下面两张图只作为本轮代码链路 smoke 证据，不是最终论文图：
+
+![case01 mismatch floor smoke](assets/case01-mismatch-floor-local-074e912a.png)
+
+![case09 resolution smoke](assets/case09-resolution-local-074e912a.png)
+
+#### 仍然存在的风险或边界
+
+- Case 1 smoke 的 Monte Carlo 很低，不能把 `-52 deg` 的数值结果当成最终 mismatch floor 强度；它只说明自动选角、谱图和逐角偏差图已经对齐。
+- Case 9 现在可以比较 `Proposed` 与 `Interpolation`，但正式论文主张必须看 paper profile 或更厚 Monte Carlo；如果 `Proposed` 不能稳定优于 `Interpolation`，主张要收窄为“相对 Ideal 的校正有效”。
+- `results_step0p2_qw/` 仍保留为兼容默认输出目录；正式可回溯结果应使用 `results/<case-name>/<timestamp>-<localhash>/`。
+
+#### 对论文表述的影响
+
+- 图注必须说明：snapshots 由 HFSS truth manifold 生成，`Ideal / Interpolation / Proposed / HFSS Oracle` 只是 MUSIC 扫描使用的 estimator manifolds。
+- Case 1 的正确说法是“之前 benchmark 过于容易，掩盖了可观测的结构性偏差”，不能写成“失配不存在”。
+- Case 9 的正确说法必须包含 `Interpolation` 基线；只有 `Proposed > Interpolation` 稳定成立时，才能强调建模方式相对普通插值的额外价值。
+
 ### 2026-04-18：项目默认实验切换到 `2.5GHz / 0.2 deg / lambda/4`
 
 #### 一句话结论

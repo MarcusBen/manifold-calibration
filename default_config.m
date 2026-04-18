@@ -1,9 +1,13 @@
-function cfg = default_config(rootDir)
+function cfg = default_config(rootDir, profileName)
 %DEFAULT_CONFIG Create the default MATLAB configuration for the project.
 
 if nargin < 1 || isempty(rootDir)
     rootDir = fileparts(mfilename('fullpath'));
 end
+if nargin < 2 || isempty(profileName)
+    profileName = 'default';
+end
+profileName = char(profileName);
 
 cfg = struct();
 cfg.rootDir = rootDir;
@@ -17,6 +21,16 @@ cfg.array = struct();
 cfg.array.numElements = 8;
 cfg.array.frequencyHz = 2.5e9;
 cfg.array.elementSpacingLambda = 0.25;
+
+cfg.run = struct();
+cfg.run.useTraceableDirs = false;
+cfg.run.resultRoot = fullfile(rootDir, 'results');
+cfg.run.runId = '';
+cfg.run.pendingLocalHash = '';
+cfg.run.baseHead = '';
+cfg.run.gitStatusShort = '';
+cfg.run.command = '';
+cfg.run.notes = '';
 
 cfg.eval = struct();
 cfg.eval.targetMode = 'stratified';
@@ -34,10 +48,10 @@ cfg.model.regularization = 'order-weighted';
 
 cfg.case1 = struct();
 cfg.case1.exampleAngleDeg = 25;
-cfg.case1.highSNRDb = 20;
-cfg.case1.snapshots = 500;
-cfg.case1.monteCarlo = 40;
-cfg.case1.toleranceDeg = 1;
+cfg.case1.highSNRDb = 40;
+cfg.case1.snapshots = 2000;
+cfg.case1.monteCarlo = 80;
+cfg.case1.toleranceDeg = 0.4;
 
 cfg.case2 = struct();
 cfg.case2.evalSNRDb = 10;
@@ -97,6 +111,7 @@ cfg.case9.biasedToleranceDeg = 2;
 cfg.case9.marginalToleranceDeg = 5;
 cfg.case9.separationSweepDeg = [1 2 3 4 5 6 8 10];
 cfg.case9.maxPairsPerSeparation = 21;
+cfg.case9.pairSelectionMode = 'research_coverage';
 cfg.case9.sourcePairsDeg = [];
 cfg.case9.exampleTargetResolutionProb = 0.5;
 
@@ -107,4 +122,20 @@ cfg.case10.evalSNRDb = 10;
 cfg.case10.snapshots = 500;
 cfg.case10.monteCarlo = 40;
 cfg.case10.toleranceDeg = 1;
+
+cfg = local_apply_profile(cfg, profileName);
+end
+
+function cfg = local_apply_profile(cfg, profileName)
+switch lower(strtrim(profileName))
+    case {'default', 'daily', ''}
+        return;
+    case 'paper'
+        cfg.case1.monteCarlo = 120;
+        cfg.case7.monteCarlo = 200;
+        cfg.case8.monteCarlo = 200;
+        cfg.case9.monteCarlo = 300;
+    otherwise
+        error('Unknown default_config profile: %s', profileName);
+end
 end

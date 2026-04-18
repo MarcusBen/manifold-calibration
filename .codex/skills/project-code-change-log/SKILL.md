@@ -1,6 +1,6 @@
 ---
 name: project-code-change-log
-description: "Project-specific code modification logging workflow for this manifold calibration repository. Use when the user says 修改代码, 改代码, 修改完代码记日志, 记录变更, 跑 case, 运行实验, 把图片放进 log, or asks to change MATLAB code and keep traceable docs/results; after code changes, update docs/research-log.md with the local research hash, store referenced images in docs/assets, and put every run under a unique results case folder named with timestamp plus git short hash."
+description: "Project-specific code modification logging workflow for this manifold calibration repository. Use when the user says 修改代码, 改代码, 修改完代码记日志, 记录变更, 跑 case, 运行实验, 把图片放进 log, or asks to change MATLAB code and keep traceable docs/results; after code changes, generate one pending local short hash for the current version, use it consistently in docs/research-log.md and case result folders, store referenced images in docs/assets, and leave final replacement with the real Git commit hash to project-github-sync."
 ---
 
 # Project Code Change Log
@@ -14,20 +14,32 @@ Use this skill whenever code or experiment behavior changes in this repository. 
 - Main log: `docs/research-log.md`
 - Review/comment source: `docs/comments.md`
 - Documentation images: `docs/assets/`
-- Run outputs: `results/<case-name>/<YYYYMMDD-HHMMSS>-<git-short-hash>/`
+- Run outputs before upload: `results/<case-name>/<YYYYMMDD-HHMMSS>-<pending-local-hash>/`
+- Run outputs after upload finalization: `results/<case-name>/<YYYYMMDD-HHMMSS>-<git-code-commit-hash>/`
 
-Use the current `HEAD` short hash for `<git-short-hash>`. If the worktree has uncommitted changes, still use the current `HEAD` hash and write a small run note in the result directory stating that the run used an uncommitted worktree.
+Generate one pending local hash after code edits are complete and before writing logs or running cases. Use the same pending local hash everywhere for that code-change batch. `project-github-sync` later replaces that exact pending local hash with the real Git code/results commit hash.
+
+In short: project-github-sync later replaces the pending local hash; this skill only creates and uses it consistently.
 
 ## Hash Trace Policy
 
-Use one local/research hash consistently across logs and case results for a given code state.
+Use one pending local hash consistently across logs and case results for a given code-change batch.
 
-- Record `git rev-parse --short HEAD` in every new log entry that describes code behavior or run results.
-- Use the same short hash in the result run directory name.
-- If code changes are uncommitted, use the current `HEAD` hash as the base hash and explicitly record `git status --short` in both the log entry and `RUN_NOTES.md`.
-- Do not pretend an uncommitted run corresponds exactly to a clean commit; call it `HEAD plus uncommitted changes`.
-- Let `project-github-sync` map this local/research hash to the later published GitHub hash in `README.md` when upload creates a new commit.
-- When `docs/comments.md` is later written for a reviewed GitHub commit hash, only combine it with log conclusions if that hash matches the relevant local/research or published hash mapping in `README.md`.
+- After code edits are complete, generate a pending local hash with `.codex/skills/project-code-change-log/scripts/new_local_hash.py`.
+- Use the generated value, such as `local-a1b2c3d4`, in the log title, log metadata, result directory names, and `RUN_NOTES.md`.
+- Do not use `git rev-parse --short HEAD` as the primary version id during an uncommitted code-change batch; it points to the previous commit, not the just-edited code.
+- Record the current `HEAD` short hash separately as the base commit when useful.
+- If code changes are uncommitted, explicitly record `git status --short` in both the log entry and `RUN_NOTES.md`.
+- Let `project-github-sync` replace the exact pending local hash with the real Git code/results commit hash after commit.
+- When `docs/comments.md` is later written for a reviewed GitHub commit hash, only combine it with log conclusions if that hash matches the finalized Git hash or README mapping.
+
+Generate the pending local hash with:
+
+```bash
+py -X utf8 .codex/skills/project-code-change-log/scripts/new_local_hash.py
+```
+
+If `py` is unavailable, use any equivalent command that creates a unique lowercase value matching `local-[0-9a-f]{8}`.
 
 ## Before Editing Code
 
@@ -35,20 +47,21 @@ Use one local/research hash consistently across logs and case results for a give
 2. Identify existing user changes and avoid overwriting them.
 3. Read the relevant code, config, and current `docs/research-log.md` entry.
 4. If a requested change relates to an existing review point, also read `docs/comments.md`.
+5. After the code edits are complete, generate one pending local hash and keep it unchanged for the rest of this task.
 
 ## Result Directory Rule
 
 Before running any case or experiment, create or configure a fresh output path:
 
 ```text
-results/<case-name>/<YYYYMMDD-HHMMSS>-<git-short-hash>/
+results/<case-name>/<YYYYMMDD-HHMMSS>-<pending-local-hash>/
 ```
 
 Examples:
 
 ```text
-results/case09_two_source_resolution/20260418-091530-a1b2c3d/
-results/case01_problem_validation/20260418-101245-a1b2c3d/
+results/case09_two_source_resolution/20260418-091530-local-a1b2c3d4/
+results/case01_problem_validation/20260418-101245-local-a1b2c3d4/
 ```
 
 Never reuse an existing run directory, even for the same case and same parameters. Do not overwrite historical `.mat`, `.png`, `.csv`, or summary files.
@@ -56,7 +69,8 @@ Never reuse an existing run directory, even for the same case and same parameter
 When the run uses uncommitted changes, add a short provenance file in the run directory, for example `RUN_NOTES.md`, containing:
 
 - timestamp
-- `HEAD` short hash
+- pending local hash
+- base `HEAD` short hash
 - `git status --short`
 - command or case that was run
 - important config overrides
@@ -67,7 +81,8 @@ After changing code, update `docs/research-log.md` in UTF-8. Add a new dated ent
 
 Each entry should include:
 
-- local/research hash
+- pending local hash in the title or first metadata lines
+- base `HEAD` short hash when the worktree is uncommitted
 - why the change was made
 - what files or behavior changed
 - which case(s) are affected
@@ -83,14 +98,15 @@ Recommended entry skeleton:
 ```markdown
 ### YYYY-MM-DD: short change title
 
-- Local/research hash: `abc1234`
-- Worktree state: clean / HEAD plus uncommitted changes
+- Version hash: `local-a1b2c3d4`
+- Base HEAD: `abc1234`
+- Worktree state: clean / uncommitted code changes
 - Change:
 - Affected cases:
 - Validation:
 - Result path:
 - Remaining risk:
-- Comment/review status: no matching reviewed hash yet / comments for `abc1234` reviewed this version
+- Comment/review status: no matching reviewed Git hash yet
 ```
 
 ## Image Handling
@@ -115,6 +131,7 @@ Do not place documentation images in the repository root. Do not reference image
 - Do not move historical results into the new structure unless the user explicitly asks.
 - Do not write final-paper claims from smoke tests.
 - Do not use comments written for a different commit hash as current-version evaluation.
+- Do not generate a new pending local hash for each case in the same code-change batch; reuse the same one.
 - Mention any test or run that could not be completed.
 
 ## Completion Checklist
@@ -124,5 +141,5 @@ Before finishing a code-change task using this skill, confirm:
 - Code/config changes are complete.
 - Each executed case wrote to a unique run directory under `results/`.
 - Any documentation image was copied to `docs/assets/` and referenced from there.
-- `docs/research-log.md` records the local/research hash, change, validation, result path, and remaining risk.
+- `docs/research-log.md` records the pending local hash, base HEAD, change, validation, result path, and remaining risk.
 - `git status --short` has been checked and unrelated user changes are preserved.

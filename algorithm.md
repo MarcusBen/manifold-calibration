@@ -4,7 +4,7 @@
 
 ### A. Array Response Acquisition and Manifold Definition
 
-Consider an $M$-element receiving array with $M=8$, operating at the carrier frequency $f_0=2.36\,\mathrm{GHz}$. The inter-element spacing is set to $d=\lambda/2$, where $\lambda=c/f_0$ denotes the wavelength and $c$ is the speed of light.
+Consider an $M$-element receiving array with $M=8$, operating at the carrier frequency $f_0=2.5\,\mathrm{GHz}$. The ideal-array baseline uses the user-specified inter-element spacing $d=\lambda/4$, where $\lambda=c/f_0$ denotes the wavelength and $c$ is the speed of light. The full-wave HFSS manifold is sampled on the angular grid $[-60^\circ,60^\circ]$ with a $0.2^\circ$ step.
 
 To characterize the practical array response, a full-wave electromagnetic model is established in HFSS. For each incident direction $\theta$, a far-field plane wave is imposed on the array, and the complex voltages at the eight receiving ports are extracted. Therefore, the practical array response corresponding to $\theta$ can be written as
 
@@ -42,7 +42,7 @@ The vector $\tilde{\mathbf{a}}_{\mathrm{H}}(\theta)$ is regarded as the practica
 
 ### B. Ideal Steering Vector
 
-For an ideal uniform linear array with half-wavelength spacing, the steering vector corresponding to the incident direction $\theta$ is given by
+For an ideal uniform linear array with quarter-wavelength spacing, the steering vector corresponding to the incident direction $\theta$ is given by
 
 $$
 \mathbf{a}_{\mathrm{I}}(\theta)
@@ -57,20 +57,33 @@ e^{j(M-1)kd\sin\theta}
 \tag{3}
 $$
 
-where $k=2\pi/\lambda$ is the wavenumber. Since $d=\lambda/2$, (3) can be further written as
+where $k=2\pi/\lambda$ is the wavenumber. Since $d=\lambda/4$, (3) can be further written as
 
 $$
 \mathbf{a}_{\mathrm{I}}(\theta)
 =
 \left[
 1,\,
-e^{j\pi\sin\theta},\,
-e^{j2\pi\sin\theta},\,
+e^{j(\pi/2)\sin\theta},\,
+e^{j2(\pi/2)\sin\theta},\,
 \ldots,\,
-e^{j(M-1)\pi\sin\theta}
+e^{j(M-1)(\pi/2)\sin\theta}
 \right]^T.
 \tag{4}
 $$
+
+Equivalently, the $m$-th entry used in the MATLAB implementation is
+
+$$
+a_{\mathrm{I},m}(\theta)
+=
+\exp\!\left[j(m-1)\frac{\pi}{2}\sin\theta\right],
+\qquad m=1,\ldots,M.
+\tag{4a}
+$$
+
+In code, where $\theta$ is represented in degrees, this is implemented as
+`exp(1j * (m-1) * (pi/2) * sind(theta))`.
 
 For consistency with the practical manifold in (2), the ideal steering vector is also normalized as
 
@@ -215,7 +228,7 @@ $$
 
 is the array manifold matrix, $\mathbf s(t)\in\mathbb C^{K\times 1}$ is the source signal vector, and $\mathbf n(t)\in\mathbb C^{M\times 1}$ is the additive noise vector.
 
-When the practical array manifold is employed, $\mathbf a(\theta_k)$ in (17) can be taken as either the HFSS-extracted manifold $\tilde{\mathbf a}_{\mathrm H}(\theta_k)$ or the reconstructed manifold $\hat{\mathbf a}(\theta_k)$. Accordingly, the snapshot matrix with $N$ temporal samples is
+In the numerical experiments of this repository, the snapshot generation manifold in (17) is always the HFSS truth manifold $\tilde{\mathbf a}_{\mathrm H}(\theta_k)$. The ideal, interpolation, and proposed reconstructed manifolds are used only in the MUSIC scanning stage as estimator manifolds. This separation avoids validating a reconstructed manifold with self-generated snapshots. Accordingly, the snapshot matrix with $N$ temporal samples is
 
 $$
 \mathbf X
@@ -556,4 +569,3 @@ The proposed algorithm transforms the original ill-posed sparse-calibration mani
 2. **Low calibration burden**: only a small number of known-direction calibration samples are required.
 3. **Generalization to unseen directions**: the correction is learned as a smooth function of $\sin\theta$, rather than as a dense lookup table.
 4. **Compatibility with existing DOA estimators**: once the corrected manifold is reconstructed, it can be directly plugged into MUSIC or other subspace-based methods.
-

@@ -34,6 +34,9 @@ for methodIdx = 1:numMethods
     result.methods(methodIdx).successRate = NaN;
     result.methods(methodIdx).rmse = NaN;
     result.methods(methodIdx).perTargetRmse = NaN(numTargets, 1);
+    result.methods(methodIdx).perTargetMeanError = NaN(numTargets, 1);
+    result.methods(methodIdx).perTargetAbsBias = NaN(numTargets, 1);
+    result.methods(methodIdx).trialErrorStd = NaN(numTargets, 1);
     result.methods(methodIdx).perTargetSuccess = NaN(numTargets, 1);
     result.methods(methodIdx).resolutionRate = NaN;
     result.methods(methodIdx).marginalRate = NaN;
@@ -99,6 +102,9 @@ for methodIdx = 1:numMethods
     if strcmp(modeName, 'single')
         result.methods(methodIdx).rmse = sqrt(mean(trialErrors(:) .^ 2));
         result.methods(methodIdx).perTargetRmse = sqrt(mean(trialErrors .^ 2, 2));
+        result.methods(methodIdx).perTargetMeanError = mean(trialErrors, 2);
+        result.methods(methodIdx).perTargetAbsBias = abs(result.methods(methodIdx).perTargetMeanError);
+        result.methods(methodIdx).trialErrorStd = std(trialErrors, 0, 2);
     else
         result.methods(methodIdx).rmse = mean(trialErrors(:));
         result.methods(methodIdx).perTargetRmse = mean(trialErrors, 2);

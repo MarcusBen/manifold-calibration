@@ -15,35 +15,59 @@
 - 理想阵列基线按 `elementSpacingLambda = 0.25` 生成，对应四分之一波长阵元间距；从 HFSS 数据诊断出的约 `0.276 lambda` 只作为失配诊断，不替代理想基线配置。
 - `build_project_context.m` 会校验 0.2 度网格、2.5GHz 频率、8 路复数端口数据以及非 NaN/Inf 输入。
 - 单源 DOA Monte Carlo 默认使用分层未见角抽样，避免 601 个角点全量运行过慢；流形误差指标仍覆盖全部未见角。
-- `case09` 已适配细网格双源 near-threshold separation sweep，默认 `separationSweepDeg = [1 2 3 4 5 6 8 10]`，并限制每个 separation 的代表性 pair 数量。
-- `results_step0p2_qw/` 保存了这轮默认配置对应的输出，可用于复查链路和图像，但仍应按研究日志中的说明谨慎区分 smoke / proof-of-trend 与最终论文 benchmark。
+- `case09` 已适配细网格双源 near-threshold separation sweep，默认 `separationSweepDeg = [1 2 3 4 5 6 8 10]`，并同时比较 `Ideal / Interpolation / Proposed / HFSS Oracle`。
+- `case09` 的 pair 选择默认使用 `research_coverage`，优先覆盖边缘区、高失配区、远离校准角的未见角和近阈值困难组合。
+- `results_step0p2_qw/` 是兼容旧运行习惯的默认输出目录；可追溯实验应使用 `cfg.run.useTraceableDirs = true`，输出到 `results/<case-name>/<timestamp>-<localhash>/`。
+- `default_config(rootDir, 'paper')` 提供更厚 Monte Carlo 的正式图配置；日常默认配置仍以较快迭代为主。
 
 当前更稳妥的论文表述是：项目已经完成默认代码层面的 dense HFSS 数据切换，并建立了更严格的细网格评估入口；但正式论文结论仍需要更高置信度 Monte Carlo、结果稳定性复查和 hash 匹配评阅后再收束。
 
 ## Version Trace
 
-- Local/research base hash: `ba9e6b7`
+- Pending local hash: `local-074e912a`
+- Base HEAD: `81eaaf4`
 - Published GitHub hash: pending this sync commit
 - Latest reviewed comments hash: unavailable in `docs/comments.md`
 - Review status: `docs/comments.md` 没有可识别的 `Reviewed commit` 或 `Review for commit` 标记，因此只能作为背景意见；当前工作区版本尚未获得 hash-matched review。
+- Latest traceable smoke run: `results/case01_problem_validation/20260418-101955-local-074e912a/` and `results/case09_two_source_resolution/20260418-101955-local-074e912a/`
 
 ## 提醒：`comments`、`research-log` 和当前代码并不完全对齐
 
 以下差异需要保留，不要把旧评论平滑成当前结论：
 
 - `docs/comments.md` 评价的是上一轮 `case09` 改进，并未标明评审 commit hash；它提到的 `centerAngleDeg = 37.5`、`separationSweepDeg = 4:2:18`、`numTrials = 250`、`scanGridDeg = -60:1:60` 不是当前默认配置。
-- 当前代码与 `docs/research-log.md` 的最新条目一致：默认 `case09` 使用 `[1 2 3 4 5 6 8 10]` 的 separation sweep、`snapshots = 500`、`monteCarlo = 80`，并在细网格下使用更严格的状态阈值。
+- 当前代码与 `docs/research-log.md` 的最新条目一致：默认 `case09` 使用 `[1 2 3 4 5 6 8 10]` 的 separation sweep、`snapshots = 500`、`monteCarlo = 80`，包含 `Interpolation` 基线，并在细网格下使用更严格的状态阈值。
 - 旧日志中关于 `5 deg` 网格和 coarse-grid benchmark 的条目是历史判断；当前默认入口已切到 `0.2 deg` HFSS 数据，但最终论文图仍需要按最新配置重新确认。
 - `Amp+Phase` 仍应作为 oracle 上界，而不是同预算可实现基线。
 
 ## 运行方式
 
-在 MATLAB 中运行全部 case：
+在 MATLAB 中运行全部 case，使用兼容默认输出目录：
 
 ```matlab
 setup_paths
 cfg = default_config();
 run_project(1:10, cfg);
+```
+
+使用正式图 Monte Carlo 配置：
+
+```matlab
+setup_paths
+cfg = default_config(pwd, 'paper');
+run_project(1:10, cfg);
+```
+
+使用可追溯结果目录时，需要为本批代码生成一个 pending local hash，并设置同一个 `runId`：
+
+```matlab
+setup_paths
+cfg = default_config(pwd);
+cfg.run.useTraceableDirs = true;
+cfg.run.pendingLocalHash = 'local-xxxxxxxx';
+cfg.run.runId = 'YYYYMMDD-HHMMSS-local-xxxxxxxx';
+cfg.run.command = 'run_project([1 9], cfg)';
+run_project([1 9], cfg);
 ```
 
 只快速检查数据上下文：

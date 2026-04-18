@@ -27,8 +27,12 @@ else
 end
 cfg = local_complete_runtime_config(cfg, rootDir);
 
-if ~exist(cfg.outputDir, 'dir')
-    mkdir(cfg.outputDir);
+outputRoot = cfg.outputDir;
+if cfg.run.useTraceableDirs
+    outputRoot = cfg.run.resultRoot;
+end
+if ~exist(outputRoot, 'dir')
+    mkdir(outputRoot);
 end
 
 ctx = build_project_context(cfg);
@@ -99,22 +103,29 @@ ylabel('Relative error');
 title('Case 1: ideal-vs-HFSS manifold mismatch');
 save_figure(fig, fullfile(outDir, 'similarity_curves.png'));
 
-exampleAngle = cfg.case1.exampleAngleDeg;
 methods = [ ...
     local_method('ideal', 'Ideal', ctx.AI), ...
     local_method('oracle', 'HFSS Oracle', ctx.AH)];
 
 evalCfg = struct();
 evalCfg.mode = 'single';
-evalCfg.trueAngles = exampleAngle;
+evalCfg.trueAngles = local_single_source_eval_angles(ctx, [], cfg);
 evalCfg.snrDb = cfg.case1.highSNRDb;
 evalCfg.snapshots = cfg.case1.snapshots;
-evalCfg.monteCarlo = 1;
+evalCfg.monteCarlo = cfg.case1.monteCarlo;
 evalCfg.toleranceDeg = cfg.case1.toleranceDeg;
-evalCfg.collectRepresentativeSpectrum = true;
-exampleSpectrum = benchmark_music(ctx, methods, evalCfg);
+evalCfg.collectRepresentativeSpectrum = false;
+highSnrSweep = benchmark_music(ctx, methods, evalCfg);
 
-fig = figure('Visible', 'off', 'Position', [140 140 1100 500]);
+[stressExampleAngle, exampleSelectionReason, stressScore] = local_case1_select_stress_angle(highSnrSweep);
+
+exampleEval = evalCfg;
+exampleEval.trueAngles = stressExampleAngle;
+exampleEval.monteCarlo = 1;
+exampleEval.collectRepresentativeSpectrum = true;
+exampleSpectrum = benchmark_music(ctx, methods, exampleEval);
+
+fig = figure('Visible', 'off', 'Position', [140 140 1100 520]);
 hold on;
 for methodIdx = 1:numel(exampleSpectrum.methods)
     plot(ctx.thetaDeg, 10 * log10(exampleSpectrum.methods(methodIdx).representativeSpectrum), ...
@@ -123,25 +134,38 @@ end
 grid on;
 xlabel('Scan angle (deg)');
 ylabel('Pseudo-spectrum (dB)');
-title(sprintf('Case 1: MUSIC spectrum at %.1f deg, SNR = %g dB', exampleAngle, cfg.case1.highSNRDb));
+title({sprintf('Case 1: high-SNR spectrum at %.1f deg, SNR = %g dB', ...
+    stressExampleAngle, cfg.case1.highSNRDb), ...
+    'HFSS truth snapshots; MUSIC scan uses the listed estimator manifold'});
 legend({exampleSpectrum.methods.label}, 'Location', 'best');
 save_figure(fig, fullfile(outDir, 'example_music_spectrum.png'));
 
-evalCfg.trueAngles = local_single_source_eval_angles(ctx, [], cfg);
-evalCfg.monteCarlo = cfg.case1.monteCarlo;
-evalCfg.collectRepresentativeSpectrum = false;
-highSnrSweep = benchmark_music(ctx, methods, evalCfg);
+fig = figure('Visible', 'off', 'Position', [160 160 1180 720]);
+tiledlayout(2, 1, 'Padding', 'compact', 'TileSpacing', 'compact');
+nexttile;
+hold on;
+for methodIdx = 1:numel(highSnrSweep.methods)
+    plot(highSnrSweep.trueAngleSetsDeg, highSnrSweep.methods(methodIdx).perTargetMeanError, ...
+        'o-', 'LineWidth', 1.4, 'MarkerSize', 5);
+end
+xline(stressExampleAngle, 'k--', 'Stress example');
+grid on;
+xlabel('True angle (deg)');
+ylabel('Signed bias (deg)');
+title(sprintf('Case 1: high-SNR signed bias, SNR = %g dB', cfg.case1.highSNRDb));
+legend({highSnrSweep.methods.label}, 'Location', 'best');
 
-fig = figure('Visible', 'off', 'Position', [160 160 1100 500]);
+nexttile;
 hold on;
 for methodIdx = 1:numel(highSnrSweep.methods)
     plot(highSnrSweep.trueAngleSetsDeg, highSnrSweep.methods(methodIdx).perTargetRmse, ...
         'o-', 'LineWidth', 1.4, 'MarkerSize', 5);
 end
+xline(stressExampleAngle, 'k--', 'Stress example');
 grid on;
 xlabel('True angle (deg)');
 ylabel('DOA RMSE (deg)');
-title(sprintf('Case 1: high-SNR angle error, SNR = %g dB', cfg.case1.highSNRDb));
+title('Case 1: high-SNR RMSE floor check');
 legend({highSnrSweep.methods.label}, 'Location', 'best');
 save_figure(fig, fullfile(outDir, 'high_snr_angle_bias.png'));
 
@@ -149,6 +173,9 @@ caseResult = struct();
 caseResult.outputDir = outDir;
 caseResult.metrics = metrics;
 caseResult.contextDiagnostics = ctx.diagnostics;
+caseResult.stressExampleAngleDeg = stressExampleAngle;
+caseResult.exampleSelectionReason = exampleSelectionReason;
+caseResult.stressScoreDeg = stressScore;
 caseResult.exampleSpectrum = exampleSpectrum;
 caseResult.highSnrSweep = highSnrSweep;
 save(fullfile(outDir, 'case01_results.mat'), 'caseResult');
@@ -770,11 +797,11 @@ outDir = local_case_output_dir(cfg, 'case09_two_source_resolution');
 
 calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'uniform');
 models = build_sparse_models(ctx, calIdx, cfg.model);
-methods = local_named_methods(ctx, models, {'ideal', 'proposed', 'oracle'});
+methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed', 'oracle'});
 
-sourcePairs = local_case9_source_pairs(cfg.case9, ctx.thetaDeg, models.calAnglesDeg);
+[sourcePairs, pairSelection] = local_case9_source_pairs(cfg.case9, ctx, models.calAnglesDeg);
 pairLabels = local_case9_pair_labels(sourcePairs);
-separationDeg = sourcePairs(:, 2) - sourcePairs(:, 1);
+separationDeg = round(sourcePairs(:, 2) - sourcePairs(:, 1), 10);
 pairCenterDeg = mean(sourcePairs, 2);
 
 evalCfg = struct();
@@ -807,8 +834,8 @@ end
 [uniqueSep, resolutionMean, resolutionStd] = local_case9_group_metric(separationDeg, resolutionProb);
 [~, pairRmseMean, pairRmseStd] = local_case9_group_metric(separationDeg, pairRmse);
 
-exampleIdx = local_case9_select_example_pair(bench, methods, separationDeg, ...
-    cfg.case9.exampleTargetResolutionProb);
+[exampleIdx, exampleSelectionReason] = local_case9_select_example_pair(bench, methods, separationDeg, ...
+    cfg.case9.exampleTargetResolutionProb, pairSelection);
 examplePair = sourcePairs(exampleIdx, :);
 exampleStateMatrix = zeros(numel(methods), 4);
 for methodIdx = 1:numel(methods)
@@ -878,8 +905,11 @@ save_figure(fig, fullfile(outDir, 'two_source_resolution.png'));
 caseResult = struct();
 caseResult.outputDir = outDir;
 caseResult.models = models;
+caseResult.methodLabels = {methods.label};
 caseResult.sourcePairsDeg = sourcePairs;
 caseResult.sourcePairLabels = pairLabels;
+caseResult.pairSelectionMode = pairSelection.mode;
+caseResult.pairSelectionScores = pairSelection;
 caseResult.separationDeg = separationDeg;
 caseResult.pairCenterDeg = pairCenterDeg;
 caseResult.resolutionProb = resolutionProb;
@@ -894,6 +924,7 @@ caseResult.groupedResolutionStd = resolutionStd;
 caseResult.groupedPairRmseMean = pairRmseMean;
 caseResult.groupedPairRmseStd = pairRmseStd;
 caseResult.examplePairIndex = exampleIdx;
+caseResult.exampleSelectionReason = exampleSelectionReason;
 caseResult.benchmark = bench;
 caseResult.exampleBenchmark = exampleBench;
 save(fullfile(outDir, 'case09_results.mat'), 'caseResult');
@@ -965,10 +996,60 @@ save(fullfile(outDir, 'case10_results.mat'), 'caseResult');
 end
 
 function outDir = local_case_output_dir(cfg, caseFolderName)
-outDir = fullfile(cfg.outputDir, caseFolderName);
+if cfg.run.useTraceableDirs
+    if ~isfield(cfg.run, 'runId') || isempty(cfg.run.runId)
+        error('cfg.run.runId is required when cfg.run.useTraceableDirs is true.');
+    end
+    outDir = fullfile(cfg.run.resultRoot, caseFolderName, cfg.run.runId);
+else
+    outDir = fullfile(cfg.outputDir, caseFolderName);
+end
 if ~exist(outDir, 'dir')
     mkdir(outDir);
+elseif cfg.run.useTraceableDirs && local_case_output_has_results(outDir)
+    error('Traceable output directory already contains result files: %s', outDir);
 end
+
+if cfg.run.useTraceableDirs
+    local_write_run_notes(outDir, cfg, caseFolderName);
+end
+end
+
+function hasResults = local_case_output_has_results(outDir)
+matFiles = dir(fullfile(outDir, '*.mat'));
+pngFiles = dir(fullfile(outDir, '*.png'));
+hasResults = ~isempty(matFiles) || ~isempty(pngFiles);
+end
+
+function local_write_run_notes(outDir, cfg, caseFolderName)
+notesPath = fullfile(outDir, 'RUN_NOTES.md');
+if exist(notesPath, 'file')
+    return;
+end
+
+fid = fopen(notesPath, 'w');
+if fid < 0
+    error('Unable to write RUN_NOTES.md in %s', outDir);
+end
+cleanupObj = onCleanup(@() fclose(fid));
+
+fprintf(fid, '# Run Notes\n\n');
+fprintf(fid, '- Case: `%s`\n', caseFolderName);
+fprintf(fid, '- Timestamp: `%s`\n', datestr(now, 'yyyy-mm-dd HH:MM:SS'));
+fprintf(fid, '- Pending local hash: `%s`\n', cfg.run.pendingLocalHash);
+fprintf(fid, '- Base HEAD: `%s`\n', cfg.run.baseHead);
+fprintf(fid, '- Run id: `%s`\n', cfg.run.runId);
+fprintf(fid, '- Command: `%s`\n', cfg.run.command);
+fprintf(fid, '- Notes: `%s`\n\n', cfg.run.notes);
+fprintf(fid, '## Important Config\n\n');
+fprintf(fid, '- Data: `%s`\n', cfg.data.csvPath);
+fprintf(fid, '- Frequency Hz: `%.12g`\n', cfg.array.frequencyHz);
+fprintf(fid, '- Element spacing lambda: `%.12g`\n', cfg.array.elementSpacingLambda);
+fprintf(fid, '- Case 1 high SNR dB: `%.12g`\n', cfg.case1.highSNRDb);
+fprintf(fid, '- Case 9 Monte Carlo: `%d`\n', cfg.case9.monteCarlo);
+fprintf(fid, '- Case 9 separation sweep: `%s`\n\n', mat2str(cfg.case9.separationSweepDeg));
+fprintf(fid, '## Git Status Short\n\n');
+fprintf(fid, '```text\n%s\n```\n', cfg.run.gitStatusShort);
 end
 
 function cfg = local_complete_runtime_config(cfg, rootDir)
@@ -978,6 +1059,17 @@ end
 if ~isfield(cfg, 'outputDir') || isempty(cfg.outputDir)
     cfg.outputDir = fullfile(rootDir, 'results_step0p2_qw');
 end
+if ~isfield(cfg, 'run') || isempty(cfg.run)
+    cfg.run = struct();
+end
+cfg.run = local_set_default_field(cfg.run, 'useTraceableDirs', false);
+cfg.run = local_set_default_field(cfg.run, 'resultRoot', fullfile(rootDir, 'results'));
+cfg.run = local_set_default_field(cfg.run, 'runId', '');
+cfg.run = local_set_default_field(cfg.run, 'pendingLocalHash', '');
+cfg.run = local_set_default_field(cfg.run, 'baseHead', '');
+cfg.run = local_set_default_field(cfg.run, 'gitStatusShort', '');
+cfg.run = local_set_default_field(cfg.run, 'command', '');
+cfg.run = local_set_default_field(cfg.run, 'notes', '');
 if ~isfield(cfg, 'eval') || isempty(cfg.eval)
     cfg.eval = struct();
 end
@@ -992,6 +1084,7 @@ if isfield(cfg, 'case9')
     cfg.case9 = local_set_default_field(cfg.case9, 'separationSweepDeg', [1 2 3 4 5 6 8 10]);
     cfg.case9 = local_set_default_field(cfg.case9, 'biasedToleranceDeg', 2);
     cfg.case9 = local_set_default_field(cfg.case9, 'marginalToleranceDeg', 5);
+    cfg.case9 = local_set_default_field(cfg.case9, 'pairSelectionMode', 'research_coverage');
 end
 end
 
@@ -1059,6 +1152,34 @@ end
 function nearestAngle = local_nearest_angle_from_set(queryAngle, availableAngles)
 [~, nearestIdx] = min(abs(availableAngles(:).' - queryAngle));
 nearestAngle = availableAngles(nearestIdx);
+end
+
+function [stressAngleDeg, reason, stressScore] = local_case1_select_stress_angle(bench)
+idealIdx = find(strcmp({bench.methods.name}, 'ideal'), 1, 'first');
+oracleIdx = find(strcmp({bench.methods.name}, 'oracle'), 1, 'first');
+
+if isempty(idealIdx)
+    idealIdx = 1;
+end
+
+ideal = bench.methods(idealIdx);
+score = ideal.perTargetAbsBias(:) + ideal.perTargetRmse(:);
+if ~isempty(oracleIdx)
+    oracle = bench.methods(oracleIdx);
+    score = score - oracle.perTargetRmse(:);
+end
+
+[stressScore, targetIdx] = max(score);
+stressAngleDeg = bench.trueAngleSetsDeg(targetIdx);
+
+if ~isempty(oracleIdx)
+    reason = sprintf(['Selected %.1f deg because Ideal has the largest high-SNR ' ...
+        'abs-bias plus RMSE minus HFSS Oracle RMSE score (%.3f deg).'], ...
+        stressAngleDeg, stressScore);
+else
+    reason = sprintf(['Selected %.1f deg because Ideal has the largest high-SNR ' ...
+        'abs-bias plus RMSE score (%.3f deg).'], stressAngleDeg, stressScore);
+end
 end
 
 function method = local_method(name, label, manifold)
@@ -1146,7 +1267,8 @@ if nargin >= 3 && ~isempty(calAnglesDeg)
 end
 end
 
-function sourcePairs = local_case9_source_pairs(caseCfg, thetaGrid, calAnglesDeg)
+function [sourcePairs, pairSelection] = local_case9_source_pairs(caseCfg, ctx, calAnglesDeg)
+thetaGrid = ctx.thetaDeg;
 if isfield(caseCfg, 'sourcePairsDeg') && ~isempty(caseCfg.sourcePairsDeg)
     candidatePairs = caseCfg.sourcePairsDeg;
 else
@@ -1164,11 +1286,23 @@ separationDeg = sourcePairs(:, 2) - sourcePairs(:, 1);
 pairCenterDeg = mean(sourcePairs, 2);
 sourcePairs = sortrows([sourcePairs, separationDeg, pairCenterDeg], [3 4 1 2]);
 sourcePairs = sourcePairs(:, 1:2);
+preLimitPairs = sourcePairs;
 
 if isfield(caseCfg, 'maxPairsPerSeparation') && ~isempty(caseCfg.maxPairsPerSeparation) && ...
         isfinite(caseCfg.maxPairsPerSeparation) && caseCfg.maxPairsPerSeparation > 0
-    sourcePairs = local_case9_limit_pairs_per_separation(sourcePairs, caseCfg.maxPairsPerSeparation);
+    selectionMode = local_optional_case9_field(caseCfg, 'pairSelectionMode', 'research_coverage');
+    [sourcePairs, selectedIdx] = local_case9_limit_pairs_per_separation( ...
+        sourcePairs, caseCfg.maxPairsPerSeparation, ctx, calAnglesDeg, selectionMode);
+else
+    selectionMode = 'none';
+    selectedIdx = 1:size(sourcePairs, 1);
 end
+
+pairSelection = local_case9_score_pairs(preLimitPairs, ctx, calAnglesDeg);
+pairSelection.mode = selectionMode;
+pairSelection.preLimitPairCount = size(preLimitPairs, 1);
+pairSelection.selectedOriginalIndex = selectedIdx(:);
+pairSelection = local_case9_subset_pair_selection(pairSelection, selectedIdx);
 end
 
 function candidatePairs = local_case9_generate_pairs(thetaGrid, separationSweepDeg)
@@ -1186,19 +1320,135 @@ for sepDeg = reshape(separationSweepDeg, 1, [])
 end
 end
 
-function limitedPairs = local_case9_limit_pairs_per_separation(sourcePairs, maxPairsPerSeparation)
+function [limitedPairs, selectedIdx] = local_case9_limit_pairs_per_separation( ...
+    sourcePairs, maxPairsPerSeparation, ctx, calAnglesDeg, selectionMode)
 separationDeg = sourcePairs(:, 2) - sourcePairs(:, 1);
 uniqueSep = unique(round(separationDeg, 10), 'sorted');
 limitedPairs = zeros(0, 2);
+selectedIdx = zeros(0, 1);
+useResearchCoverage = strcmpi(selectionMode, 'research_coverage');
+if useResearchCoverage
+    scores = local_case9_score_pairs(sourcePairs, ctx, calAnglesDeg);
+end
 
 for sepIdx = 1:numel(uniqueSep)
     pairIdx = find(abs(separationDeg - uniqueSep(sepIdx)) < 1e-9);
     if numel(pairIdx) > maxPairsPerSeparation
-        pickLocal = unique(round(linspace(1, numel(pairIdx), maxPairsPerSeparation)));
-        pairIdx = pairIdx(pickLocal);
+        if useResearchCoverage
+            pairIdx = local_case9_research_coverage_indices(pairIdx, scores, sourcePairs, maxPairsPerSeparation);
+        else
+            pickLocal = unique(round(linspace(1, numel(pairIdx), maxPairsPerSeparation)));
+            pairIdx = pairIdx(pickLocal);
+        end
     end
     limitedPairs = [limitedPairs; sourcePairs(pairIdx, :)]; %#ok<AGROW>
+    selectedIdx = [selectedIdx; pairIdx(:)]; %#ok<AGROW>
 end
+end
+
+function pairSelection = local_case9_score_pairs(sourcePairs, ctx, calAnglesDeg)
+leftIdx = local_angle_indices(ctx.thetaDeg, sourcePairs(:, 1));
+rightIdx = local_angle_indices(ctx.thetaDeg, sourcePairs(:, 2));
+leftMetrics = compute_manifold_metrics(ctx.AH(:, leftIdx), ctx.AI(:, leftIdx));
+rightMetrics = compute_manifold_metrics(ctx.AH(:, rightIdx), ctx.AI(:, rightIdx));
+
+maxAbsAngle = max(abs(ctx.thetaDeg));
+if maxAbsAngle <= 0
+    maxAbsAngle = 1;
+end
+
+pairMismatchScore = (leftMetrics.relativeError(:) + rightMetrics.relativeError(:)) / 2;
+edgeScore = max(abs(sourcePairs), [], 2) / maxAbsAngle;
+
+if nargin < 3 || isempty(calAnglesDeg)
+    calDistanceScore = ones(size(pairMismatchScore));
+else
+    calDistance = zeros(size(pairMismatchScore));
+    for pairIdx = 1:size(sourcePairs, 1)
+        leftDistance = min(abs(calAnglesDeg(:) - sourcePairs(pairIdx, 1)));
+        rightDistance = min(abs(calAnglesDeg(:) - sourcePairs(pairIdx, 2)));
+        calDistance(pairIdx) = min(leftDistance, rightDistance);
+    end
+    calDistanceScore = min(calDistance / maxAbsAngle, 1);
+end
+
+combinedScore = 0.55 * pairMismatchScore + 0.30 * edgeScore + 0.15 * calDistanceScore;
+
+pairSelection = struct();
+pairSelection.mode = 'research_coverage';
+pairSelection.sourcePairsDeg = sourcePairs;
+pairSelection.pairMismatchScore = pairMismatchScore;
+pairSelection.edgeScore = edgeScore;
+pairSelection.calDistanceScore = calDistanceScore;
+pairSelection.combinedScore = combinedScore;
+pairSelection.weights = [0.55 0.30 0.15];
+end
+
+function subsetSelection = local_case9_subset_pair_selection(pairSelection, selectedIdx)
+subsetSelection = pairSelection;
+fieldsToSubset = {'sourcePairsDeg', 'pairMismatchScore', 'edgeScore', ...
+    'calDistanceScore', 'combinedScore'};
+for fieldIdx = 1:numel(fieldsToSubset)
+    fieldName = fieldsToSubset{fieldIdx};
+    values = pairSelection.(fieldName);
+    if size(values, 1) == numel(pairSelection.combinedScore)
+        subsetSelection.(fieldName) = values(selectedIdx, :);
+    end
+end
+end
+
+function selectedIdx = local_case9_research_coverage_indices(pairIdx, scores, sourcePairs, maxPairsPerSeparation)
+selectedIdx = zeros(0, 1);
+
+[~, combinedOrder] = sort(scores.combinedScore(pairIdx), 'descend');
+combinedPick = pairIdx(combinedOrder(1:min(9, min(maxPairsPerSeparation, numel(combinedOrder)))));
+selectedIdx = local_append_unique_indices(selectedIdx, combinedPick);
+
+remainingSlots = maxPairsPerSeparation - numel(selectedIdx);
+if remainingSlots > 0
+    [~, edgeOrder] = sort(scores.edgeScore(pairIdx), 'descend');
+    edgePick = pairIdx(edgeOrder(1:min(6, min(remainingSlots, numel(edgeOrder)))));
+    selectedIdx = local_append_unique_indices(selectedIdx, edgePick);
+end
+
+while numel(selectedIdx) < maxPairsPerSeparation
+    remaining = setdiff(pairIdx(:), selectedIdx(:), 'stable');
+    if isempty(remaining)
+        break;
+    end
+    nextIdx = local_case9_next_farthest_center_idx(remaining, selectedIdx, sourcePairs, scores);
+    selectedIdx = local_append_unique_indices(selectedIdx, nextIdx);
+end
+
+selectedIdx = sort(selectedIdx(:));
+end
+
+function selectedIdx = local_append_unique_indices(selectedIdx, newIdx)
+for idx = reshape(newIdx, 1, [])
+    if ~ismember(idx, selectedIdx)
+        selectedIdx(end+1, 1) = idx; %#ok<AGROW>
+    end
+end
+end
+
+function nextIdx = local_case9_next_farthest_center_idx(remaining, selectedIdx, sourcePairs, scores)
+centers = mean(sourcePairs, 2);
+if isempty(selectedIdx)
+    [~, localIdx] = max(scores.combinedScore(remaining));
+    nextIdx = remaining(localIdx);
+    return;
+end
+
+selectedCenters = centers(selectedIdx);
+minDistance = zeros(numel(remaining), 1);
+for idx = 1:numel(remaining)
+    minDistance(idx) = min(abs(centers(remaining(idx)) - selectedCenters));
+end
+
+tieBreaker = scores.combinedScore(remaining);
+rankScore = minDistance + 1e-3 * tieBreaker;
+[~, localIdx] = max(rankScore);
+nextIdx = remaining(localIdx);
 end
 
 function pairLabels = local_case9_pair_labels(sourcePairs)
@@ -1207,6 +1457,7 @@ pairLabels = arrayfun(@(rowIdx) sprintf('[%g,%g]', sourcePairs(rowIdx, 1), sourc
 end
 
 function [uniqueSep, meanMetric, stdMetric] = local_case9_group_metric(separationDeg, metricMatrix)
+separationDeg = round(separationDeg, 10);
 uniqueSep = unique(separationDeg, 'sorted');
 meanMetric = zeros(numel(uniqueSep), size(metricMatrix, 2));
 stdMetric = zeros(numel(uniqueSep), size(metricMatrix, 2));
@@ -1218,8 +1469,10 @@ for sepIdx = 1:numel(uniqueSep)
 end
 end
 
-function exampleIdx = local_case9_select_example_pair(bench, methods, separationDeg, targetResolutionProb)
+function [exampleIdx, reason] = local_case9_select_example_pair( ...
+    bench, methods, separationDeg, targetResolutionProb, pairSelection)
 methodIdx = find(strcmp({methods.name}, 'proposed'), 1, 'first');
+interpIdx = find(strcmp({methods.name}, 'interp'), 1, 'first');
 if isempty(methodIdx)
     methodIdx = 1;
 end
@@ -1232,23 +1485,53 @@ stateMatrix = [ ...
     proposed.perTargetStableRate(:)];
 stateEntropy = -sum(stateMatrix .* log(max(stateMatrix, eps)), 2);
 
-candidateMask = proposed.perTargetResolutionRate > 0.2 & ...
-    proposed.perTargetResolutionRate < 0.98 & ...
-    (proposed.perTargetMarginalRate + proposed.perTargetBiasedRate) > 0.05;
-if ~any(candidateMask)
-    candidateMask = proposed.perTargetResolutionRate > 0.05 & ...
-        proposed.perTargetResolutionRate < 1;
+mixedMask = proposed.perTargetResolutionRate > 0.05 & proposed.perTargetResolutionRate < 0.98;
+mismatchScore = zeros(size(proposed.perTargetResolutionRate(:)));
+if nargin >= 5 && isfield(pairSelection, 'combinedScore')
+    mismatchScore = pairSelection.combinedScore(:);
+    mismatchScore = mismatchScore / max(max(mismatchScore), eps);
 end
+
+if ~isempty(interpIdx)
+    interp = bench.methods(interpIdx);
+    advantage = proposed.perTargetStableRate(:) - interp.perTargetStableRate(:) + ...
+        0.5 * (proposed.perTargetResolutionRate(:) - interp.perTargetResolutionRate(:));
+    candidateMask = mixedMask & advantage > 0.02;
+    if any(candidateMask)
+        candidateIdx = find(candidateMask);
+        score = advantage(candidateIdx) + 0.4 * stateEntropy(candidateIdx) ...
+            + 0.15 * mismatchScore(candidateIdx) - 0.02 * separationDeg(candidateIdx);
+        [~, bestLocalIdx] = max(score);
+        exampleIdx = candidateIdx(bestLocalIdx);
+        reason = sprintf(['Selected [%g, %g] deg because Proposed improves stable/resolution ' ...
+            'behavior over Interpolation while remaining a mixed hard pair.'], ...
+            bench.trueAngleSetsDeg(exampleIdx, 1), bench.trueAngleSetsDeg(exampleIdx, 2));
+        return;
+    end
+end
+
+candidateMask = mixedMask;
 if ~any(candidateMask)
     candidateMask = true(size(proposed.perTargetResolutionRate));
 end
 
 candidateIdx = find(candidateMask);
-score = abs(proposed.perTargetResolutionRate(candidateIdx) - targetResolutionProb) ...
-    - 0.6 * stateEntropy(candidateIdx) ...
-    + 0.01 * separationDeg(candidateIdx);
-[~, bestLocalIdx] = min(score);
+score = 0.45 * mismatchScore(candidateIdx) + 0.35 * stateEntropy(candidateIdx) ...
+    - abs(proposed.perTargetResolutionRate(candidateIdx) - targetResolutionProb) ...
+    - 0.02 * separationDeg(candidateIdx);
+[~, bestLocalIdx] = max(score);
 exampleIdx = candidateIdx(bestLocalIdx);
+reason = sprintf(['Selected [%g, %g] deg as the hardest available high-mismatch pair; ' ...
+    'no stable Proposed-over-Interpolation advantage pair was found in this run.'], ...
+    bench.trueAngleSetsDeg(exampleIdx, 1), bench.trueAngleSetsDeg(exampleIdx, 2));
+end
+
+function value = local_optional_case9_field(inputStruct, fieldName, defaultValue)
+if isfield(inputStruct, fieldName) && ~isempty(inputStruct.(fieldName))
+    value = inputStruct.(fieldName);
+else
+    value = defaultValue;
+end
 end
 
 function [xValues, yValues] = local_box_inputs(dataMatrix, labels)
