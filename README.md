@@ -1,4 +1,4 @@
-# manifold calibration
+﻿# manifold calibration
 
 这个仓库保存 MATLAB 实验代码、HFSS 数据、可追溯实验结果和论文证据链记录。当前主线是用少量校准角重构未见方向流形，并比较 `Ideal / Interpolation / Proposed / HFSS Oracle` 在 MUSIC DOA 任务中的表现。
 
@@ -21,15 +21,16 @@
 - `case04` 已保留 harder 设计，并切到严格公共测试集版本：所有 `L` 使用同一组单源测试角和双源 pair，`paper` profile 下使用 `MC = 200`，输出 `stable / biased / marginal / unresolved` 四状态分解。
 - `default_config(rootDir, 'paper')` 提供更厚 Monte Carlo 的正式图配置；日常默认配置仍以较快迭代为主。
 
-最新全量结果批次为 `results/<case-name>/20260418-195622-local-3e814f40/`。该批次跑完 10 个 case，所有 case 均生成 `RUN_NOTES.md`。它是当前本地收口归档候选和研究记录，但在完成 Git hash finalization 前，`local-3e814f40` 仍只是 pending local hash。
+最新全量结果批次为 `results/<case-name>/20260418-195622-f4e46e4/`。该批次跑完 10 个 case，所有 case 均生成 `RUN_NOTES.md`。它原本以 `local-3e814f40` 作为 pending local hash 运行，第一阶段上传提交后已映射为 Git code commit `f4e46e4`。
 
 ## Version Trace
 
-- Pending local hash: `local-3e814f40`
+- Former pending local hash: `local-3e814f40`
 - Base HEAD for this local batch: `bd11394`
-- Git code commit hash: pending first upload commit
+- Git code commit hash: `f4e46e4`
+- Metadata/finalization commit hash: pending
 - Published branch hash: pending finalization after commit/push
-- Latest traceable paper-profile full run: `results/<case-name>/20260418-195622-local-3e814f40/`
+- Latest traceable paper-profile full run: `results/<case-name>/20260418-195622-f4e46e4/`
 
 ## 当前结果与清理状态
 
@@ -40,7 +41,7 @@
 
 ## 仍需保留的边界
 
-- `local-3e814f40` 这一批 full run 来自 uncommitted worktree；同步后需要用真实 Git commit hash 替换 pending local hash。
+- `f4e46e4` 这一批 full run 原始生成时来自 uncommitted worktree；本次同步已经把 pending local hash 映射到真实 Git code commit hash，但它仍不是 clean repo 重新运行结果。
 - Case 4 已经不再“太容易”，但现在双源分辨很难；它更适合作为 calibration count 的严格压力测试，双源主证据仍应以 Case 9 为主。
 - Case 4 中 `Proposed` 与 `Interpolation` 在四状态统计上非常接近，论文不能写成 Proposed 在该 case 中明显压过 Interpolation。
 - Case 9 仍包含 `Ideal / Interpolation / Proposed / HFSS Oracle`，但 `Proposed` 未稳定全局优于 `Interpolation`，因此论文主张应收窄为“相对 Ideal 的流形失配校正有效，Proposed 与 Interpolation 的差异需要按角域和状态细分讨论”。

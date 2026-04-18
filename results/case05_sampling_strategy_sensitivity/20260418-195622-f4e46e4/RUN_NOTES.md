@@ -1,10 +1,10 @@
-# Run Notes
+﻿# Run Notes
 
-- Case: `case07_single_source_snr`
-- Timestamp: `2026-04-18 19:59:38`
-- Pending local hash: `local-3e814f40`
+- Case: `case05_sampling_strategy_sensitivity`
+- Timestamp: `2026-04-18 19:58:43`
+- Pending local hash: `f4e46e4`
 - Base HEAD: `bd11394`
-- Run id: `20260418-195622-local-3e814f40`
+- Run id: `20260418-195622-f4e46e4`
 - Command: `run_project(1:10, default_config(pwd, 'paper'))`
 - Notes: `Full paper-profile run after strict Case 4 update: MC=200, common single-source and two-source test sets across L, and four-state two-source breakdown.`
 
@@ -126,7 +126,7 @@ M .codex/skills/project-code-change-log/SKILL.md
 ?? results/case03_unseen_generalization/20260418-190723-local-77d2252a/
 ?? results/case04_calibration_count_sensitivity/20260418-190723-local-77d2252a/
 ?? results/case04_calibration_count_sensitivity/20260418-193948-local-7fa085bd/
-?? results/case04_calibration_count_sensitivity/20260418-195529-local-3e814f40-smoke/
+?? results/case04_calibration_count_sensitivity/20260418-195529-f4e46e4-smoke/
 ?? results/case05_sampling_strategy_sensitivity/20260418-190723-local-77d2252a/
 ?? results/case06_model_sensitivity/20260418-190723-local-77d2252a/
 ?? results/case07_single_source_snr/20260418-190723-local-77d2252a/

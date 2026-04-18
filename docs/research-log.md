@@ -16,13 +16,14 @@
 
 ## 最新整理
 
-### 2026-04-18：`local-3e814f40` Case 4 严格公共测试集与全量 paper run
+### 2026-04-18：`f4e46e4` Case 4 严格公共测试集与全量 paper run
 
-- Version hash: `local-3e814f40`
+- Git code commit hash: `f4e46e4`
+- Former pending local hash: `local-3e814f40`
 - Base HEAD: `bd11394`
 - Worktree state: uncommitted code changes; existing historical result deletions and prior local archive artifacts were preserved.
 - Run command: `run_project(1:10, default_config(pwd, 'paper'))`
-- Result path pattern: `results/<case-name>/20260418-195622-local-3e814f40/`
+- Result path pattern: `results/<case-name>/20260418-195622-f4e46e4/`
 - Run scope: all 10 cases, paper profile.
 
 #### 一句话结论
@@ -41,7 +42,7 @@
 
 #### 全量运行结果检查
 
-- 10 个 case 均生成 `20260418-195622-local-3e814f40` 目录。
+- 10 个 case 均生成 `20260418-195622-f4e46e4` 目录。
 - 10 个 case 均生成 `RUN_NOTES.md`。
 - Case 4 使用公共测试集：`useCommonTestSet = 1`。
 - Case 4 公共双源 pair 数：`40`；每个 L 的 `sourcePairCount` 均为 `40`。
@@ -60,22 +61,22 @@
 
 #### 关键图片
 
-以下图片来自 `20260418-195622-local-3e814f40` 全量 paper-profile run，并已复制到 `docs/assets/`。
+以下图片来自 `20260418-195622-f4e46e4` 全量 paper-profile run，并已复制到 `docs/assets/`。
 
-![case01 mismatch floor paper local 3e814f40](assets/case01-mismatch-floor-paper-local-3e814f40.png)
+![case01 mismatch floor paper f4e46e4](assets/case01-mismatch-floor-paper-f4e46e4.png)
 
-![case04 calibration count paper local 3e814f40](assets/case04-calibration-count-paper-local-3e814f40.png)
+![case04 calibration count paper f4e46e4](assets/case04-calibration-count-paper-f4e46e4.png)
 
-![case07 snr metrics paper local 3e814f40](assets/case07-snr-metrics-paper-local-3e814f40.png)
+![case07 snr metrics paper f4e46e4](assets/case07-snr-metrics-paper-f4e46e4.png)
 
-![case08 snapshot metrics paper local 3e814f40](assets/case08-snapshot-metrics-paper-local-3e814f40.png)
+![case08 snapshot metrics paper f4e46e4](assets/case08-snapshot-metrics-paper-f4e46e4.png)
 
-![case09 resolution paper local 3e814f40](assets/case09-resolution-paper-local-3e814f40.png)
+![case09 resolution paper f4e46e4](assets/case09-resolution-paper-f4e46e4.png)
 
 #### 仍然存在的风险或边界
 
-- `local-3e814f40` 仍是 pending local hash，不是真实 Git commit hash。
-- 本轮 full run 来自 uncommitted worktree；它是 traceable paper-profile run，但仍不是 clean repo final archive。
+- `local-3e814f40` 已在本次同步中映射为 Git code commit hash `f4e46e4`。
+- 本轮 full run 原始生成时来自 uncommitted worktree；它是 traceable paper-profile run，但仍不是 clean repo final archive。
 - Case 4 已经不再“太容易”，但现在双源分辨很难；它更适合作为 calibration count 的严格压力测试，双源主证据仍应以 Case 9 为主。
 - Case 4 中 Proposed 与 Interpolation 在四状态统计上非常接近，论文不能写成 Proposed 在该 case 中明显压过 Interpolation。
 
