@@ -12,7 +12,7 @@ Use this skill whenever code or experiment behavior changes in this repository. 
 ## Required Project Conventions
 
 - Main log: `docs/research-log.md`
-- Review/comment source: `docs/comments.md`
+- Optional read-only reference: `docs/comments.md`
 - Documentation images: `docs/assets/`
 - Run outputs before upload: `results/<case-name>/<YYYYMMDD-HHMMSS>-<pending-local-hash>/`
 - Run outputs after upload finalization: `results/<case-name>/<YYYYMMDD-HHMMSS>-<git-code-commit-hash>/`
@@ -31,7 +31,7 @@ Use one pending local hash consistently across logs and case results for a given
 - Record the current `HEAD` short hash separately as the base commit when useful.
 - If code changes are uncommitted, explicitly record `git status --short` in both the log entry and `RUN_NOTES.md`.
 - Let `project-github-sync` replace the exact pending local hash with the real Git code/results commit hash after commit.
-- When `docs/comments.md` is later written for a reviewed GitHub commit hash, only combine it with log conclusions if that hash matches the finalized Git hash or README mapping.
+- Treat `docs/comments.md` as read-only reference material. It may inform the motivation for a change, but this skill must not create, edit, summarize, or reorganize `docs/comments.md`.
 
 Generate the pending local hash with:
 
@@ -46,7 +46,7 @@ If `py` is unavailable, use any equivalent command that creates a unique lowerca
 1. Inspect `git status --short`.
 2. Identify existing user changes and avoid overwriting them.
 3. Read the relevant code, config, and current `docs/research-log.md` entry.
-4. If a requested change relates to an existing review point, also read `docs/comments.md`.
+4. If the requested change explicitly relates to review feedback or prior comments, read `docs/comments.md` only as reference.
 5. After the code edits are complete, generate one pending local hash and keep it unchanged for the rest of this task.
 
 ## Result Directory Rule
@@ -106,7 +106,6 @@ Recommended entry skeleton:
 - Validation:
 - Result path:
 - Remaining risk:
-- Comment/review status: no matching reviewed Git hash yet
 ```
 
 ## Image Handling
@@ -130,6 +129,7 @@ Do not place documentation images in the repository root. Do not reference image
 - Do not run formatters or code generators that rewrite unrelated files.
 - Do not move historical results into the new structure unless the user explicitly asks.
 - Do not write final-paper claims from smoke tests.
+- Do not create, edit, summarize, or reorganize `docs/comments.md`; code-change runs update `docs/research-log.md` and run metadata only.
 - Do not use comments written for a different commit hash as current-version evaluation.
 - Do not generate a new pending local hash for each case in the same code-change batch; reuse the same one.
 - Mention any test or run that could not be completed.

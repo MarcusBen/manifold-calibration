@@ -16,6 +16,169 @@
 
 ## 最新整理
 
+### 2026-04-18：`local-3e814f40` Case 4 严格公共测试集与全量 paper run
+
+- Version hash: `local-3e814f40`
+- Base HEAD: `bd11394`
+- Worktree state: uncommitted code changes; existing historical result deletions and prior local archive artifacts were preserved.
+- Run command: `run_project(1:10, default_config(pwd, 'paper'))`
+- Result path pattern: `results/<case-name>/20260418-195622-local-3e814f40/`
+- Run scope: all 10 cases, paper profile.
+
+#### 一句话结论
+
+本轮保留 harder Case 4，不退回旧宽间隔双源版本；同时把 Case 4 改成“只比较 L”的严格公共测试集版本，并把右侧双源图从单一 stable probability 扩成 `stable / biased / marginal / unresolved` 四状态分解。随后用同一个 pending hash 跑完 10 个 case 的全量 paper-profile 结果，便于统一管理。
+
+#### 代码与行为变化
+
+- Case 4 默认 `monteCarlo` 提高到 `200`，paper profile 也保持 `case4.monteCarlo = 200`。
+- Case 4 继续使用 harder near-threshold sweep：`separationSweepDeg = [4 5 6 8 10]`，每个 separation 最多 `8` 个 pair，`pairSelectionMode = research_coverage`。
+- 新增 `cfg.case4.useCommonTestSet = true`。Case 4 会先收集所有 `L = [3 5 7 9 13 17]` 的 uniform calibration angles，并在这些角之外固定公共单源测试角和公共双源 pair。
+- Case 4 每个 L 都使用同一组 `commonSingleAnglesDeg` 和 `commonSourcePairsDeg`，从而把变量收紧到校准数量 L 本身。
+- Case 4 结果新增 `stableRate`、`biasedRate`、`marginalRate`、`unresolvedRate`、`commonSingleAnglesDeg`、`commonSourcePairsDeg`、`commonExcludedCalibrationAnglesDeg` 和 `useCommonTestSet`。
+- Case 4 图改成 `2 x 3` 布局：manifold error、single-source RMSE、stable、biased、marginal、unresolved。
+- `cfg.case1.exampleAngleDeg = 25` 保留为同一行 manual fallback 注释；默认 Case 1 仍由 high-SNR sweep 自动选择 stress angle。
+
+#### 全量运行结果检查
+
+- 10 个 case 均生成 `20260418-195622-local-3e814f40` 目录。
+- 10 个 case 均生成 `RUN_NOTES.md`。
+- Case 4 使用公共测试集：`useCommonTestSet = 1`。
+- Case 4 公共双源 pair 数：`40`；每个 L 的 `sourcePairCount` 均为 `40`。
+- Case 4 公共单源测试角数：`75`；所有 L 的校准角并集排除数：`25`。
+- Case 4 full run 的 stable rate roughly 为：
+  - Ideal: 全部约 `0`
+  - Interpolation: `0.0560-0.0607`
+  - Proposed: `0.0516-0.0561`
+  - HFSS Oracle: `0.1032-0.1119`
+- Case 4 unresolved rate roughly 为：
+  - Ideal: 约 `0.9998-1.0000`
+  - Interpolation: `0.7986-0.8081`
+  - Proposed: `0.8033-0.8085`
+  - HFSS Oracle: `0.7649-0.7711`
+- Case 9 仍包含 `Ideal / Interpolation / Proposed / HFSS Oracle`，共 `168` 个 pair、`8` 个 separation，代表困难 pair 为 `[-38.4, -30.4] deg`。
+
+#### 关键图片
+
+以下图片来自 `20260418-195622-local-3e814f40` 全量 paper-profile run，并已复制到 `docs/assets/`。
+
+![case01 mismatch floor paper local 3e814f40](assets/case01-mismatch-floor-paper-local-3e814f40.png)
+
+![case04 calibration count paper local 3e814f40](assets/case04-calibration-count-paper-local-3e814f40.png)
+
+![case07 snr metrics paper local 3e814f40](assets/case07-snr-metrics-paper-local-3e814f40.png)
+
+![case08 snapshot metrics paper local 3e814f40](assets/case08-snapshot-metrics-paper-local-3e814f40.png)
+
+![case09 resolution paper local 3e814f40](assets/case09-resolution-paper-local-3e814f40.png)
+
+#### 仍然存在的风险或边界
+
+- `local-3e814f40` 仍是 pending local hash，不是真实 Git commit hash。
+- 本轮 full run 来自 uncommitted worktree；它是 traceable paper-profile run，但仍不是 clean repo final archive。
+- Case 4 已经不再“太容易”，但现在双源分辨很难；它更适合作为 calibration count 的严格压力测试，双源主证据仍应以 Case 9 为主。
+- Case 4 中 Proposed 与 Interpolation 在四状态统计上非常接近，论文不能写成 Proposed 在该 case 中明显压过 Interpolation。
+
+### 2026-04-18：`local-7fa085bd` 按 comments 收紧 Case 4 双源难度
+
+- Version hash: `local-7fa085bd`
+- Base HEAD: `bd11394`
+- Worktree state: uncommitted code changes; previous result deletions and local archive artifacts are preserved.
+- Change reason: `docs/comments.md` 指出 `case1.exampleAngleDeg = 25` 仍像主配置，且 Case 4 旧双源 pair 太容易，`Interpolation / Proposed / Oracle` 基本饱和到 1。
+- Affected cases: Case 1 config readability, Case 4 calibration-count sensitivity.
+- Result path: `results/case04_calibration_count_sensitivity/20260418-193948-local-7fa085bd/`
+
+#### 代码与行为变化
+
+- `cfg.case1.exampleAngleDeg = 25` 改为同一行注释，明确它只是 manual fallback；默认 Case 1 仍由 high-SNR sweep 自动选择 stress angle。
+- Case 4 的双源部分不再使用旧的宽间隔对称 pair `[-5,5] / [-10,10] / [-15,15] / [-20,20]`。
+- Case 4 现在使用 `separationSweepDeg = [4 5 6 8 10]`，每个 separation 最多选 `8` 个 pair，并复用 Case 9 的 `research_coverage` 评分逻辑覆盖高失配、边缘和远离校准角的组合。
+- Case 4 结果新增 `sourcePairCount`，每个 L 的 `perL` 中保存实际 `sourcePairsDeg` 和 `pairSelection`，便于回看双源样例来源。
+- Case 4 图中第三栏改成 `Stable resolution probability`，标题改成 near-threshold two-source resolution，避免把它误读成旧版宽间隔演示。
+- `paper` profile 将 `case4.monteCarlo` 提到 `120`，因为近阈值概率比旧宽间隔 pair 更需要厚一点的统计。
+
+#### Smoke 验证
+
+已跑低 Monte Carlo traceable smoke：
+
+```matlab
+run_project(4, cfgSmoke)
+```
+
+验证配置只用于链路检查：`lValues = [3 9 17]`，`monteCarlo = 8`。结果确认：
+
+- 每个 L 自动选出 `40` 个双源 pair。
+- 第一档 L 的 pair separation 覆盖 `[4.0, 10.0] deg`。
+- `pairSelection.mode = case4_research_coverage`。
+- `resolutionProb` 不再像旧 Case 4 那样在修正方法上饱和为 1；本次 smoke 中 corrected/oracle 方法约落在 `0.04-0.11`，而 Ideal 为 `0`。由于 MC 很低，这只能说明难度区间已被收紧，不能当作正式统计数值。
+
+![case04 near-threshold smoke](assets/case04-near-threshold-smoke-local-7fa085bd.png)
+
+#### 仍然存在的风险或边界
+
+- 本次只按 comments 做局部代码收口，没有升级 Case 5 / Case 6 的实验结构。
+- Case 4 现在避免了“太容易”，但 smoke 结果偏难；正式论文是否采用它作为主图仍需 paper profile 或更厚 MC 复核。
+- Case 4 仍应定位为校准数量敏感性和辅助证据；真正的双源分辨主证据仍是 Case 9。
+
+### 2026-04-18：`local-77d2252a` 本地收口归档候选 full paper run
+
+- Pending local hash: `local-77d2252a`
+- Base HEAD: `bd11394`
+- Worktree state: uncommitted local closeout run; tracked historical `results*` deletions are intentionally preserved per user confirmation.
+- Run command: `run_project(1:10, default_config(pwd, 'paper'))`
+- Result path pattern: `results/<case-name>/20260418-190723-local-77d2252a/`
+- Comment/review status: `docs/comments.md` is a current local project-completeness analysis, not a hash-matched review verdict.
+
+#### 一句话结论
+
+本轮按“收口归档”路线处理：不扩模型、不重写 Case 9 核心算法，先完成文本统一、legacy 配置说明、traceable full paper-profile run 和 `docs/assets/` 图像归档。当前结果可用于本地研究判断和 issue 收口，但仍是 pending local hash，不是最终 clean Git 归档。
+
+#### 代码与行为变化
+
+- 图题统一到 `HFSS truth snapshots; MUSIC scan uses the listed estimator manifolds`，避免 singular/plural 和 truth/estimator 表述混用。
+- `case1.exampleAngleDeg = 25` 保留为 manual fallback，并在配置中注明默认 Case 1 仍由 high-SNR sweep 自动选择 stress angle。
+- Case 9 保留现有 near-threshold + research_coverage + `Interpolation` baseline 设计，没有在本轮引入新算法变量。
+- Case 4 / Case 5 / Case 6 的深层升级只在文档中标为后续阶段，不在 clean 归档前扩大代码改动面。
+
+#### 全量结果摘要
+
+- Case 7 在 `SNR = 20 dB` 时，`Ideal / Interpolation / Proposed / HFSS Oracle` 的 RMSE 约为 `3.7507 / 0.0037 / 0.0123 / 0.0043 deg`；mean absolute bias 约为 `2.9180 / 0.0001 / 0.0008 / 0.0001 deg`；P90 absolute error 约为 `6.6000 / 0.0000 / 0.0000 / 0.0000 deg`。Ideal 的 high-SNR mismatch floor 仍然清楚。
+- Case 8 在 `SNR = 10 dB, snapshots = 1000` 时，`Ideal / Interpolation / Proposed / HFSS Oracle` 的 RMSE 约为 `3.7545 / 0.0455 / 0.0594 / 0.0473 deg`；mean absolute bias 约为 `2.9214 / 0.0027 / 0.0129 / 0.0023 deg`；P90 absolute error 约为 `6.6000 / 0.0000 / 0.0000 / 0.0000 deg`。这继续支持“快拍数增加不能自动修复错误流形”的表述。
+- Case 9 的方法标签已确认为 `Ideal / Interpolation / Proposed / HFSS Oracle`，每个 separation 都有代表性 pair 和状态分级字段。
+- Case 9 本次代表性困难 pair 为 `[-38.4, -30.4] deg`，选择原因是 `Proposed` 相比 `Interpolation` 在该 pair 上改善 stable/resolution 行为，同时仍是 mixed hard pair。
+- Case 9 在 `10 deg` separation 下 resolution mean 约为 `Ideal 0.4748 / Interpolation 0.6192 / Proposed 0.6148 / HFSS Oracle 0.5887`，pair RMSE mean 约为 `18.6304 / 14.9388 / 15.0744 / 16.0637 deg`，stable mean 约为 `0.0243 / 0.1989 / 0.1933 / 0.1870`。因此双源结论仍应保持克制，不能写成 Proposed 全局稳定优于 Interpolation。
+
+#### 关键图片
+
+以下图片来自 `20260418-190723-local-77d2252a` 本地 paper-profile full run，并已复制到 `docs/assets/`。它们可用于当前研究日志和 issue 收口，但最终论文归档仍需真实 Git hash 或 clean rerun 对齐。
+
+![case01 mismatch floor paper local](assets/case01-mismatch-floor-paper-local-77d2252a.png)
+
+![case02 mismatch dominance paper local](assets/case02-mismatch-dominance-paper-local-77d2252a.png)
+
+![case07 snr metrics paper local](assets/case07-snr-metrics-paper-local-77d2252a.png)
+
+![case07 representative spectra paper local](assets/case07-representative-spectra-paper-local-77d2252a.png)
+
+![case08 snapshot metrics paper local](assets/case08-snapshot-metrics-paper-local-77d2252a.png)
+
+![case09 resolution paper local](assets/case09-resolution-paper-local-77d2252a.png)
+
+#### 仍然存在的风险或边界
+
+- `local-77d2252a` 是 pending local hash，不能冒充真实 Git code commit hash。
+- 当前 full run 来自 uncommitted worktree；它已经 traceable，但还不是 clean repo final archive。
+- 大量历史 `results*` 删除是本轮确认保留的清理方向，旧平铺结果不再恢复。
+- Case 9 已经是正确困难 benchmark，但 `Proposed` 与 `Interpolation` 的全局差异很小，论文主张必须收窄。
+- Case 4 双源升级、Case 5 辅助定位强化、Case 6 模型天花板路线选择都留到下一阶段。
+
+#### 对论文表述的影响
+
+- 可以继续写：本文实验使用 `2.5 GHz` HFSS truth manifold，在 `[-60 deg, 60 deg]` 上以 `0.2 deg` 步长构建角度网格，理想阵列基线按 `lambda/4` 阵元间距生成。
+- 图注和正文应使用：`HFSS truth snapshots; MUSIC scan uses the listed estimator manifolds`。
+- 可以写：错误的 Ideal manifold 在高 SNR / 高快拍条件下留下明显 bias floor，`Interpolation` 与 `Proposed` 都显著缓解该结构性误差。
+- 不应写：`local-77d2252a` 已经是最终论文统计；也不应写：`Proposed` 在 Case 9 上稳定全局优于 `Interpolation`。
+
 ### 2026-04-18：`35756f6` GitHub issues 全量 paper-profile 运行
 
 - Git code commit hash: `35756f6`
@@ -186,7 +349,7 @@ run_project([1 9], cfgSmoke)
 - 已跑通过低 Monte Carlo smoke test：
   - `run_project([1 3 7 9], cfgSmoke)`
   - `run_project([2 4 5 6 8 10], cfgSmokeRest)`
-- smoke 输出只用于链路验证，本条暂不插入新的结果图，避免把低 Monte Carlo 图误读为正式实验图。后续如需要纳入图像，统一保存到 `docs/assets/`，并用相对路径写入 Markdown，例如 `![caption](assets/example.png)`。
+- smoke 输出只用于链路验证，本条暂不插入新的结果图，避免把低 Monte Carlo 图误读为正式实验图。后续如需要纳入图像，统一保存到 `docs/assets/`，并用 `assets/<image>.png` 相对路径引用。
 
 #### 这次改动实际解决了什么
 
@@ -208,7 +371,7 @@ run_project([1 9], cfgSmoke)
 - 用默认参数跑一版完整 `results_step0p2_qw`，确认正式图中的排序和误差曲线是否稳定。
 - 回读 Case 7/8 的 `evalAnglesDeg`，确认 DOA 曲线确实来自分层未见角，而不是校准角。
 - 回读 Case 9 的 `sourcePairsDeg` 与 per-separation pair 数量，确认每个 separation 都有足够代表性困难样例。
-- 如果后续把图写入文档，先把图片复制或导出到 `docs/assets/`，再在 Markdown 中用 `assets/...` 相对路径引用，避免文档迁移或读取时路径失效。
+- 如果后续把图写入文档，先把图片复制或导出到 `docs/assets/`，再在 Markdown 中用 `assets/<image>.png` 相对路径引用，避免文档迁移或读取时路径失效。
 
 #### 对论文表述的影响
 

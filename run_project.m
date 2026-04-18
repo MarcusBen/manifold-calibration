@@ -136,7 +136,7 @@ xlabel('Scan angle (deg)');
 ylabel('Pseudo-spectrum (dB)');
 title({sprintf('Case 1: high-SNR spectrum at %.1f deg, SNR = %g dB', ...
     stressExampleAngle, cfg.case1.highSNRDb), ...
-    'HFSS truth snapshots; MUSIC scan uses the listed estimator manifold'});
+    'HFSS truth snapshots; MUSIC scan uses the listed estimator manifolds'});
 legend({exampleSpectrum.methods.label}, 'Location', 'best');
 save_figure(fig, fullfile(outDir, 'example_music_spectrum.png'));
 
@@ -379,7 +379,16 @@ methodsLegend = {'Ideal', 'Interpolation', 'Proposed', 'HFSS Oracle'};
 manifoldError = zeros(numel(lValues), numel(methodKeys));
 singleRmse = zeros(numel(lValues), numel(methodKeys));
 resolutionProb = zeros(numel(lValues), numel(methodKeys));
+stableRate = zeros(numel(lValues), numel(methodKeys));
+biasedRate = zeros(numel(lValues), numel(methodKeys));
+marginalRate = zeros(numel(lValues), numel(methodKeys));
+unresolvedRate = zeros(numel(lValues), numel(methodKeys));
+sourcePairCount = zeros(numel(lValues), 1);
 perL = cell(1, numel(lValues));
+
+[commonSingleAngles, commonSourcePairs, commonPairSelection, commonExcludedAngles] = ...
+    local_case4_common_test_set(cfg.case4, ctx, lValues, cfg);
+useCommonTestSet = isfield(cfg.case4, 'useCommonTestSet') && cfg.case4.useCommonTestSet;
 
 for lIdx = 1:numel(lValues)
     fprintf('Case 4: L = %d\n', lValues(lIdx));
@@ -399,7 +408,11 @@ for lIdx = 1:numel(lValues)
     methods = local_named_methods(ctx, models, methodKeys);
     evalCfg = struct();
     evalCfg.mode = 'single';
-    evalCfg.trueAngles = local_single_source_eval_angles(ctx, models, cfg);
+    if useCommonTestSet
+        evalCfg.trueAngles = commonSingleAngles;
+    else
+        evalCfg.trueAngles = local_single_source_eval_angles(ctx, models, cfg);
+    end
     evalCfg.snrDb = cfg.case4.evalSNRDb;
     evalCfg.snapshots = cfg.case4.snapshots;
     evalCfg.monteCarlo = cfg.case4.monteCarlo;
@@ -412,21 +425,30 @@ for lIdx = 1:numel(lValues)
     end
     perL{lIdx}.singleBenchmark = singleBench;
 
-    validPairs = local_filter_pairs(cfg.case4.sourcePairsDeg, ctx.thetaDeg, models.calAnglesDeg);
-    if isempty(validPairs)
-        validPairs = cfg.case4.sourcePairsDeg;
+    if useCommonTestSet
+        validPairs = commonSourcePairs;
+        pairSelection = commonPairSelection;
+    else
+        [validPairs, pairSelection] = local_case4_source_pairs(cfg.case4, ctx, models.calAnglesDeg);
     end
     evalCfg.mode = 'double';
     evalCfg.trueAngles = validPairs;
     doubleBench = benchmark_music(ctx, methods, evalCfg);
     for methodIdx = 1:numel(methodKeys)
         resolutionProb(lIdx, methodIdx) = doubleBench.methods(methodIdx).successRate;
+        stableRate(lIdx, methodIdx) = doubleBench.methods(methodIdx).stableRate;
+        biasedRate(lIdx, methodIdx) = doubleBench.methods(methodIdx).biasedRate;
+        marginalRate(lIdx, methodIdx) = doubleBench.methods(methodIdx).marginalRate;
+        unresolvedRate(lIdx, methodIdx) = 1 - doubleBench.methods(methodIdx).resolutionRate;
     end
+    sourcePairCount(lIdx) = size(validPairs, 1);
+    perL{lIdx}.sourcePairsDeg = validPairs;
+    perL{lIdx}.pairSelection = pairSelection;
     perL{lIdx}.doubleBenchmark = doubleBench;
 end
 
-fig = figure('Visible', 'off', 'Position', [120 120 1300 480]);
-tiledlayout(1, 3, 'Padding', 'compact', 'TileSpacing', 'compact');
+fig = figure('Visible', 'off', 'Position', [100 80 1450 780]);
+tiledlayout(2, 3, 'Padding', 'compact', 'TileSpacing', 'compact');
 
 nexttile;
 hold on;
@@ -450,14 +472,20 @@ title(sprintf('Case 4: DOA RMSE vs L at %g dB', cfg.case4.evalSNRDb));
 
 nexttile;
 hold on;
-for methodIdx = 1:numel(methodKeys)
-    plot(lValues, resolutionProb(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
-end
-grid on;
-ylim([0 1]);
-xlabel('Calibration count L');
-ylabel('Resolution probability');
-title('Case 4: two-source resolution vs L');
+local_plot_case4_state_metric(lValues, stableRate, methodsLegend, 'Stable rate');
+title('Case 4: stable');
+
+nexttile;
+local_plot_case4_state_metric(lValues, biasedRate, methodsLegend, 'Biased rate');
+title('Case 4: biased');
+
+nexttile;
+local_plot_case4_state_metric(lValues, marginalRate, methodsLegend, 'Marginal rate');
+title('Case 4: marginal');
+
+nexttile;
+local_plot_case4_state_metric(lValues, unresolvedRate, methodsLegend, 'Unresolved rate');
+title('Case 4: unresolved');
 legend(methodsLegend, 'Location', 'best');
 save_figure(fig, fullfile(outDir, 'calibration_count_sensitivity.png'));
 
@@ -467,8 +495,29 @@ caseResult.lValues = lValues;
 caseResult.manifoldError = manifoldError;
 caseResult.singleRmse = singleRmse;
 caseResult.resolutionProb = resolutionProb;
+caseResult.stableRate = stableRate;
+caseResult.biasedRate = biasedRate;
+caseResult.marginalRate = marginalRate;
+caseResult.unresolvedRate = unresolvedRate;
+caseResult.sourcePairCount = sourcePairCount;
+caseResult.commonSingleAnglesDeg = commonSingleAngles;
+caseResult.commonSourcePairsDeg = commonSourcePairs;
+caseResult.commonPairSelection = commonPairSelection;
+caseResult.commonExcludedCalibrationAnglesDeg = commonExcludedAngles;
+caseResult.useCommonTestSet = useCommonTestSet;
 caseResult.perL = perL;
 save(fullfile(outDir, 'case04_results.mat'), 'caseResult');
+end
+
+function local_plot_case4_state_metric(lValues, metricMatrix, methodsLegend, yLabelText)
+hold on;
+for methodIdx = 1:numel(methodsLegend)
+    plot(lValues, metricMatrix(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+ylim([0 1]);
+xlabel('Calibration count L');
+ylabel(yLabelText);
 end
 
 function caseResult = case05_sampling_strategy_sensitivity(cfg, ctx)
@@ -1230,6 +1279,53 @@ else
         'String', sprintf('%s\n%s', mainTitle, subtitle), ...
         'EdgeColor', 'none', 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
 end
+end
+
+function [sourcePairs, pairSelection] = local_case4_source_pairs(caseCfg, ctx, calAnglesDeg)
+if isfield(caseCfg, 'separationSweepDeg') && ~isempty(caseCfg.separationSweepDeg)
+    [sourcePairs, pairSelection] = local_case9_source_pairs(caseCfg, ctx, calAnglesDeg);
+    pairSelection.mode = ['case4_' pairSelection.mode];
+    return;
+end
+
+if ~isfield(caseCfg, 'sourcePairsDeg') || isempty(caseCfg.sourcePairsDeg)
+    error('Case 4 requires either separationSweepDeg or sourcePairsDeg.');
+end
+
+sourcePairs = local_filter_pairs(caseCfg.sourcePairsDeg, ctx.thetaDeg, calAnglesDeg);
+if isempty(sourcePairs)
+    sourcePairs = local_filter_pairs(caseCfg.sourcePairsDeg, ctx.thetaDeg);
+end
+
+pairSelection = struct();
+pairSelection.mode = 'case4_manual';
+pairSelection.sourcePairsDeg = sourcePairs;
+pairSelection.preLimitPairCount = size(caseCfg.sourcePairsDeg, 1);
+pairSelection.selectedOriginalIndex = (1:size(sourcePairs, 1)).';
+end
+
+function [singleAngles, sourcePairs, pairSelection, excludedCalAngles] = ...
+    local_case4_common_test_set(caseCfg, ctx, lValues, cfg)
+tolDeg = local_angle_tolerance_from_grid(ctx.thetaDeg);
+excludedCalAngles = zeros(0, 1);
+for lValue = reshape(lValues, 1, [])
+    calIdx = select_calibration_indices(ctx.thetaDeg, lValue, 'uniform');
+    calAngles = ctx.thetaDeg(calIdx);
+    excludedCalAngles = [excludedCalAngles; calAngles(:)]; %#ok<AGROW>
+end
+excludedCalAngles = unique(round(excludedCalAngles(:), 10), 'stable');
+
+candidateMask = true(size(ctx.thetaDeg(:)));
+for calIdx = 1:numel(excludedCalAngles)
+    candidateMask = candidateMask & abs(ctx.thetaDeg(:) - excludedCalAngles(calIdx)) > tolDeg;
+end
+
+dummyModels = struct();
+dummyModels.testAnglesDeg = ctx.thetaDeg(candidateMask);
+singleAngles = local_single_source_eval_angles(ctx, dummyModels, cfg);
+[sourcePairs, pairSelection] = local_case4_source_pairs(caseCfg, ctx, excludedCalAngles);
+pairSelection.commonExcludedCalibrationAnglesDeg = excludedCalAngles;
+pairSelection.commonSingleAnglesDeg = singleAngles;
 end
 
 function [exampleAngle, reason] = local_case7_example_angle(ctx, models, evalAngles, caseCfg)

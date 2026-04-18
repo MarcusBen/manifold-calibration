@@ -47,7 +47,7 @@ cfg.model.interpMethod = 'spline';
 cfg.model.regularization = 'order-weighted';
 
 cfg.case1 = struct();
-cfg.case1.exampleAngleDeg = 25;
+cfg.case1.exampleAngleDeg = 25; % Manual fallback only; default Case 1 selects a stress angle from the high-SNR sweep.
 cfg.case1.highSNRDb = 40;
 cfg.case1.snapshots = 2000;
 cfg.case1.monteCarlo = 80;
@@ -69,9 +69,13 @@ cfg.case4 = struct();
 cfg.case4.lValues = [3 5 7 9 13 17];
 cfg.case4.evalSNRDb = 10;
 cfg.case4.snapshots = 500;
-cfg.case4.monteCarlo = 60;
+cfg.case4.monteCarlo = 200;
 cfg.case4.toleranceDeg = 1;
-cfg.case4.sourcePairsDeg = [-5 5; -10 10; -15 15; -20 20];
+cfg.case4.separationSweepDeg = [4 5 6 8 10];
+cfg.case4.maxPairsPerSeparation = 8;
+cfg.case4.pairSelectionMode = 'research_coverage';
+cfg.case4.sourcePairsDeg = [];
+cfg.case4.useCommonTestSet = true;
 
 cfg.case5 = struct();
 cfg.case5.l = 9;
@@ -133,6 +137,7 @@ switch lower(strtrim(profileName))
         return;
     case 'paper'
         cfg.case1.monteCarlo = 120;
+        cfg.case4.monteCarlo = 200;
         cfg.case7.monteCarlo = 200;
         cfg.case8.monteCarlo = 200;
         cfg.case9.monteCarlo = 300;
