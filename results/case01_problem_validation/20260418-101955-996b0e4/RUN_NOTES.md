@@ -1,10 +1,10 @@
-# Run Notes
+﻿# Run Notes
 
 - Case: `case01_problem_validation`
 - Timestamp: `2026-04-18 10:20:11`
-- Pending local hash: `local-074e912a`
+- Git code commit hash: `996b0e4`
 - Base HEAD: `81eaaf4`
-- Run id: `20260418-101955-local-074e912a`
+- Run id: `20260418-101955-996b0e4`
 - Command: `run_project([1 9], cfgSmoke)`
 - Notes: `Low-Monte-Carlo smoke validation after separation grouping fix for Case 1 mismatch-floor plumbing and Case 9 interpolation/research-coverage pair selection.`
 
@@ -27,6 +27,6 @@ M .codex/skills/project-code-change-log/SKILL.md
  M run_project.m
  M src/benchmark_music.m
 ?? .codex/skills/project-code-change-log/scripts/
-?? results/case01_problem_validation/20260418-101739-local-074e912a/
-?? results/case09_two_source_resolution/20260418-101739-local-074e912a/
+?? results/case01_problem_validation/20260418-101739-996b0e4/
+?? results/case09_two_source_resolution/20260418-101739-996b0e4/
 ```

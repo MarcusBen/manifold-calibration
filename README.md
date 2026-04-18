@@ -1,4 +1,4 @@
-# manifold calibration
+﻿# manifold calibration
 
 这个仓库同时保存 MATLAB 实验代码、HFSS 数据、实验输出和论文证据链记录。当前主线是用少量校准角重构未见方向流形，并比较 `Ideal / Interpolation / Proposed / HFSS Oracle` 在 MUSIC DOA 任务中的表现。
 
@@ -24,12 +24,12 @@
 
 ## Version Trace
 
-- Pending local hash: `local-074e912a`
-- Base HEAD: `81eaaf4`
-- Published GitHub hash: pending this sync commit
+- Git code commit hash: `996b0e4`
+- Base HEAD before this batch: `81eaaf4`
+- Published branch hash: pending finalization push
 - Latest reviewed comments hash: unavailable in `docs/comments.md`
-- Review status: `docs/comments.md` 没有可识别的 `Reviewed commit` 或 `Review for commit` 标记，因此只能作为背景意见；当前工作区版本尚未获得 hash-matched review。
-- Latest traceable smoke run: `results/case01_problem_validation/20260418-101955-local-074e912a/` and `results/case09_two_source_resolution/20260418-101955-local-074e912a/`
+- Review status: `docs/comments.md` 没有可识别的 `Reviewed commit` 或 `Review for commit` 标记，因此只能作为背景意见；当前 code/results commit 尚未获得 hash-matched review。
+- Latest traceable smoke run: `results/case01_problem_validation/20260418-101955-996b0e4/` and `results/case09_two_source_resolution/20260418-101955-996b0e4/`
 
 ## 提醒：`comments`、`research-log` 和当前代码并不完全对齐
 

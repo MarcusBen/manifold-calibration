@@ -1,4 +1,4 @@
-# 研究变更记录
+﻿# 研究变更记录
 
 这份文档用于长期记录项目里的研究判断、实验变更、代码方向调整和论文表述收束。
 
@@ -16,14 +16,14 @@
 
 ## 最新整理
 
-### 2026-04-18：`local-074e912a` 加固 Case 1/9 与可追溯运行目录
+### 2026-04-18：`996b0e4` 加固 Case 1/9 与可追溯运行目录
 
-- Version hash: `local-074e912a`
+- Git code commit hash: `996b0e4`
 - Base HEAD: `81eaaf4`
-- Worktree state: uncommitted code/docs changes; existing `.codex/skills/*` and `docs/comments.md` edits were preserved.
+- Worktree state before upload: uncommitted code/docs changes; existing `.codex/skills/*` and `docs/comments.md` edits were preserved.
 - Result paths:
-  - `results/case01_problem_validation/20260418-101955-local-074e912a/`
-  - `results/case09_two_source_resolution/20260418-101955-local-074e912a/`
+  - `results/case01_problem_validation/20260418-101955-996b0e4/`
+  - `results/case09_two_source_resolution/20260418-101955-996b0e4/`
 - Comment/review status: no hash-matched reviewed Git commit yet.
 
 #### 一句话结论
@@ -57,9 +57,9 @@ run_project([1 9], cfgSmoke)
 
 下面两张图只作为本轮代码链路 smoke 证据，不是最终论文图：
 
-![case01 mismatch floor smoke](assets/case01-mismatch-floor-local-074e912a.png)
+![case01 mismatch floor smoke](assets/case01-mismatch-floor-996b0e4.png)
 
-![case09 resolution smoke](assets/case09-resolution-local-074e912a.png)
+![case09 resolution smoke](assets/case09-resolution-996b0e4.png)
 
 #### 仍然存在的风险或边界
 
