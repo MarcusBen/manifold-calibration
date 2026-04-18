@@ -205,7 +205,7 @@ methods = [ ...
     local_method('ideal', 'Ideal', ctx.AI), ...
     local_method('phase_only', 'Phase-only', aPhaseOnly), ...
     local_method('amplitude_only', 'Amplitude-only', aAmplitudeOnly), ...
-    local_method('amp_phase', 'Amp+Phase', aAmpPhase)];
+    local_method('amp_phase_oracle', 'Amp+Phase Oracle', aAmpPhase)];
 
 evalCfg = struct();
 evalCfg.mode = 'single';
@@ -234,7 +234,7 @@ bar([ ...
     mean(metricsAmplitude.relativeError), ...
     mean(metricsAmpPhase.relativeError)]);
 grid on;
-set(gca, 'XTickLabel', {'Ideal', 'Phase', 'Amplitude', 'Amp+Phase'});
+set(gca, 'XTickLabel', {'Ideal', 'Phase', 'Amplitude', 'Amp+Phase Oracle'});
 ylabel('Mean manifold relative error');
 title('Case 2: manifold approximation error');
 
@@ -245,6 +245,7 @@ set(gca, 'XTickLabel', {bench.methods.label});
 ylabel('Single-source DOA RMSE (deg)');
 title(sprintf('Case 2: DOA RMSE at %g dB', cfg.case2.evalSNRDb));
 xtickangle(20);
+local_add_truth_scan_sgtitle('Case 2: mismatch dominance; Amp+Phase Oracle is a full-residual upper bound');
 save_figure(fig, fullfile(outDir, 'mismatch_dominance.png'));
 
 caseResult = struct();
@@ -255,6 +256,7 @@ caseResult.manifoldMetrics = struct( ...
     'phaseOnly', metricsPhase, ...
     'amplitudeOnly', metricsAmplitude, ...
     'ampPhase', metricsAmpPhase);
+caseResult.oracleUpperBoundMethod = 'Amp+Phase Oracle uses the full HFSS-vs-ideal residual and is not a same-budget deployable baseline.';
 caseResult.benchmark = bench;
 save(fullfile(outDir, 'case02_results.mat'), 'caseResult');
 end
@@ -642,6 +644,8 @@ evalAngles = local_single_source_eval_angles(ctx, models, cfg);
 
 rmse = zeros(numel(snrSweep), numel(methods));
 successRate = zeros(numel(snrSweep), numel(methods));
+meanAbsBias = zeros(numel(snrSweep), numel(methods));
+p90AbsError = zeros(numel(snrSweep), numel(methods));
 details = cell(1, numel(snrSweep));
 
 for snrIdx = 1:numel(snrSweep)
@@ -659,11 +663,13 @@ for snrIdx = 1:numel(snrSweep)
     for methodIdx = 1:numel(methods)
         rmse(snrIdx, methodIdx) = bench.methods(methodIdx).rmse;
         successRate(snrIdx, methodIdx) = bench.methods(methodIdx).successRate;
+        meanAbsBias(snrIdx, methodIdx) = mean(bench.methods(methodIdx).perTargetAbsBias);
+        p90AbsError(snrIdx, methodIdx) = bench.methods(methodIdx).p90AbsError;
     end
 end
 
-fig = figure('Visible', 'off', 'Position', [130 130 1200 500]);
-tiledlayout(1, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
+fig = figure('Visible', 'off', 'Position', [130 130 1280 840]);
+tiledlayout(2, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
 
 nexttile;
 hold on;
@@ -684,12 +690,32 @@ grid on;
 ylim([0 1]);
 xlabel('SNR (dB)');
 ylabel('Success rate');
-title('Case 7: success rate vs SNR');
+title(sprintf('Case 7: success rate vs SNR (%.1f deg)', cfg.case7.toleranceDeg));
+
+nexttile;
+hold on;
+for methodIdx = 1:numel(methods)
+    plot(snrSweep, meanAbsBias(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+xlabel('SNR (dB)');
+ylabel('Mean absolute bias (deg)');
+title('Case 7: bias floor vs SNR');
+
+nexttile;
+hold on;
+for methodIdx = 1:numel(methods)
+    plot(snrSweep, p90AbsError(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+xlabel('SNR (dB)');
+ylabel('P90 absolute error (deg)');
+title('Case 7: tail error vs SNR');
 legend({methods.label}, 'Location', 'best');
+local_add_truth_scan_sgtitle('Case 7: single-source SNR sweep');
 save_figure(fig, fullfile(outDir, 'rmse_and_success_vs_snr.png'));
 
-exampleAngle = cfg.case7.exampleAngleDeg;
-exampleAngle = local_nearest_angle_from_set(exampleAngle, models.testAnglesDeg);
+[exampleAngle, exampleSelectionReason] = local_case7_example_angle(ctx, models, evalAngles, cfg.case7);
 
 fig = figure('Visible', 'off', 'Position', [150 150 1200 760]);
 tiledlayout(numel(cfg.case7.spectrumSnrDb), 1, 'Padding', 'compact', 'TileSpacing', 'compact');
@@ -717,6 +743,7 @@ for snrIdx = 1:numel(cfg.case7.spectrumSnrDb)
         exampleAngle, cfg.case7.spectrumSnrDb(snrIdx)));
 end
 legend({methods.label}, 'Location', 'eastoutside');
+local_add_truth_scan_sgtitle(sprintf('Case 7: representative spectra; %s', exampleSelectionReason));
 save_figure(fig, fullfile(outDir, 'representative_spectra.png'));
 
 caseResult = struct();
@@ -726,6 +753,10 @@ caseResult.evalAnglesDeg = evalAngles;
 caseResult.snrSweep = snrSweep;
 caseResult.rmse = rmse;
 caseResult.successRate = successRate;
+caseResult.meanAbsBias = meanAbsBias;
+caseResult.p90AbsError = p90AbsError;
+caseResult.exampleAngleDeg = exampleAngle;
+caseResult.exampleSelectionReason = exampleSelectionReason;
 caseResult.details = details;
 save(fullfile(outDir, 'case07_results.mat'), 'caseResult');
 end
@@ -742,6 +773,8 @@ evalAngles = local_single_source_eval_angles(ctx, models, cfg);
 snapshotSweep = cfg.case8.snapshotSweep;
 snrValues = cfg.case8.snrValuesDb;
 rmse = zeros(numel(snapshotSweep), numel(methods), numel(snrValues));
+meanAbsBias = zeros(numel(snapshotSweep), numel(methods), numel(snrValues));
+p90AbsError = zeros(numel(snapshotSweep), numel(methods), numel(snrValues));
 details = cell(numel(snrValues), numel(snapshotSweep));
 
 for snrIdx = 1:numel(snrValues)
@@ -759,12 +792,14 @@ for snrIdx = 1:numel(snrValues)
         details{snrIdx, snapIdx} = bench;
         for methodIdx = 1:numel(methods)
             rmse(snapIdx, methodIdx, snrIdx) = bench.methods(methodIdx).rmse;
+            meanAbsBias(snapIdx, methodIdx, snrIdx) = mean(bench.methods(methodIdx).perTargetAbsBias);
+            p90AbsError(snapIdx, methodIdx, snrIdx) = bench.methods(methodIdx).p90AbsError;
         end
     end
 end
 
-fig = figure('Visible', 'off', 'Position', [140 140 1200 520]);
-tiledlayout(1, numel(snrValues), 'Padding', 'compact', 'TileSpacing', 'compact');
+fig = figure('Visible', 'off', 'Position', [140 140 1380 820]);
+tiledlayout(numel(snrValues), 3, 'Padding', 'compact', 'TileSpacing', 'compact');
 
 for snrIdx = 1:numel(snrValues)
     nexttile;
@@ -775,9 +810,30 @@ for snrIdx = 1:numel(snrValues)
     grid on;
     xlabel('Snapshots');
     ylabel('RMSE (deg)');
-    title(sprintf('Case 8: SNR = %g dB', snrValues(snrIdx)));
+    title(sprintf('Case 8: RMSE, SNR = %g dB', snrValues(snrIdx)));
+
+    nexttile;
+    hold on;
+    for methodIdx = 1:numel(methods)
+        plot(snapshotSweep, meanAbsBias(:, methodIdx, snrIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+    end
+    grid on;
+    xlabel('Snapshots');
+    ylabel('Mean absolute bias (deg)');
+    title(sprintf('Case 8: bias floor, SNR = %g dB', snrValues(snrIdx)));
+
+    nexttile;
+    hold on;
+    for methodIdx = 1:numel(methods)
+        plot(snapshotSweep, p90AbsError(:, methodIdx, snrIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+    end
+    grid on;
+    xlabel('Snapshots');
+    ylabel('P90 absolute error (deg)');
+    title(sprintf('Case 8: tail error, SNR = %g dB', snrValues(snrIdx)));
 end
 legend({methods.label}, 'Location', 'eastoutside');
+local_add_truth_scan_sgtitle('Case 8: snapshots reduce variance; estimator-manifold bias can remain');
 save_figure(fig, fullfile(outDir, 'rmse_vs_snapshots.png'));
 
 caseResult = struct();
@@ -787,6 +843,8 @@ caseResult.evalAnglesDeg = evalAngles;
 caseResult.snapshotSweep = snapshotSweep;
 caseResult.snrValues = snrValues;
 caseResult.rmse = rmse;
+caseResult.meanAbsBias = meanAbsBias;
+caseResult.p90AbsError = p90AbsError;
 caseResult.details = details;
 save(fullfile(outDir, 'case08_results.mat'), 'caseResult');
 end
@@ -900,6 +958,7 @@ ylabel('Pseudo-spectrum (dB)');
 title(sprintf('Case 9: representative hard spectrum at [%g, %g] deg', ...
     examplePair(1), examplePair(2)));
 legend({methods.label}, 'Location', 'best');
+local_add_truth_scan_sgtitle('Case 9: near-threshold two-source resolution');
 save_figure(fig, fullfile(outDir, 'two_source_resolution.png'));
 
 caseResult = struct();
@@ -1086,6 +1145,14 @@ if isfield(cfg, 'case9')
     cfg.case9 = local_set_default_field(cfg.case9, 'marginalToleranceDeg', 5);
     cfg.case9 = local_set_default_field(cfg.case9, 'pairSelectionMode', 'research_coverage');
 end
+if isfield(cfg, 'case7')
+    cfg.case7 = local_set_default_field(cfg.case7, 'toleranceDeg', 0.5);
+    cfg.case7 = local_set_default_field(cfg.case7, 'exampleAngleMode', 'auto_high_mismatch_edge');
+    cfg.case7 = local_set_default_field(cfg.case7, 'exampleAngleDeg', 10);
+end
+if isfield(cfg, 'case8')
+    cfg.case8 = local_set_default_field(cfg.case8, 'toleranceDeg', 0.5);
+end
 end
 
 function inputStruct = local_set_default_field(inputStruct, fieldName, defaultValue)
@@ -1152,6 +1219,43 @@ end
 function nearestAngle = local_nearest_angle_from_set(queryAngle, availableAngles)
 [~, nearestIdx] = min(abs(availableAngles(:).' - queryAngle));
 nearestAngle = availableAngles(nearestIdx);
+end
+
+function local_add_truth_scan_sgtitle(mainTitle)
+subtitle = 'HFSS truth snapshots; MUSIC scan uses the listed estimator manifolds';
+if exist('sgtitle', 'file') == 2
+    sgtitle({mainTitle, subtitle}, 'FontWeight', 'bold');
+else
+    annotation(gcf, 'textbox', [0.02 0.94 0.96 0.05], ...
+        'String', sprintf('%s\n%s', mainTitle, subtitle), ...
+        'EdgeColor', 'none', 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
+end
+end
+
+function [exampleAngle, reason] = local_case7_example_angle(ctx, models, evalAngles, caseCfg)
+modeName = 'auto_high_mismatch_edge';
+if isfield(caseCfg, 'exampleAngleMode') && ~isempty(caseCfg.exampleAngleMode)
+    modeName = lower(strtrim(caseCfg.exampleAngleMode));
+end
+
+if strcmp(modeName, 'manual')
+    exampleAngle = local_nearest_angle_from_set(caseCfg.exampleAngleDeg, models.testAnglesDeg);
+    reason = sprintf('manual angle %.1f deg snapped to unseen grid', exampleAngle);
+    return;
+end
+
+candidateAngles = evalAngles(:).';
+candidateIdx = local_angle_indices(ctx.thetaDeg, candidateAngles);
+metrics = compute_manifold_metrics(ctx.AH(:, candidateIdx), ctx.AI(:, candidateIdx));
+mismatchScore = metrics.relativeError(:);
+mismatchScore = mismatchScore / max(max(mismatchScore), eps);
+edgeScore = abs(candidateAngles(:)) / max(max(abs(ctx.thetaDeg)), eps);
+score = 0.65 * mismatchScore + 0.35 * edgeScore;
+
+[bestScore, bestIdx] = max(score);
+exampleAngle = candidateAngles(bestIdx);
+reason = sprintf(['auto high-mismatch/edge angle %.1f deg selected with score %.3f ' ...
+    '(0.65 mismatch + 0.35 edge)'], exampleAngle, bestScore);
 end
 
 function [stressAngleDeg, reason, stressScore] = local_case1_select_stress_angle(bench)

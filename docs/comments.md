@@ -1,3 +1,84 @@
+﻿# 2026-04-18：`996b0e4` 加固 Case 1/9 与可追溯运行目录
+
+- Git code commit hash: `996b0e4`
+- Base HEAD: `81eaaf4`
+
+我看完这两条结果目录和对应的最新代码后，结论是：
+
+**这次修改质量明显比上一轮高，而且改到了真正关键的位置；但这两条结果本身仍然只是 smoke 级别，不能拿来当最终论文统计。**
+
+先说最直接的判断。
+
+这两个目录的 `RUN_NOTES.md` 已经明确写成了 **Low-Monte-Carlo smoke validation**，运行命令是 `run_project([1 9], cfgSmoke)`，而且这次 `case09` 实际只跑了 **Monte Carlo = 2**。说明你已经把“链路验证”和“正式统计”分开写了，这一点是对的；但也意味着这两条结果本身不能用来证明最终论文强度。
+
+这次最实质的改进有五个。
+
+第一，`case01` 的逻辑确实变严了。它不再用固定的温和示例角，而是先跑高 SNR sweep，再自动挑一个 **stress angle**；同时图里新增了 **signed bias、RMSE floor、stress example 标记**。这比以前那个“挑一个舒服角度看谱”更能暴露系统偏差。`benchmark_music.m` 也同步增加了 `perTargetMeanError`、`perTargetAbsBias` 和 `trialErrorStd`，说明你现在不只是看 RMSE，而是开始区分“偏差”和“随机波动”了。
+
+第二，`case01` 在“HFSS truth 生成快照、估计流形只用于扫描”这条原则上，已经落到了图题层。`run_project.m` 顶部明确写了三条项目原则：HFSS 作为 truth manifold、稀疏角只用于重构、DOA snapshots 始终从 HFSS truth 生成；而 `case01` 的代表性谱图标题里也已经显式写了 “HFSS truth snapshots; MUSIC scan uses the listed estimator manifold”。这说明你不是只在脑子里记住了这条原则，而是已经开始把它写进产物。
+
+第三，`case09` 这次的修复是有效的，而且比我上次批评的版本成熟很多。你已经把 `Interpolation` 重新放回 `case09` 的方法集合，变成 `Ideal / Interpolation / Proposed / HFSS Oracle` 四组对比；这一步很重要，因为这才是对最接近你的可实现 baseline 的正面对比。与此同时，pair 选择也不再只是简单均匀裁剪，而是改成了 `research_coverage`，综合了 **pair mismatch、edge score、与校准角距离** 三类分数，再优先挑高 combined score、边缘样例和中心分布更开的样例。这个方向是对的。
+
+第四，你这次把“结果可追溯性”补上了。`run_project.m` 现在支持 traceable output dirs，并自动写 `RUN_NOTES.md`；`default_config.m` 也把 `runId / baseHead / gitStatusShort / notes` 这些运行元信息纳入配置。这是论文工程化必须有的东西，不是装饰。
+
+第五，你已经开始区分“日常默认配置”和“论文统计配置”。`default_config.m` 里新增了 profile 机制，`paper` profile 会把 `case1/7/8/9` 的 Monte Carlo 提到 `120/200/200/300`。这说明你已经意识到：默认跑通参数和论文统计参数不该混为一谈。这个改动是正确的。
+
+下面对应你之前那三条担忧，逐条审查。
+
+**第一条：是否已经确认所有 case 的图注和表述都沿用“HFSS truth 生成快照，重构流形只用于估计”的原则？**
+
+答案是：**只修了一半，还没完全闭环。**
+
+代码原则已经写明，`case01` 的关键图题也已经显式写出来了，这部分是合格的。
+但我刚核对的 `case09` 图题仍然只是：
+
+* near-threshold resolution probability
+* pair RMSE in the hard interval
+* state breakdown
+* representative hard spectrum
+
+这里面**没有显式重复**“HFSS truth snapshots / estimator manifold only used for scan”这条原则。也就是说，方法学语义在代码里是对的，但图注层面的统一还没做完。你如果说“所有 case 都已经统一”，我现在不能同意。
+
+**第二条：默认参数会不会继续吞掉细小系统偏差？**
+
+答案是：**比以前好，但还没有完全消除。**
+
+已经变好的部分是：`case01` 明显更严了。它现在用 `highSNRDb = 40`、`snapshots = 2000`、`monteCarlo = 80`、`toleranceDeg = 0.4`，而且 stress angle 自动选择。这套配置比之前更适合做 mismatch floor 检查。
+
+但没有完全解决的部分也很明确：`case07` 和 `case08` 默认仍然是 `toleranceDeg = 1`，`monteCarlo = 80`，`case07.exampleAngleDeg = 10`。在 0.2° 网格下，`1°` 容差对单源精细偏差仍然偏宽松，`10°` 这个代表角也仍然偏温和，不是最能暴露失配的区域。也就是说，你已经把 `case01` 修到更像“偏差检查”，但 `case07/08` 默认设置还没完全跟上。
+
+**第三条：有没有避免把“代码跑通”误写成“论文统计已足够”？**
+
+答案是：**这次明显进步了，但还有一个可重复性风险。**
+
+进步在于，`RUN_NOTES.md` 已经把这次运行直接标成了 smoke validation，而且还写明了这次是为了验证 `Case 1 mismatch-floor plumbing` 和 `Case 9 interpolation/research-coverage pair selection`。这说明你的结果说明文字已经开始区分“修管线”和“出正式统计”。这一点我认可。
+
+但风险在于，这次运行不是 clean repo 上出的。`RUN_NOTES.md` 同时记录了有未提交修改和未跟踪结果目录。这种记录方式本身是好的，因为它诚实；但从论文可复现实验的标准看，**dirty working tree 上跑出来的结果** 仍然不适合作为最终主结果归档。
+
+所以我对这次修改质量的总评价是：
+
+**整体质量：高于上一轮一大截，核心修复有效，但还不能算完全收口。**
+
+我最认可的三点是：
+
+* `case01` 从“展示图”变成了“偏差压力测试”。
+* `case09` 把 `Interpolation` 放回来了，而且 pair 选择终于开始围绕研究问题抽样。
+* `paper` profile 的引入，说明你已经在工程层面区分 smoke、default、paper 三个层级。
+
+我最在意的三个残留问题是：
+
+* “HFSS truth 生成快照”这条原则还没有统一写进所有关键图题，至少 `case09` 还不够显式。
+* `case07/08` 默认还是 `toleranceDeg = 1`，代表角还是 `10°`，对细小偏差依然偏宽容。
+* 这次结果目录是 smoke 运行，而且 `case09` 的这次结果只跑了 `MC = 2`，所以你现在能证明的是“修复方向对、链路通了”，还不能证明“统计趋势已经稳”。
+
+最后给你一个直接结论：
+
+1. 把 `case09` 的图题也显式写上 HFSS truth / estimator manifold 原则。
+2. 把 `case07/08` 默认单源容差再收紧，或者至少补一组 bias / percentile 指标。
+3. 用 `paper` profile 跑一版 clean repo 的正式结果，替掉现在这组 smoke 目录。
+
+
+
 # 2026年4月18日09:52:05
 
 我把你这轮项目主干看过了，重点看了这几处：
@@ -273,7 +354,7 @@
 
 这是对这次改动的评价：
 
-我看了你仓库里的这几部分：`docs/research-log.md`、`default_config.m`、`run_project.m`、`src/benchmark_music.m`。 
+我看了你仓库里的这几部分：`docs/research-log.md`、`default_config.m`、`run_project.m`、`src/benchmark_music.m`。
 
 结论是：**这次改进是有效的，而且方向基本改对了；尤其是 case09，已经从“几乎无信息量的演示”改成了“能检验你设想核心命题的 benchmark”。**
 

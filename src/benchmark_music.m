@@ -37,6 +37,8 @@ for methodIdx = 1:numMethods
     result.methods(methodIdx).perTargetMeanError = NaN(numTargets, 1);
     result.methods(methodIdx).perTargetAbsBias = NaN(numTargets, 1);
     result.methods(methodIdx).trialErrorStd = NaN(numTargets, 1);
+    result.methods(methodIdx).p90AbsError = NaN;
+    result.methods(methodIdx).perTargetP90AbsError = NaN(numTargets, 1);
     result.methods(methodIdx).perTargetSuccess = NaN(numTargets, 1);
     result.methods(methodIdx).resolutionRate = NaN;
     result.methods(methodIdx).marginalRate = NaN;
@@ -105,6 +107,8 @@ for methodIdx = 1:numMethods
         result.methods(methodIdx).perTargetMeanError = mean(trialErrors, 2);
         result.methods(methodIdx).perTargetAbsBias = abs(result.methods(methodIdx).perTargetMeanError);
         result.methods(methodIdx).trialErrorStd = std(trialErrors, 0, 2);
+        result.methods(methodIdx).p90AbsError = local_percentile(abs(trialErrors(:)), 90);
+        result.methods(methodIdx).perTargetP90AbsError = local_row_percentile(abs(trialErrors), 90);
     else
         result.methods(methodIdx).rmse = mean(trialErrors(:));
         result.methods(methodIdx).perTargetRmse = mean(trialErrors, 2);
@@ -121,6 +125,31 @@ for methodIdx = 1:numMethods
 
     result.methods(methodIdx).successRate = mean(trialSuccess(:));
     result.methods(methodIdx).perTargetSuccess = mean(trialSuccess, 2);
+end
+end
+
+function value = local_percentile(values, percentile)
+values = sort(values(:), 'ascend');
+if isempty(values)
+    value = NaN;
+    return;
+end
+
+rank = 1 + (numel(values) - 1) * percentile / 100;
+lowerIdx = floor(rank);
+upperIdx = ceil(rank);
+if lowerIdx == upperIdx
+    value = values(lowerIdx);
+else
+    fraction = rank - lowerIdx;
+    value = (1 - fraction) * values(lowerIdx) + fraction * values(upperIdx);
+end
+end
+
+function values = local_row_percentile(dataMatrix, percentile)
+values = NaN(size(dataMatrix, 1), 1);
+for rowIdx = 1:size(dataMatrix, 1)
+    values(rowIdx) = local_percentile(dataMatrix(rowIdx, :), percentile);
 end
 end
 

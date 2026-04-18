@@ -114,7 +114,7 @@ $$
 
   1. 只修正相位
   2. 只修正幅度
-  3. 幅相都修正
+  3. 幅相都修正。该项使用完整残差信息，应标注为 `Amp+Phase Oracle` 或 upper bound，不是同预算可实现 baseline。
 
 **输出图**
 
@@ -259,25 +259,29 @@ $$
 - SNR: $-15:5:20$ dB 或你现在常用范围
 - snapshots: 固定一个中等值，比如 200 或 500
 - Monte Carlo: 200~500 次
+- 当前默认成功判据为 `0.5^\circ`，用于避免 0.2 度密网格下细小系统偏差被过宽容差吞掉
+- 代表性谱图角度默认自动选择边缘/高失配未见角，而不是固定温和角度
 
 比较对象：
 
 - Ideal manifold + MUSIC
+- Interpolation manifold + MUSIC
 - Proposed corrected manifold + MUSIC
 - HFSS oracle manifold + MUSIC
-- 可选：插值基线
 
 **输出图**
 
 - RMSE vs SNR
 - 成功率 vs SNR
+- mean absolute bias vs SNR
+- P90 absolute error vs SNR
 - 若干代表 SNR 下的伪谱图
 
 **你要得到的结论**
 
 - 低 SNR 时噪声主导，几种方法差距有限
 - 中高 SNR 时模型失配主导，ideal 出现误差地板
-- proposed 明显逼近 HFSS oracle
+- interpolation/proposed 都应明显降低 Ideal 的误差地板；若 proposed 与 interpolation 接近，论文主张应收窄为更稳定或更有结构解释，而不是均值碾压
 
 这会是你论文里最直观的一张主图。
 
@@ -292,17 +296,20 @@ $$
 - 固定 SNR，例如 0 dB 和 10 dB 两档
 - snapshots: $N=50,100,200,500,1000$
 - 源角为未见角
+- 当前默认成功判据为 `0.5^\circ`
 
 **输出图**
 
 - RMSE vs snapshots
+- mean absolute bias vs snapshots
+- P90 absolute error vs snapshots
 - 高快拍区误差地板对比图
 
 **你要得到的结论**
 
 - 快拍数增加能压低统计误差
 - 但 ideal 的模型误差不会因快拍无限增多而消失
-- proposed 可显著降低高快拍下的偏差地板
+- interpolation/proposed 可显著降低高快拍下由 Ideal 失配造成的偏差地板；二者差异需要结合 bias、P90 和角域分布解释
 
 这个 case 很能说明“你解决的是模型误差，不是噪声误差”。
 

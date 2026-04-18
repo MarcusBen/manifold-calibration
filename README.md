@@ -20,23 +20,25 @@
 - `results_step0p2_qw/` 是兼容旧运行习惯的默认输出目录；可追溯实验应使用 `cfg.run.useTraceableDirs = true`，输出到 `results/<case-name>/<timestamp>-<localhash>/`。
 - `default_config(rootDir, 'paper')` 提供更厚 Monte Carlo 的正式图配置；日常默认配置仍以较快迭代为主。
 
-当前更稳妥的论文表述是：项目已经完成默认代码层面的 dense HFSS 数据切换，并建立了更严格的细网格评估入口；但正式论文结论仍需要更高置信度 Monte Carlo、结果稳定性复查和 hash 匹配评阅后再收束。
+当前更稳妥的论文表述是：项目已经完成默认代码层面的 dense HFSS 数据切换，并建立了更严格的细网格评估入口。`local-2e941ccf` 这一批已直接跑完 dirty worktree 上的 `paper` profile 全量 `run_project(1:10, cfg)`；它可以作为 issue 收口验证和研究记录，但不能冒充 clean repo 最终归档。
 
 ## Version Trace
 
-- Git code commit hash: `996b0e4`
-- Base HEAD before this batch: `81eaaf4`
-- Published branch hash: pending finalization push
-- Latest reviewed comments hash: unavailable in `docs/comments.md`
-- Review status: `docs/comments.md` 没有可识别的 `Reviewed commit` 或 `Review for commit` 标记，因此只能作为背景意见；当前 code/results commit 尚未获得 hash-matched review。
-- Latest traceable smoke run: `results/case01_problem_validation/20260418-101955-996b0e4/` and `results/case09_two_source_resolution/20260418-101955-996b0e4/`
+- Pending local hash: `local-2e941ccf`
+- Base HEAD before this batch: `7191dc4`
+- Published branch hash: `7191dc4`
+- Latest comments entry: `2026-04-18` review of `996b0e4`
+- Review status: latest comments explicitly evaluate `996b0e4`, but they are not marked with `Reviewed commit:` / `Review for commit`; treat them as current reviewer guidance rather than a formal hash-matched review marker.
+- Latest traceable paper-profile full run: `results/<case-name>/20260418-133202-local-2e941ccf/`
 
 ## 提醒：`comments`、`research-log` 和当前代码并不完全对齐
 
 以下差异需要保留，不要把旧评论平滑成当前结论：
 
-- `docs/comments.md` 评价的是上一轮 `case09` 改进，并未标明评审 commit hash；它提到的 `centerAngleDeg = 37.5`、`separationSweepDeg = 4:2:18`、`numTrials = 250`、`scanGridDeg = -60:1:60` 不是当前默认配置。
+- `docs/comments.md` 最新条目认可 `996b0e4` 的方向；`local-2e941ccf` 已进一步补齐 Case 7/8 严格判据、Case 9 图题语义和 Case 2 oracle 标注。
 - 当前代码与 `docs/research-log.md` 的最新条目一致：默认 `case09` 使用 `[1 2 3 4 5 6 8 10]` 的 separation sweep、`snapshots = 500`、`monteCarlo = 80`，包含 `Interpolation` 基线，并在细网格下使用更严格的状态阈值。
+- `paper` profile full run 显示 Case 7/8 中 `Ideal` 的结构性误差地板很明显；但 Case 9 中 `Proposed` 未稳定优于 `Interpolation`，因此论文主张应收窄为“相对 Ideal 的流形失配校正有效，Proposed 与 Interpolation 的差异需要按角域/状态细分讨论”。
+- 这次 full run 记录了 dirty worktree，仍需后续 clean repo + finalized Git hash 归档。
 - 旧日志中关于 `5 deg` 网格和 coarse-grid benchmark 的条目是历史判断；当前默认入口已切到 `0.2 deg` HFSS 数据，但最终论文图仍需要按最新配置重新确认。
 - `Amp+Phase` 仍应作为 oracle 上界，而不是同预算可实现基线。
 

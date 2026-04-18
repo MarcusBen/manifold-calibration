@@ -92,7 +92,8 @@ cfg.case7 = struct();
 cfg.case7.snrSweepDb = -15:5:20;
 cfg.case7.snapshots = 500;
 cfg.case7.monteCarlo = 80;
-cfg.case7.toleranceDeg = 1;
+cfg.case7.toleranceDeg = 0.5;
+cfg.case7.exampleAngleMode = 'auto_high_mismatch_edge';
 cfg.case7.exampleAngleDeg = 10;
 cfg.case7.spectrumSnrDb = [-10 0 10];
 
@@ -100,7 +101,7 @@ cfg.case8 = struct();
 cfg.case8.snapshotSweep = [50 100 200 500 1000];
 cfg.case8.snrValuesDb = [0 10];
 cfg.case8.monteCarlo = 80;
-cfg.case8.toleranceDeg = 1;
+cfg.case8.toleranceDeg = 0.5;
 
 cfg.case9 = struct();
 cfg.case9.evalSNRDb = 5;
