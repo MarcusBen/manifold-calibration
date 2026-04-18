@@ -16,6 +16,93 @@
 
 ## 最新整理
 
+### 2026-04-18：项目默认实验切换到 `2.5GHz / 0.2 deg / lambda/4`
+
+#### 一句话结论
+
+本轮已经把 MATLAB 默认实验从旧的粗角度 HFSS 数据切换到 `data/hfss/step0.2deg.csv`，频率统一为 `2.5GHz`，理想导向矢量按用户最终确认的四分之一波长间距生成；HFSS 流形仍作为真值，`Ideal / Interpolation / Proposed / HFSS Oracle` 的比较框架保持不变。
+
+#### 当前判断
+
+- 新数据源 `step0.2deg.csv` 是后续默认实验的唯一入口；旧 `port1-8_E.csv` 只保留为历史数据，不再参与默认流程。
+- 阵元间隔以 `elementSpacingLambda = 0.25` 为准，而不是旧文档中的 `lambda/2`，也不是从数据反推得到的等效间距。
+- 从新 HFSS 数据拟合出的等效间距约为 `0.276 lambda`，这个结果只作为诊断信息保留，不改变算法中理想导向矢量的生成方式。
+- 0.2 度密网格会显著增加 DOA Monte Carlo 的运行量，因此单源 DOA 默认改为分层未见角抽样；流形级误差指标仍使用全部未见角，避免证据变弱。
+
+#### 已确认事实
+
+- `default_config.m` 已更新：
+  - `cfg.data.csvPath = fullfile(rootDir, 'data', 'hfss', 'step0.2deg.csv')`
+  - `cfg.array.frequencyHz = 2.5e9`
+  - `cfg.array.elementSpacingLambda = 0.25`
+  - 默认输出目录改为 `results_step0p2_qw`
+  - 新增 `cfg.eval`，默认使用 `targetMode = 'stratified'` 和 `targetStrideDeg = 2`
+- `build_project_context.m` 已更新数据校验：
+  - 期望角度数为 `601`
+  - 角度网格为 `-60:0.2:60`
+  - 数据频率列必须全为 `2.5`
+  - 端口数据为 8 路复数响应
+  - 不允许出现 `NaN` 或 `Inf`
+- 理想导向矢量现在由
+
+  ```matlab
+  a_m(theta) = exp(1j * (m-1) * (pi/2) * sind(theta))
+  ```
+
+  生成，对应 `2*pi*0.25 = pi/2`。
+- 角度查找已经从严格浮点匹配改为最近网格点匹配，容差为半个网格步长，因此 `37.5 deg` 这类不落在 0.2 度网格上的角度会映射到最近可用 HFSS 角度，并记录请求角与实际使用角。
+- Case 1/2/4/5/7/8/10 的 DOA Monte Carlo 不再默认遍历全部 601 个角点，而是从未见角中分层抽样，并强制覆盖边缘区、中心区和若干高失配区域。
+- Case 3/4/5/6/10 的流形误差仍使用全部未见角计算。
+- Case 9 已改为基于 0.2 度网格生成双源 pair，默认 separation sweep 为 `[1 2 3 4 5 6 8 10]`，并按每个 separation 限制代表性 pair 数量，避免组合爆炸。
+- Case 9 的状态阈值已适配细网格：
+  - `stableToleranceDeg = 0.6`
+  - `biasedToleranceDeg = 2`
+  - `marginalToleranceDeg = 5`
+
+#### 验证记录
+
+- 已完成 context 级数据读取验证：
+  - `size(ctx.AH) == [8 601]`
+  - `ctx.thetaDeg(1) == -60`
+  - `ctx.thetaDeg(end) == 60`
+  - `ctx.gridStepDeg == 0.2`
+  - `ctx.dataFrequencyGHz == 2.5`
+  - `cfg.array.elementSpacingLambda == 0.25`
+- 已确认默认配置中不再出现旧的 `2.36e9`、`port1-8_E.csv`、`elementSpacingLambda = 0.5` 或旧版 Case 9 separation sweep。
+- 已跑通过低 Monte Carlo smoke test：
+  - `run_project([1 3 7 9], cfgSmoke)`
+  - `run_project([2 4 5 6 8 10], cfgSmokeRest)`
+- smoke 输出只用于链路验证，本条暂不插入新的结果图，避免把低 Monte Carlo 图误读为正式实验图。后续如需要纳入图像，统一保存到 `docs/assets/`，并用相对路径写入 Markdown，例如 `![caption](assets/example.png)`。
+
+#### 这次改动实际解决了什么
+
+1. 解决了代码默认数据源、频率配置和用户当前 HFSS 数据不一致的问题。
+2. 解决了理想导向矢量仍沿用旧阵元间距假设的问题。
+3. 解决了 0.2 度密网格下 DOA Monte Carlo 默认全量运行过慢的问题。
+4. 解决了 `10 deg`、`37.5 deg` 等角度因为浮点或网格不重合而直接报错的问题。
+5. 解决了 Case 9 在细网格下 pair 生成、pair 数量和状态阈值没有同步适配的问题。
+
+#### 仍然存在的风险或边界
+
+- `0.276 lambda` 的等效间距诊断说明 HFSS 真值流形和 `lambda/4` 理想流形仍有系统性差异；这正是项目要校正的对象，但论文表述中要避免把 `lambda/4` 理想模型说成物理真值。
+- 分层 DOA 抽样提升了默认实验速度，但正式论文图如果需要极高置信度，仍应提高 Monte Carlo 次数或单独跑更密的目标角集合。
+- Case 9 当前通过限制每个 separation 的 pair 数量控制运行量；如果正式结果对边缘角特别敏感，需要检查每个 separation 的 pair 覆盖是否足够均衡。
+- 本轮没有重写旧 Markdown 条目中关于 `5 deg` 网格的历史记录；那些内容作为历史判断保留，不代表当前默认代码状态。
+
+#### 下一步动作
+
+- 用默认参数跑一版完整 `results_step0p2_qw`，确认正式图中的排序和误差曲线是否稳定。
+- 回读 Case 7/8 的 `evalAnglesDeg`，确认 DOA 曲线确实来自分层未见角，而不是校准角。
+- 回读 Case 9 的 `sourcePairsDeg` 与 per-separation pair 数量，确认每个 separation 都有足够代表性困难样例。
+- 如果后续把图写入文档，先把图片复制或导出到 `docs/assets/`，再在 Markdown 中用 `assets/...` 相对路径引用，避免文档迁移或读取时路径失效。
+
+#### 对论文表述的影响
+
+- 可以明确写成：本文实验使用 `2.5GHz` HFSS 流形作为真值，并在 `[-60 deg, 60 deg]` 上以 `0.2 deg` 步长构建角度网格。
+- 理想阵列基线应表述为“按 `lambda/4` 阵元间距生成的理想 ULA steering vector”，而不是从 HFSS 数据拟合得到的阵列模型。
+- 流形误差图和 DOA 性能图需要区分说明：前者默认覆盖全部未见角，后者默认使用分层未见角抽样以控制计算量。
+- Case 9 可以表述为“细角度网格下的双源 near-threshold separation sweep”，并应说明状态分级阈值是工程化评价标准，不是解析 Rayleigh 极限。
+
 ### 2026-04-17：`case09` 已从“容易分开”改成“近阈值分辨率扫描”
 
 #### 一句话结论

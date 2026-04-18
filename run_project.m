@@ -25,6 +25,7 @@ else
         cfg.outputDir = fullfile(rootDir, 'results');
     end
 end
+cfg = local_complete_runtime_config(cfg, rootDir);
 
 if ~exist(cfg.outputDir, 'dir')
     mkdir(cfg.outputDir);
@@ -126,7 +127,7 @@ title(sprintf('Case 1: MUSIC spectrum at %.1f deg, SNR = %g dB', exampleAngle, c
 legend({exampleSpectrum.methods.label}, 'Location', 'best');
 save_figure(fig, fullfile(outDir, 'example_music_spectrum.png'));
 
-evalCfg.trueAngles = ctx.thetaDeg(:);
+evalCfg.trueAngles = local_single_source_eval_angles(ctx, [], cfg);
 evalCfg.monteCarlo = cfg.case1.monteCarlo;
 evalCfg.collectRepresentativeSpectrum = false;
 highSnrSweep = benchmark_music(ctx, methods, evalCfg);
@@ -134,7 +135,7 @@ highSnrSweep = benchmark_music(ctx, methods, evalCfg);
 fig = figure('Visible', 'off', 'Position', [160 160 1100 500]);
 hold on;
 for methodIdx = 1:numel(highSnrSweep.methods)
-    plot(ctx.thetaDeg, highSnrSweep.methods(methodIdx).perTargetRmse, ...
+    plot(highSnrSweep.trueAngleSetsDeg, highSnrSweep.methods(methodIdx).perTargetRmse, ...
         'o-', 'LineWidth', 1.4, 'MarkerSize', 5);
 end
 grid on;
@@ -147,6 +148,7 @@ save_figure(fig, fullfile(outDir, 'high_snr_angle_bias.png'));
 caseResult = struct();
 caseResult.outputDir = outDir;
 caseResult.metrics = metrics;
+caseResult.contextDiagnostics = ctx.diagnostics;
 caseResult.exampleSpectrum = exampleSpectrum;
 caseResult.highSnrSweep = highSnrSweep;
 save(fullfile(outDir, 'case01_results.mat'), 'caseResult');
@@ -180,7 +182,7 @@ methods = [ ...
 
 evalCfg = struct();
 evalCfg.mode = 'single';
-evalCfg.trueAngles = ctx.thetaDeg(:);
+evalCfg.trueAngles = local_single_source_eval_angles(ctx, [], cfg);
 evalCfg.snrDb = cfg.case2.evalSNRDb;
 evalCfg.snapshots = cfg.case2.snapshots;
 evalCfg.monteCarlo = cfg.case2.monteCarlo;
@@ -368,7 +370,7 @@ for lIdx = 1:numel(lValues)
     methods = local_named_methods(ctx, models, methodKeys);
     evalCfg = struct();
     evalCfg.mode = 'single';
-    evalCfg.trueAngles = models.testAnglesDeg(:);
+    evalCfg.trueAngles = local_single_source_eval_angles(ctx, models, cfg);
     evalCfg.snrDb = cfg.case4.evalSNRDb;
     evalCfg.snapshots = cfg.case4.snapshots;
     evalCfg.monteCarlo = cfg.case4.monteCarlo;
@@ -479,7 +481,7 @@ for strategyIdx = 1:numel(strategyNames)
             rng(cfg.randomSeed + 900 + strategyIdx * 100 + trialIdx * 10 + snrIdx, 'twister');
             evalCfg = struct();
             evalCfg.mode = 'single';
-            evalCfg.trueAngles = models.testAnglesDeg(:);
+            evalCfg.trueAngles = local_single_source_eval_angles(ctx, models, cfg);
             evalCfg.snrDb = snrSweep(snrIdx);
             evalCfg.snapshots = cfg.case5.snapshots;
             evalCfg.monteCarlo = cfg.case5.monteCarlo;
@@ -609,6 +611,7 @@ calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'un
 models = build_sparse_models(ctx, calIdx, cfg.model);
 methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed', 'oracle'});
 snrSweep = cfg.case7.snrSweepDb;
+evalAngles = local_single_source_eval_angles(ctx, models, cfg);
 
 rmse = zeros(numel(snrSweep), numel(methods));
 successRate = zeros(numel(snrSweep), numel(methods));
@@ -618,7 +621,7 @@ for snrIdx = 1:numel(snrSweep)
     fprintf('Case 7: SNR = %g dB\n', snrSweep(snrIdx));
     evalCfg = struct();
     evalCfg.mode = 'single';
-    evalCfg.trueAngles = models.testAnglesDeg(:);
+    evalCfg.trueAngles = evalAngles;
     evalCfg.snrDb = snrSweep(snrIdx);
     evalCfg.snapshots = cfg.case7.snapshots;
     evalCfg.monteCarlo = cfg.case7.monteCarlo;
@@ -659,9 +662,7 @@ legend({methods.label}, 'Location', 'best');
 save_figure(fig, fullfile(outDir, 'rmse_and_success_vs_snr.png'));
 
 exampleAngle = cfg.case7.exampleAngleDeg;
-if ~ismember(exampleAngle, models.testAnglesDeg)
-    exampleAngle = models.testAnglesDeg(1);
-end
+exampleAngle = local_nearest_angle_from_set(exampleAngle, models.testAnglesDeg);
 
 fig = figure('Visible', 'off', 'Position', [150 150 1200 760]);
 tiledlayout(numel(cfg.case7.spectrumSnrDb), 1, 'Padding', 'compact', 'TileSpacing', 'compact');
@@ -694,6 +695,7 @@ save_figure(fig, fullfile(outDir, 'representative_spectra.png'));
 caseResult = struct();
 caseResult.outputDir = outDir;
 caseResult.models = models;
+caseResult.evalAnglesDeg = evalAngles;
 caseResult.snrSweep = snrSweep;
 caseResult.rmse = rmse;
 caseResult.successRate = successRate;
@@ -708,6 +710,7 @@ outDir = local_case_output_dir(cfg, 'case08_single_source_snapshots');
 calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'uniform');
 models = build_sparse_models(ctx, calIdx, cfg.model);
 methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed', 'oracle'});
+evalAngles = local_single_source_eval_angles(ctx, models, cfg);
 
 snapshotSweep = cfg.case8.snapshotSweep;
 snrValues = cfg.case8.snrValuesDb;
@@ -719,7 +722,7 @@ for snrIdx = 1:numel(snrValues)
         fprintf('Case 8: SNR = %g dB, snapshots = %d\n', snrValues(snrIdx), snapshotSweep(snapIdx));
         evalCfg = struct();
         evalCfg.mode = 'single';
-        evalCfg.trueAngles = models.testAnglesDeg(:);
+        evalCfg.trueAngles = evalAngles;
         evalCfg.snrDb = snrValues(snrIdx);
         evalCfg.snapshots = snapshotSweep(snapIdx);
         evalCfg.monteCarlo = cfg.case8.monteCarlo;
@@ -753,6 +756,7 @@ save_figure(fig, fullfile(outDir, 'rmse_vs_snapshots.png'));
 caseResult = struct();
 caseResult.outputDir = outDir;
 caseResult.models = models;
+caseResult.evalAnglesDeg = evalAngles;
 caseResult.snapshotSweep = snapshotSweep;
 caseResult.snrValues = snrValues;
 caseResult.rmse = rmse;
@@ -919,9 +923,10 @@ for splitIdx = 1:numSplits
         mean(metricsProposed.relativeError)];
 
     methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed'});
+    evalAngles = local_single_source_eval_angles(ctx, models, cfg);
     evalCfg = struct();
     evalCfg.mode = 'single';
-    evalCfg.trueAngles = models.testAnglesDeg(:);
+    evalCfg.trueAngles = evalAngles;
     evalCfg.snrDb = cfg.case10.evalSNRDb;
     evalCfg.snapshots = cfg.case10.snapshots;
     evalCfg.monteCarlo = cfg.case10.monteCarlo;
@@ -966,6 +971,96 @@ if ~exist(outDir, 'dir')
 end
 end
 
+function cfg = local_complete_runtime_config(cfg, rootDir)
+if ~isfield(cfg, 'rootDir') || isempty(cfg.rootDir)
+    cfg.rootDir = rootDir;
+end
+if ~isfield(cfg, 'outputDir') || isempty(cfg.outputDir)
+    cfg.outputDir = fullfile(rootDir, 'results_step0p2_qw');
+end
+if ~isfield(cfg, 'eval') || isempty(cfg.eval)
+    cfg.eval = struct();
+end
+cfg.eval = local_set_default_field(cfg.eval, 'targetMode', 'stratified');
+cfg.eval = local_set_default_field(cfg.eval, 'targetStrideDeg', 2);
+cfg.eval = local_set_default_field(cfg.eval, 'edgeBandDeg', 8);
+cfg.eval = local_set_default_field(cfg.eval, 'highMismatchCount', 12);
+cfg.eval = local_set_default_field(cfg.eval, 'useFullGridForManifoldMetrics', true);
+
+if isfield(cfg, 'case9')
+    cfg.case9 = local_set_default_field(cfg.case9, 'maxPairsPerSeparation', 21);
+    cfg.case9 = local_set_default_field(cfg.case9, 'separationSweepDeg', [1 2 3 4 5 6 8 10]);
+    cfg.case9 = local_set_default_field(cfg.case9, 'biasedToleranceDeg', 2);
+    cfg.case9 = local_set_default_field(cfg.case9, 'marginalToleranceDeg', 5);
+end
+end
+
+function inputStruct = local_set_default_field(inputStruct, fieldName, defaultValue)
+if ~isfield(inputStruct, fieldName) || isempty(inputStruct.(fieldName))
+    inputStruct.(fieldName) = defaultValue;
+end
+end
+
+function evalAngles = local_single_source_eval_angles(ctx, models, cfg)
+if nargin >= 2 && ~isempty(models) && isfield(models, 'testAnglesDeg')
+    candidateAngles = models.testAnglesDeg(:).';
+else
+    candidateAngles = ctx.thetaDeg(:).';
+end
+
+candidateAngles = sort(unique(candidateAngles));
+if isempty(candidateAngles)
+    error('No candidate evaluation angles are available.');
+end
+
+targetMode = lower(strtrim(cfg.eval.targetMode));
+if strcmp(targetMode, 'all')
+    evalAngles = candidateAngles(:);
+    return;
+end
+
+strideDeg = cfg.eval.targetStrideDeg;
+if ~isfinite(strideDeg) || strideDeg <= 0
+    strideDeg = 2;
+end
+
+targetGrid = candidateAngles(1):strideDeg:candidateAngles(end);
+selected = local_nearest_angles_from_set(targetGrid, candidateAngles);
+
+edgeBand = cfg.eval.edgeBandDeg;
+anchors = [ ...
+    candidateAngles(1), ...
+    candidateAngles(1) + edgeBand, ...
+    -edgeBand, ...
+    0, ...
+    edgeBand, ...
+    candidateAngles(end) - edgeBand, ...
+    candidateAngles(end)];
+selected = [selected, local_nearest_angles_from_set(anchors, candidateAngles)]; %#ok<AGROW>
+
+highMismatchCount = cfg.eval.highMismatchCount;
+if highMismatchCount > 0
+    candidateIdx = local_angle_indices(ctx.thetaDeg, candidateAngles);
+    candidateMetrics = compute_manifold_metrics(ctx.AH(:, candidateIdx), ctx.AI(:, candidateIdx));
+    [~, order] = sort(candidateMetrics.relativeError, 'descend');
+    selected = [selected, candidateAngles(order(1:min(highMismatchCount, numel(order))))]; %#ok<AGROW>
+end
+
+evalAngles = sort(unique(selected(:)));
+end
+
+function nearestAngles = local_nearest_angles_from_set(queryAngles, availableAngles)
+nearestAngles = zeros(size(queryAngles));
+for idx = 1:numel(queryAngles)
+    nearestAngles(idx) = local_nearest_angle_from_set(queryAngles(idx), availableAngles);
+end
+end
+
+function nearestAngle = local_nearest_angle_from_set(queryAngle, availableAngles)
+[~, nearestIdx] = min(abs(availableAngles(:).' - queryAngle));
+nearestAngle = availableAngles(nearestIdx);
+end
+
 function method = local_method(name, label, manifold)
 method = struct('name', name, 'label', label, 'manifold', manifold);
 end
@@ -991,9 +1086,26 @@ end
 end
 
 function idx = local_angle_index(thetaDeg, queryAngle)
-idx = find(abs(thetaDeg - queryAngle) < 1e-9, 1, 'first');
-if isempty(idx)
-    error('Angle %.6f deg is not available in the current grid.', queryAngle);
+[distance, idx] = min(abs(thetaDeg - queryAngle));
+tolDeg = local_angle_tolerance_from_grid(thetaDeg);
+if distance > tolDeg
+    error('Angle %.6f deg is %.6f deg away from the nearest grid point, exceeding tolerance %.6f deg.', ...
+        queryAngle, distance, tolDeg);
+end
+end
+
+function idx = local_angle_indices(thetaDeg, queryAngles)
+idx = zeros(size(queryAngles));
+for angleIdx = 1:numel(queryAngles)
+    idx(angleIdx) = local_angle_index(thetaDeg, queryAngles(angleIdx));
+end
+end
+
+function tolDeg = local_angle_tolerance_from_grid(thetaDeg)
+if numel(thetaDeg) > 1
+    tolDeg = median(diff(sort(thetaDeg))) / 2 + 1e-9;
+else
+    tolDeg = 1e-9;
 end
 end
 
@@ -1006,11 +1118,28 @@ manifold = manifold ./ colNorm;
 end
 
 function validPairs = local_filter_pairs(candidatePairs, thetaGrid, calAnglesDeg)
-availableMask = ismember(candidatePairs(:, 1), thetaGrid) & ismember(candidatePairs(:, 2), thetaGrid);
-validPairs = candidatePairs(availableMask, :);
+tolDeg = local_angle_tolerance_from_grid(thetaGrid);
+snappedPairs = zeros(size(candidatePairs));
+availableMask = false(size(candidatePairs, 1), 1);
+
+for pairIdx = 1:size(candidatePairs, 1)
+    [leftDistance, leftIdx] = min(abs(thetaGrid - candidatePairs(pairIdx, 1)));
+    [rightDistance, rightIdx] = min(abs(thetaGrid - candidatePairs(pairIdx, 2)));
+    if leftDistance <= tolDeg && rightDistance <= tolDeg
+        snappedPairs(pairIdx, :) = [thetaGrid(leftIdx), thetaGrid(rightIdx)];
+        availableMask(pairIdx) = true;
+    end
+end
+
+validPairs = snappedPairs(availableMask, :);
 
 if nargin >= 3 && ~isempty(calAnglesDeg)
-    unseenMask = ~ismember(validPairs(:, 1), calAnglesDeg) & ~ismember(validPairs(:, 2), calAnglesDeg);
+    unseenMask = true(size(validPairs, 1), 1);
+    for pairIdx = 1:size(validPairs, 1)
+        touchesCal = any(abs(calAnglesDeg - validPairs(pairIdx, 1)) <= tolDeg) || ...
+            any(abs(calAnglesDeg - validPairs(pairIdx, 2)) <= tolDeg);
+        unseenMask(pairIdx) = ~touchesCal;
+    end
     if any(unseenMask)
         validPairs = validPairs(unseenMask, :);
     end
@@ -1035,18 +1164,40 @@ separationDeg = sourcePairs(:, 2) - sourcePairs(:, 1);
 pairCenterDeg = mean(sourcePairs, 2);
 sourcePairs = sortrows([sourcePairs, separationDeg, pairCenterDeg], [3 4 1 2]);
 sourcePairs = sourcePairs(:, 1:2);
+
+if isfield(caseCfg, 'maxPairsPerSeparation') && ~isempty(caseCfg.maxPairsPerSeparation) && ...
+        isfinite(caseCfg.maxPairsPerSeparation) && caseCfg.maxPairsPerSeparation > 0
+    sourcePairs = local_case9_limit_pairs_per_separation(sourcePairs, caseCfg.maxPairsPerSeparation);
+end
 end
 
 function candidatePairs = local_case9_generate_pairs(thetaGrid, separationSweepDeg)
 candidatePairs = zeros(0, 2);
+tolDeg = local_angle_tolerance_from_grid(thetaGrid);
 
 for sepDeg = reshape(separationSweepDeg, 1, [])
     for angleIdx = 1:numel(thetaGrid)
         partnerAngle = thetaGrid(angleIdx) + sepDeg;
-        if any(abs(thetaGrid - partnerAngle) < 1e-9)
-            candidatePairs(end+1, :) = [thetaGrid(angleIdx), partnerAngle]; %#ok<AGROW>
+        [distance, partnerIdx] = min(abs(thetaGrid - partnerAngle));
+        if distance <= tolDeg
+            candidatePairs(end+1, :) = [thetaGrid(angleIdx), thetaGrid(partnerIdx)]; %#ok<AGROW>
         end
     end
+end
+end
+
+function limitedPairs = local_case9_limit_pairs_per_separation(sourcePairs, maxPairsPerSeparation)
+separationDeg = sourcePairs(:, 2) - sourcePairs(:, 1);
+uniqueSep = unique(round(separationDeg, 10), 'sorted');
+limitedPairs = zeros(0, 2);
+
+for sepIdx = 1:numel(uniqueSep)
+    pairIdx = find(abs(separationDeg - uniqueSep(sepIdx)) < 1e-9);
+    if numel(pairIdx) > maxPairsPerSeparation
+        pickLocal = unique(round(linspace(1, numel(pairIdx), maxPairsPerSeparation)));
+        pairIdx = pairIdx(pickLocal);
+    end
+    limitedPairs = [limitedPairs; sourcePairs(pairIdx, :)]; %#ok<AGROW>
 end
 end
 

@@ -16,12 +16,15 @@ switch modeName
         error('Unsupported benchmark mode: %s', evalCfg.mode);
 end
 
+requestedAngleSets = trueAngleSets;
+[trueAngleSets, trueIdxSets] = local_snap_angle_sets(ctx.thetaDeg, trueAngleSets, local_angle_tolerance(ctx));
 numTargets = size(trueAngleSets, 1);
 numMethods = numel(methods);
 toleranceDeg = evalCfg.toleranceDeg;
 
 result = struct();
 result.mode = modeName;
+result.requestedAngleSetsDeg = requestedAngleSets;
 result.trueAngleSetsDeg = trueAngleSets;
 result.methods = repmat(struct(), 1, numMethods);
 
@@ -61,7 +64,7 @@ for methodIdx = 1:numMethods
 
     for targetIdx = 1:numTargets
         trueAngles = trueAngleSets(targetIdx, :);
-        trueIdx = local_angles_to_indices(ctx.thetaDeg, trueAngles);
+        trueIdx = trueIdxSets(targetIdx, :);
         aTrue = ctx.AH(:, trueIdx);
 
         for mcIdx = 1:evalCfg.monteCarlo
@@ -115,14 +118,28 @@ for methodIdx = 1:numMethods
 end
 end
 
-function idx = local_angles_to_indices(thetaGrid, queryAngles)
-idx = zeros(size(queryAngles));
-for k = 1:numel(queryAngles)
-    matches = find(abs(thetaGrid - queryAngles(k)) < 1e-9, 1, 'first');
-    if isempty(matches)
-        error('Angle %.6f deg is not available in the HFSS grid.', queryAngles(k));
+function tolDeg = local_angle_tolerance(ctx)
+if isfield(ctx, 'gridStepDeg') && isfinite(ctx.gridStepDeg) && ctx.gridStepDeg > 0
+    tolDeg = ctx.gridStepDeg / 2 + 1e-9;
+else
+    tolDeg = 1e-9;
+end
+end
+
+function [snappedAngles, idxSets] = local_snap_angle_sets(thetaGrid, queryAngleSets, tolDeg)
+snappedAngles = zeros(size(queryAngleSets));
+idxSets = zeros(size(queryAngleSets));
+
+for rowIdx = 1:size(queryAngleSets, 1)
+    for colIdx = 1:size(queryAngleSets, 2)
+        [distance, nearestIdx] = min(abs(thetaGrid - queryAngleSets(rowIdx, colIdx)));
+        if distance > tolDeg
+            error('Angle %.6f deg is %.6f deg away from the nearest HFSS grid angle, exceeding tolerance %.6f deg.', ...
+                queryAngleSets(rowIdx, colIdx), distance, tolDeg);
+        end
+        idxSets(rowIdx, colIdx) = nearestIdx;
+        snappedAngles(rowIdx, colIdx) = thetaGrid(nearestIdx);
     end
-    idx(k) = matches;
 end
 end
 

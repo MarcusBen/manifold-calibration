@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Code Change Log"
+  short_description: "Record code changes, assets, and run outputs for this project."
+  default_prompt: "Use $project-code-change-log to record code changes and organize results for this project."

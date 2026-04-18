@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project GitHub Sync"
+  short_description: "Update README from docs before pushing this project."
+  default_prompt: "Use $project-github-sync to update README from docs and push this project to GitHub."

@@ -1,52 +1,59 @@
 # manifold calibration
 
-这个仓库现在同时承担两件事：
-- 保存 MATLAB 项目代码与实验结果
-- 作为论文实验过程记录与任务收束入口
+这个仓库同时保存 MATLAB 实验代码、HFSS 数据、实验输出和论文证据链记录。当前主线是用少量校准角重构未见方向流形，并比较 `Ideal / Interpolation / Proposed / HFSS Oracle` 在 MUSIC DOA 任务中的表现。
 
 ## 先看这里
 
 - [研究变更记录](docs/research-log.md)
 - [评阅意见与补充评论](docs/comments.md)
 
-这份文档用于持续记录：
-- 我对你发来文字的整理结果
-- 当前实验判断
-- 已确认结论
-- 风险点与偏离点
-- 下一步动作
-- 对论文表述的影响
-
 ## 最新摘要
 
-截至 2026-04-18，在同时阅读 `log` 与 `comments` 之后，当前更稳妥的综合判断是：
+截至 2026-04-18，当前默认实验已经切换到 `2.5GHz / 0.2 deg / lambda/4`：
 
-- `case09` 的方向已经明显改对：它不再只是“容易分开的双源演示”，而开始接近“近阈值 separation sweep + 状态分级”的分辨率 benchmark。
-- `log` 与 `comments` 都同意：这次 `case09` 改动是有效的，但目前更像 `smoke / proof-of-trend` 版本，还不是最终论文版。
-- 当前更准确的表述仍然是：`case09` 属于 coarse-grid near-threshold benchmark，而不是连续角域下的理论分辨率极限。
-- 仓库里已经出现新的 `data/hfss/step0.2deg.csv`，它看起来是 0.2 度间隔的更密 HFSS 数据；但当前默认配置仍未切到这份数据，因此首页结论暂时不能直接改成“已经完成 dense HFSS 验证”。
-- `case01`、`case04`、`case08` 仍需继续重构，整条证据链才算补齐。
-- `Proposed` 与 `Interpolation` 的差异仍需在更困难设置下重新验证。
-- `Amp+Phase` 仍应作为 oracle 上界处理，不应当成同预算可实现基线。
+- 默认 HFSS 数据源为 `data/hfss/step0.2deg.csv`，旧的 `data/hfss/port1-8_E.csv` 只作为历史数据保留。
+- 理想阵列基线按 `elementSpacingLambda = 0.25` 生成，对应四分之一波长阵元间距；从 HFSS 数据诊断出的约 `0.276 lambda` 只作为失配诊断，不替代理想基线配置。
+- `build_project_context.m` 会校验 0.2 度网格、2.5GHz 频率、8 路复数端口数据以及非 NaN/Inf 输入。
+- 单源 DOA Monte Carlo 默认使用分层未见角抽样，避免 601 个角点全量运行过慢；流形误差指标仍覆盖全部未见角。
+- `case09` 已适配细网格双源 near-threshold separation sweep，默认 `separationSweepDeg = [1 2 3 4 5 6 8 10]`，并限制每个 separation 的代表性 pair 数量。
+- `results_step0p2_qw/` 保存了这轮默认配置对应的输出，可用于复查链路和图像，但仍应按研究日志中的说明谨慎区分 smoke / proof-of-trend 与最终论文 benchmark。
 
-## 提醒：`comments`、`log` 与当前代码并不完全一致
+当前更稳妥的论文表述是：项目已经完成默认代码层面的 dense HFSS 数据切换，并建立了更严格的细网格评估入口；但正式论文结论仍需要更高置信度 Monte Carlo、结果稳定性复查和 hash 匹配评阅后再收束。
 
-以下不一致已经在本次同步时显式保留，避免后续写论文或看首页时误判：
+## Version Trace
 
-- `comments` 提到 `case09` 使用了更激进的配置，例如 `separationSweepDeg = 4:2:18`、`numTrials = 250`、`scanGridDeg = -60:1:60`、`centerAngleDeg = 37.5`；但当前仓库代码里已确认的默认配置仍是：
-  - `separationSweepDeg = [5 10 15]`
-  - `snapshots = 500`
-  - `monteCarlo = 80`
-  - 代码中没有同名的 `centerAngleDeg` 或 `scanGridDeg` 默认项
-- `comments` 还提到 `case07/08` 已经切到边缘目标、细扫描，并加入 `bias floor / per-target stability`；但当前代码检查结果显示：
-  - `case07/08` 仍主要在 `models.testAnglesDeg(:)` 上整体评估
-  - 还没有看到与 `case09` 类似的稳定性分级或 bias-floor 输出结构
-- 仓库新增了 `data/hfss/step0.2deg.csv`，但 `default_config.m` 当前仍使用 `data/hfss/port1-8_E.csv`；因此“更密 HFSS 数据已经可用”和“实验代码已经使用更密 HFSS 数据”需要分开表述。
-- 因此，当前首页结论应以“方向已经收紧、`case09` 明显改善，但部分更强说法尚未完全在代码中落地”为准。
+- Local/research base hash: `ba9e6b7`
+- Published GitHub hash: pending this sync commit
+- Latest reviewed comments hash: unavailable in `docs/comments.md`
+- Review status: `docs/comments.md` 没有可识别的 `Reviewed commit` 或 `Review for commit` 标记，因此只能作为背景意见；当前工作区版本尚未获得 hash-matched review。
 
-详细记录见：
-- [docs/research-log.md](docs/research-log.md)
-- [docs/comments.md](docs/comments.md)
+## 提醒：`comments`、`research-log` 和当前代码并不完全对齐
+
+以下差异需要保留，不要把旧评论平滑成当前结论：
+
+- `docs/comments.md` 评价的是上一轮 `case09` 改进，并未标明评审 commit hash；它提到的 `centerAngleDeg = 37.5`、`separationSweepDeg = 4:2:18`、`numTrials = 250`、`scanGridDeg = -60:1:60` 不是当前默认配置。
+- 当前代码与 `docs/research-log.md` 的最新条目一致：默认 `case09` 使用 `[1 2 3 4 5 6 8 10]` 的 separation sweep、`snapshots = 500`、`monteCarlo = 80`，并在细网格下使用更严格的状态阈值。
+- 旧日志中关于 `5 deg` 网格和 coarse-grid benchmark 的条目是历史判断；当前默认入口已切到 `0.2 deg` HFSS 数据，但最终论文图仍需要按最新配置重新确认。
+- `Amp+Phase` 仍应作为 oracle 上界，而不是同预算可实现基线。
+
+## 运行方式
+
+在 MATLAB 中运行全部 case：
+
+```matlab
+setup_paths
+cfg = default_config();
+run_project(1:10, cfg);
+```
+
+只快速检查数据上下文：
+
+```matlab
+setup_paths
+cfg = default_config();
+ctx = build_project_context(cfg);
+disp([ctx.numElements, ctx.numAngles, ctx.gridStepDeg, ctx.dataFrequencyGHz])
+```
 
 ## 仓库地址
 
@@ -65,9 +72,10 @@ git pull
 提交并推送本地修改：
 
 ```bash
-git add .
-git commit -m "update"
-git push
+git status --short
+git add README.md docs/research-log.md default_config.m run_project.m src/benchmark_music.m src/build_project_context.m
+git commit -m "update dense hfss default workflow"
+git push origin main
 ```
 
 ## 新环境克隆
