@@ -16,13 +16,13 @@
 
 ## 最新整理
 
-### 2026-04-18：`local-2e941ccf` GitHub issues 全量 paper-profile 运行
+### 2026-04-18：`35756f6` GitHub issues 全量 paper-profile 运行
 
-- Version hash: `local-2e941ccf`
+- Git code commit hash: `35756f6`
 - Base HEAD: `7191dc4`
 - Worktree state: dirty worktree full run; `README.md`、`docs/comments.md` 以及本批代码修改均记录在 `RUN_NOTES.md` 中。
 - Run command: `run_project(1:10, default_config(pwd, 'paper'))`
-- Result path pattern: `results/<case-name>/20260418-133202-local-2e941ccf/`
+- Result path pattern: `results/<case-name>/20260418-133202-35756f6/`
 - Comment/review status: GitHub issues `#1-#11` were used as guidance, but this is not a clean-repo final-paper archive.
 
 #### 一句话结论
@@ -49,21 +49,21 @@
 
 这些图片来自 dirty worktree 的 `paper` profile full run，可用于 issue 收口验证和研究日志，但还不是 clean repo 最终归档图。
 
-![case01 mismatch floor paper](assets/case01-mismatch-floor-paper-local-2e941ccf.png)
+![case01 mismatch floor paper](assets/case01-mismatch-floor-paper-35756f6.png)
 
-![case02 mismatch dominance paper](assets/case02-mismatch-dominance-paper-local-2e941ccf.png)
+![case02 mismatch dominance paper](assets/case02-mismatch-dominance-paper-35756f6.png)
 
-![case07 snr metrics paper](assets/case07-snr-metrics-paper-local-2e941ccf.png)
+![case07 snr metrics paper](assets/case07-snr-metrics-paper-35756f6.png)
 
-![case07 representative spectra paper](assets/case07-representative-spectra-paper-local-2e941ccf.png)
+![case07 representative spectra paper](assets/case07-representative-spectra-paper-35756f6.png)
 
-![case08 snapshot metrics paper](assets/case08-snapshot-metrics-paper-local-2e941ccf.png)
+![case08 snapshot metrics paper](assets/case08-snapshot-metrics-paper-35756f6.png)
 
-![case09 resolution paper](assets/case09-resolution-paper-local-2e941ccf.png)
+![case09 resolution paper](assets/case09-resolution-paper-35756f6.png)
 
 #### 仍然存在的风险或边界
 
-- 本次 full run 是 dirty worktree 上的 `local-2e941ccf`，不能冒充 clean repo final result；后续仍需提交后由 `project-github-sync` 替换为真实 Git hash，并在 clean repo 上复跑正式归档。
+- 本次 full run 已由 `project-github-sync` 映射到真实 Git code hash `35756f6`，但运行本身来自 dirty worktree，不能冒充 clean repo final result；后续仍需在 clean repo 上复跑正式归档。
 - Case 7/8 已能清楚展示 Ideal 的结构性误差地板，但 `Proposed` 与 `Interpolation` 的差异非常小，应避免把论文主张写成均值性能显著压倒插值。
 - Case 9 中 `Proposed` 与 `Interpolation` 的双源分辨表现非常接近，论文应重点讨论“相对 Ideal 的修正有效”和“不同 pair/状态下的稳定性差异”，而不是笼统宣称 Proposed 全局优于 Interpolation。
 

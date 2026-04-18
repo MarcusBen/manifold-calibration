@@ -1,10 +1,10 @@
-# Run Notes
+﻿# Run Notes
 
-- Case: `case02_dominant_mismatch`
-- Timestamp: `2026-04-18 13:32:56`
-- Pending local hash: `local-2e941ccf`
+- Case: `case03_unseen_generalization`
+- Timestamp: `2026-04-18 13:33:04`
+- Git code commit hash: `35756f6`
 - Base HEAD: `7191dc4`
-- Run id: `20260418-133202-local-2e941ccf`
+- Run id: `20260418-133202-35756f6`
 - Command: `run_project(1:10, default_config(pwd, 'paper'))`
 - Notes: `Full paper-profile run for GitHub issues #1-#11 closure planning; dirty worktree recorded.`
 
