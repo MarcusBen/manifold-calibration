@@ -1,4 +1,4 @@
-# 研究变更记录
+﻿# 研究变更记录
 
 这份文档用于长期记录项目里的研究判断、实验变更、代码方向调整和论文表述收束。
 
@@ -15,6 +15,8 @@
 - 对论文表述的影响
 
 ## 最新整理
+
+> Branch artifact policy: `codex/proposed-v2` 只保留 `20260419-123007-2962bc3` 这一批新分支实验结果和对应 `docs/assets` 图片；更早的历史结果仍可从 `main` 或历史提交中追溯。
 
 ### 2026-04-19：`2962bc3` Proposed-v2 Lite 与 V1 对照 full paper run
 
@@ -126,15 +128,15 @@
 
 以下图片来自 `20260418-195622-f4e46e4` 全量 paper-profile run，并已复制到 `docs/assets/`。
 
-![case01 mismatch floor paper f4e46e4](assets/case01-mismatch-floor-paper-f4e46e4.png)
+旧分支图片已从本分支删除：`assets/case01-mismatch-floor-paper-f4e46e4.png`
 
-![case04 calibration count paper f4e46e4](assets/case04-calibration-count-paper-f4e46e4.png)
+旧分支图片已从本分支删除：`assets/case04-calibration-count-paper-f4e46e4.png`
 
-![case07 snr metrics paper f4e46e4](assets/case07-snr-metrics-paper-f4e46e4.png)
+旧分支图片已从本分支删除：`assets/case07-snr-metrics-paper-f4e46e4.png`
 
-![case08 snapshot metrics paper f4e46e4](assets/case08-snapshot-metrics-paper-f4e46e4.png)
+旧分支图片已从本分支删除：`assets/case08-snapshot-metrics-paper-f4e46e4.png`
 
-![case09 resolution paper f4e46e4](assets/case09-resolution-paper-f4e46e4.png)
+旧分支图片已从本分支删除：`assets/case09-resolution-paper-f4e46e4.png`
 
 #### 仍然存在的风险或边界
 
@@ -176,7 +178,7 @@ run_project(4, cfgSmoke)
 - `pairSelection.mode = case4_research_coverage`。
 - `resolutionProb` 不再像旧 Case 4 那样在修正方法上饱和为 1；本次 smoke 中 corrected/oracle 方法约落在 `0.04-0.11`，而 Ideal 为 `0`。由于 MC 很低，这只能说明难度区间已被收紧，不能当作正式统计数值。
 
-![case04 near-threshold smoke](assets/case04-near-threshold-smoke-local-7fa085bd.png)
+旧分支图片已从本分支删除：`assets/case04-near-threshold-smoke-local-7fa085bd.png`
 
 #### 仍然存在的风险或边界
 
@@ -216,17 +218,17 @@ run_project(4, cfgSmoke)
 
 以下图片来自 `20260418-190723-local-77d2252a` 本地 paper-profile full run，并已复制到 `docs/assets/`。它们可用于当前研究日志和 issue 收口，但最终论文归档仍需真实 Git hash 或 clean rerun 对齐。
 
-![case01 mismatch floor paper local](assets/case01-mismatch-floor-paper-local-77d2252a.png)
+旧分支图片已从本分支删除：`assets/case01-mismatch-floor-paper-local-77d2252a.png`
 
-![case02 mismatch dominance paper local](assets/case02-mismatch-dominance-paper-local-77d2252a.png)
+旧分支图片已从本分支删除：`assets/case02-mismatch-dominance-paper-local-77d2252a.png`
 
-![case07 snr metrics paper local](assets/case07-snr-metrics-paper-local-77d2252a.png)
+旧分支图片已从本分支删除：`assets/case07-snr-metrics-paper-local-77d2252a.png`
 
-![case07 representative spectra paper local](assets/case07-representative-spectra-paper-local-77d2252a.png)
+旧分支图片已从本分支删除：`assets/case07-representative-spectra-paper-local-77d2252a.png`
 
-![case08 snapshot metrics paper local](assets/case08-snapshot-metrics-paper-local-77d2252a.png)
+旧分支图片已从本分支删除：`assets/case08-snapshot-metrics-paper-local-77d2252a.png`
 
-![case09 resolution paper local](assets/case09-resolution-paper-local-77d2252a.png)
+旧分支图片已从本分支删除：`assets/case09-resolution-paper-local-77d2252a.png`
 
 #### 仍然存在的风险或边界
 
@@ -276,17 +278,17 @@ run_project(4, cfgSmoke)
 
 这些图片来自 dirty worktree 的 `paper` profile full run，可用于 issue 收口验证和研究日志，但还不是 clean repo 最终归档图。
 
-![case01 mismatch floor paper](assets/case01-mismatch-floor-paper-35756f6.png)
+旧分支图片已从本分支删除：`assets/case01-mismatch-floor-paper-35756f6.png`
 
-![case02 mismatch dominance paper](assets/case02-mismatch-dominance-paper-35756f6.png)
+旧分支图片已从本分支删除：`assets/case02-mismatch-dominance-paper-35756f6.png`
 
-![case07 snr metrics paper](assets/case07-snr-metrics-paper-35756f6.png)
+旧分支图片已从本分支删除：`assets/case07-snr-metrics-paper-35756f6.png`
 
-![case07 representative spectra paper](assets/case07-representative-spectra-paper-35756f6.png)
+旧分支图片已从本分支删除：`assets/case07-representative-spectra-paper-35756f6.png`
 
-![case08 snapshot metrics paper](assets/case08-snapshot-metrics-paper-35756f6.png)
+旧分支图片已从本分支删除：`assets/case08-snapshot-metrics-paper-35756f6.png`
 
-![case09 resolution paper](assets/case09-resolution-paper-35756f6.png)
+旧分支图片已从本分支删除：`assets/case09-resolution-paper-35756f6.png`
 
 #### 仍然存在的风险或边界
 
@@ -341,9 +343,9 @@ run_project([1 9], cfgSmoke)
 
 下面两张图只作为本轮代码链路 smoke 证据，不是最终论文图：
 
-![case01 mismatch floor smoke](assets/case01-mismatch-floor-996b0e4.png)
+旧分支图片已从本分支删除：`assets/case01-mismatch-floor-996b0e4.png`
 
-![case09 resolution smoke](assets/case09-resolution-996b0e4.png)
+旧分支图片已从本分支删除：`assets/case09-resolution-996b0e4.png`
 
 #### 仍然存在的风险或边界
 
@@ -460,7 +462,7 @@ run_project([1 9], cfgSmoke)
 
 下面这张图来自缩小版 `case09` smoke run，用于确认重构后的 benchmark 形式已经成立。该图不是最终论文主图，对应的是快速验证配置，而不是完整默认参数。
 
-![case09 smoke result](assets/case09-two-source-resolution-smoke.png)
+旧分支图片已从本分支删除：`assets/case09-two-source-resolution-smoke.png`
 
 图中已经可以看到新的 `case09` 结构同时包含：
 - 按 separation 聚合的 resolution probability
