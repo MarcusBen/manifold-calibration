@@ -29,8 +29,9 @@
 - Base HEAD for this local batch: `b703792`
 - Working branch: `codex/proposed-v2`
 - Git code commit hash: `2962bc3`
-- Metadata/finalization commit hash: pending
-- Published branch hash: pending finalization after commit/push
+- Hash finalization commit hash: `cbf80d8`
+- Published branch: `origin/codex/proposed-v2`
+- Published branch tip: see latest commit on the remote branch after synchronization
 - Latest traceable paper-profile full run: `results/<case-name>/20260419-123007-2962bc3/`
 
 ## 当前结果与清理状态
