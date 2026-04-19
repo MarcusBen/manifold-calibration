@@ -16,6 +16,69 @@
 
 ## 最新整理
 
+### 2026-04-19：`local-85dc71c2` Proposed-v2 Lite 与 V1 对照 full paper run
+
+- Pending local hash: `local-85dc71c2`
+- Base HEAD: `b703792`
+- Branch: `codex/proposed-v2`
+- Worktree state: uncommitted code/docs changes; existing `docs/comments.md` and untracked `docs/v1实验结果分析.md` were preserved.
+- Run command: `run_project(1:10, default_config(pwd, 'paper'))`
+- Result path pattern: `results/<case-name>/20260419-123007-local-85dc71c2/`
+- Failed launch logs before final run: `results/full-run-20260419-122739-local-85dc71c2.*` and `results/full-run-20260419-122900-local-85dc71c2.*`; both failed before any case result directory was created because of MATLAB `-batch` quoting / temp script naming.
+- Run scope: all 10 cases, paper profile, no smoke run.
+
+#### 一句话结论
+
+本轮按 `proposed_algorithm_v2.md` 落地的是 **Proposed-v2 Lite**，不是 Full V2：代码新增边缘感知三段软分段相位残差模型，并用确定性的单源 MUSIC surrogate 从小候选集中选择 V2 参数；双源 pair task 优化只保留为关闭配置。全量 paper run 已完成，结果中同时保留 `Proposed V1` 与 `Proposed V2`。
+
+#### 代码与行为变化
+
+- `build_sparse_models` 保留现有全局 Chebyshev 残差模型作为 `Proposed V1`，并新增 `AProposedV2`、`phaseFitV2Full`、`phaseModelV2`、`v2Diagnostics`。
+- V2-lite 在 `u = sin(theta)` 域使用左边缘、中心、右边缘三段软门控局部 Chebyshev 基；校准点权重为 mismatch score 与 edge score 的组合。
+- `cfg.model.v2` 默认启用：`stage = lite`、`segmentCentersDeg = [-50 0 50]`、`order = 2`、`candidateMismatchWeights = [1 2 4]`、`candidateEdgeWeights = [0.5 1 2]`、`taskWeight = 0.25`、`pairTaskEnabled = false`。
+- Case 3/4/7/8/9/10 的关键对比扩展为 `Ideal / Interpolation / Proposed V1 / Proposed V2 / HFSS Oracle`；Case 10 使用 `Ideal / Interp / Proposed V1 / Proposed V2`。
+- Case 5 同时保存并绘制 V1/V2 在不同 calibration strategy 下的 manifold error 与 DOA RMSE。
+- Case 6 同时输出 V1/V2 的模型敏感性，用来判断 V2-lite 是否只是普通阶数/正则调参。
+- Case 9 保留 near-threshold pair 设计，代表性 pair 选择现在优先解释 `Proposed V2` 相对 `Interpolation / Proposed V1` 的优势或失败。
+
+#### 全量结果摘要
+
+- Case 3 的 mean unseen relative error 在 `L = 9` 时为 `Ideal 0.3210 / Interpolation 0.0447 / Proposed V1 0.0453 / Proposed V2 0.0447 / Oracle 0`，V2-lite 与 Interpolation 接近，并小幅优于 V1。
+- Case 6 的最佳 unseen relative error 为 `Proposed V1 0.0449 / Proposed V2 0.0447`，说明 V2-lite 收益很小，但不是明显退化。
+- Case 7 在 `SNR = 20 dB` 时，RMSE 为 `Ideal 3.7501 / Interpolation 0.0043 / Proposed V1 0.0137 / Proposed V2 0.0085 / HFSS Oracle 0.0043 deg`；mean absolute bias 为 `2.9179 / 0.0001 / 0.0009 / 0.0004 / 0.0001 deg`。
+- Case 8 在 `SNR = 10 dB, snapshots = 1000` 时，RMSE 为 `3.7542 / 0.0466 / 0.0596 / 0.0524 / 0.0464 deg`，mean absolute bias 为 `2.9220 / 0.0024 / 0.0133 / 0.0066 / 0.0020 deg`。
+- Case 9 的代表性困难 pair 为 `[35.8, 45.8] deg`，选择原因是 `Proposed V2` 相比 `Interpolation / Proposed V1` 在该 mixed hard pair 上改善 stable/resolution 行为。
+- Case 9 在 `10 deg` separation 下，resolution mean 为 `Ideal 0.4748 / Interpolation 0.6192 / Proposed V1 0.6148 / Proposed V2 0.6246 / HFSS Oracle 0.5944`，pair RMSE mean 为 `18.6304 / 14.9388 / 15.0744 / 14.7468 / 15.7154 deg`。
+- Case 9 在 `8 deg` separation 下，`Proposed V2` 的 resolution mean 为 `0.2632`，低于 `Interpolation 0.2711` 和 `Proposed V1 0.2694`；因此不能写成 V2 全局稳定优于所有 baseline。
+- Case 10 的平均 manifold error 为 `Ideal 0.3214 / Interp 0.0459 / Proposed V1 0.0461 / Proposed V2 0.0456`；平均 single-source RMSE 为 `3.7287 / 0.1262 / 0.1138 / 0.1363 deg`。V2 在流形误差上略优，但 DOA RMSE 不稳定优于 V1/Interpolation。
+
+#### 关键图片
+
+以下图片来自 `20260419-123007-local-85dc71c2` full paper-profile run，并已复制到 `docs/assets/`。
+
+![case03 unseen v1 v2 paper local](assets/case03-unseen-v1-v2-paper-local-85dc71c2.png)
+
+![case05 sampling v1 v2 paper local](assets/case05-sampling-v1-v2-paper-local-85dc71c2.png)
+
+![case06 model sensitivity v1 v2 paper local](assets/case06-model-sensitivity-v1-v2-paper-local-85dc71c2.png)
+
+![case07 snr v1 v2 paper local](assets/case07-snr-v1-v2-paper-local-85dc71c2.png)
+
+![case07 spectra v1 v2 paper local](assets/case07-spectra-v1-v2-paper-local-85dc71c2.png)
+
+![case08 snapshots v1 v2 paper local](assets/case08-snapshots-v1-v2-paper-local-85dc71c2.png)
+
+![case09 resolution v1 v2 paper local](assets/case09-resolution-v1-v2-paper-local-85dc71c2.png)
+
+![case10 random split v1 v2 paper local](assets/case10-random-split-v1-v2-paper-local-85dc71c2.png)
+
+#### 仍然存在的风险或边界
+
+- `local-85dc71c2` 是 pending local hash，不是 Git commit hash；本轮结果来自 uncommitted worktree，不能冒充 clean repo final archive。
+- 本轮实现的是 V2-lite，未启用文档中 Full V2 的双源 pair task 优化、L-BFGS/Adam 迭代或完整 task loss。
+- V2-lite 在部分流形指标和部分高 SNR / 高 snapshots 单源指标上改善 V1，但在 Case 9/10 上没有形成稳定全局优势。
+- 论文表述应收窄为：V2-lite 提供了一个可检验的新建模方向，并在若干指标上缓解 V1 的边缘/高失配问题；不能写成 Full V2 已验证，也不能写成 V2 稳定压过 Interpolation。
+
 ### 2026-04-18：`f4e46e4` Case 4 严格公共测试集与全量 paper run
 
 - Git code commit hash: `f4e46e4`

@@ -1,0 +1,89 @@
+
+=== Running Case 01 ===
+
+=== Running Case 02 ===
+
+=== Running Case 03 ===
+
+=== Running Case 04 ===
+Case 4: L = 3
+Case 4: L = 5
+Case 4: L = 7
+Case 4: L = 9
+Case 4: L = 13
+Case 4: L = 17
+
+=== Running Case 05 ===
+Case 5: strategy = uniform
+Case 5: strategy = center_dense
+Case 5: strategy = edge_enhanced
+Case 5: strategy = random
+
+=== Running Case 06 ===
+
+=== Running Case 07 ===
+Case 7: SNR = -15 dB
+Case 7: SNR = -10 dB
+Case 7: SNR = -5 dB
+Case 7: SNR = 0 dB
+Case 7: SNR = 5 dB
+Case 7: SNR = 10 dB
+Case 7: SNR = 15 dB
+Case 7: SNR = 20 dB
+
+=== Running Case 08 ===
+Case 8: SNR = 0 dB, snapshots = 50
+Case 8: SNR = 0 dB, snapshots = 100
+Case 8: SNR = 0 dB, snapshots = 200
+Case 8: SNR = 0 dB, snapshots = 500
+Case 8: SNR = 0 dB, snapshots = 1000
+Case 8: SNR = 10 dB, snapshots = 50
+Case 8: SNR = 10 dB, snapshots = 100
+Case 8: SNR = 10 dB, snapshots = 200
+Case 8: SNR = 10 dB, snapshots = 500
+Case 8: SNR = 10 dB, snapshots = 1000
+
+=== Running Case 09 ===
+
+=== Running Case 10 ===
+Case 10: random split 1/40
+Case 10: random split 2/40
+Case 10: random split 3/40
+Case 10: random split 4/40
+Case 10: random split 5/40
+Case 10: random split 6/40
+Case 10: random split 7/40
+Case 10: random split 8/40
+Case 10: random split 9/40
+Case 10: random split 10/40
+Case 10: random split 11/40
+Case 10: random split 12/40
+Case 10: random split 13/40
+Case 10: random split 14/40
+Case 10: random split 15/40
+Case 10: random split 16/40
+Case 10: random split 17/40
+Case 10: random split 18/40
+Case 10: random split 19/40
+Case 10: random split 20/40
+Case 10: random split 21/40
+Case 10: random split 22/40
+Case 10: random split 23/40
+Case 10: random split 24/40
+Case 10: random split 25/40
+Case 10: random split 26/40
+Case 10: random split 27/40
+Case 10: random split 28/40
+Case 10: random split 29/40
+Case 10: random split 30/40
+Case 10: random split 31/40
+Case 10: random split 32/40
+Case 10: random split 33/40
+Case 10: random split 34/40
+Case 10: random split 35/40
+Case 10: random split 36/40
+Case 10: random split 37/40
+Case 10: random split 38/40
+Case 10: random split 39/40
+Case 10: random split 40/40
+FULL_PROPOSED_V2_PAPER_RUN_OK

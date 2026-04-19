@@ -1,6 +1,6 @@
 ---
 name: project-github-sync
-description: "Project-specific GitHub upload workflow for this manifold calibration repository. Use when the user says s上传, 上传, 上传到 GitHub, 同步到仓库, push, commit and push, or asks to publish this project; before pushing, update README.md by reading docs/comments.md and docs/research-log.md, compare reviewed commit hashes in comments with the current local or published version, commit code/docs/results, replace the current pending local hash with the resulting Git code commit hash, explicitly mark hash mismatches as unevaluated current versions, protect existing local changes, then push to origin/main by default."
+description: "Project-specific GitHub upload workflow for this manifold calibration repository. Use when the user says s上传, 上传, 上传到 GitHub, 同步到仓库, push, commit and push, or asks to publish this project; before pushing, update README.md by reading docs/comments.md and docs/research-log.md, compare reviewed commit hashes in comments with the current local or published version, commit code/docs/results, replace the current pending local hash with the resulting Git code commit hash across current logs, case results, and matching comments entries, explicitly mark hash mismatches as unevaluated current versions, protect existing local changes, then push to origin/main by default."
 ---
 
 # Project GitHub Sync
@@ -46,6 +46,33 @@ Distinguish two hashes when needed:
 
 Git commit hashes cannot be chosen manually to equal the pending local hash. They are computed from commit contents and history. The safe workflow is to replace the pending local hash with the Git code commit hash after the first commit, then save that replacement in a small metadata/finalization commit.
 
+## Comment Finalization Policy
+
+Update `docs/comments.md` during hash finalization only when the comments entry is clearly tied to the same pending local hash as the current log/case batch.
+
+- Treat a comments entry as matching only if its header or metadata contains the exact pending local hash, such as `local-a1b2c3d4`.
+- If `docs/comments.md` has a matching current-version entry, replace that exact pending local hash with the Git code commit hash.
+- If `docs/comments.md` does not contain the pending local hash, do not rewrite it. Mark in `README.md` that the current Git version has no matching comments review yet.
+- If `docs/comments.md` contains multiple pending local hashes, replace only the exact hash for the current upload batch.
+- Do not edit historical comments for older hashes.
+- Do not infer that a comments entry matches from topic similarity alone; require the hash match.
+
+Use the same entry-opening format as `docs/research-log.md` for comments entries:
+
+```markdown
+### YYYY-MM-DD: short review title
+
+- Version hash: `local-a1b2c3d4`
+- Base HEAD: `abc1234`
+- Review target: pending local run / Git code commit
+- Review status: reviewed / partial / needs rerun
+- Main comments:
+- Conflicts with log/code:
+- Next action:
+```
+
+After finalization, the `Version hash` line should contain the Git code commit hash, not the pending local hash.
+
 ## Workflow
 
 1. Read the three project documents before editing anything.
@@ -67,13 +94,15 @@ Git commit hashes cannot be chosen manually to equal the pending local hash. The
 9. Replace the exact pending local hash with the Git code commit hash in current-version docs and result metadata:
    - `README.md`
    - `docs/research-log.md`
+   - `docs/comments.md`, but only matching entries whose header or metadata contains the exact pending local hash
    - current `RUN_NOTES.md` files
    - current result folder names that end with the pending local hash
    - Markdown links that referenced renamed result folders
-10. Do not replace historical local hashes from older entries. Replace only the exact pending local hash for the current upload batch.
-11. Commit the hash finalization as a metadata-only commit, for example `finalize version hash abc1234`.
-12. Push to `origin main` by default unless the user explicitly requests another branch.
-13. Report both the Git code commit hash and the final published branch hash so the user can decide which one the next `docs/comments.md` review targets.
+10. Normalize any matching `docs/comments.md` entry opening to the same shape as the log entry opening, with `Version hash`, `Base HEAD` when known, review target/status, conflicts, and next action.
+11. Do not replace historical local hashes from older entries. Replace only the exact pending local hash for the current upload batch.
+12. Commit the hash finalization as a metadata-only commit, for example `finalize version hash abc1234`.
+13. Push to `origin main` by default unless the user explicitly requests another branch.
+14. Report both the Git code commit hash and the final published branch hash so the user can decide which one the next `docs/comments.md` review targets.
 
 ## README Rules
 
@@ -82,6 +111,7 @@ When updating `README.md`, write concise project-facing text:
 - State what is confirmed by code and results.
 - State what is only suggested by comments or a smoke run.
 - State whether comments match the current hash.
+- State whether `docs/comments.md` was finalized from the matching pending local hash or left unchanged because no matching hash was found.
 - Keep a short version map while pending local hash replacement or metadata finalization matters.
 - State unresolved inconsistencies under a visible reminder heading.
 - Never describe a smoke/proof-of-trend run as a final benchmark.
@@ -118,6 +148,8 @@ If a claim appears in `docs/comments.md` but is not confirmed by `docs/research-
 - If the current version has no matching reviewed hash, say that plainly in README and in the final response.
 - Do not try to force Git to produce a chosen commit hash.
 - Do not replace broad patterns such as every seven-character hex string. Replace only the exact pending local hash generated for the current code-change batch.
+- Do not rewrite `docs/comments.md` unless it contains the exact pending local hash for the current batch.
+- Do not manufacture a comments review after upload; only finalize an already-existing matching comments entry.
 
 ## Default Git Commands
 
@@ -129,7 +161,7 @@ git add README.md docs/research-log.md docs/comments.md <intended-code-or-result
 git commit -m "update project documentation and results (local-a1b2c3d4)"
 git rev-parse --short HEAD
 # replace exact local-a1b2c3d4 with the code commit hash, including current result folder names
-git add README.md docs/research-log.md <renamed-result-folders-or-run-notes>
+git add README.md docs/research-log.md docs/comments.md <renamed-result-folders-or-run-notes>
 git commit -m "finalize version hash <code-commit-hash>"
 git push origin main
 ```

@@ -266,7 +266,7 @@ rng(cfg.randomSeed + 3, 'twister');
 outDir = local_case_output_dir(cfg, 'case03_unseen_generalization');
 
 lValues = cfg.case3.lValues;
-methodNames = {'Ideal', 'Interpolation', 'Proposed', 'HFSS Oracle'};
+methodNames = {'Ideal', 'Interpolation', 'Proposed V1', 'Proposed V2', 'HFSS Oracle'};
 meanUnseenError = zeros(numel(lValues), numel(methodNames));
 storedModels = cell(1, numel(lValues));
 
@@ -277,12 +277,14 @@ for lIdx = 1:numel(lValues)
 
     metricsIdeal = compute_manifold_metrics(ctx.AH(:, models.testIdx), ctx.AI(:, models.testIdx));
     metricsInterp = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AInterp(:, models.testIdx));
-    metricsProposed = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposed(:, models.testIdx));
+    metricsProposedV1 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV1(:, models.testIdx));
+    metricsProposedV2 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV2(:, models.testIdx));
 
     meanUnseenError(lIdx, :) = [ ...
         mean(metricsIdeal.relativeError), ...
         mean(metricsInterp.relativeError), ...
-        mean(metricsProposed.relativeError), ...
+        mean(metricsProposedV1.relativeError), ...
+        mean(metricsProposedV2.relativeError), ...
         0];
 end
 
@@ -315,7 +317,8 @@ for plotIdx = 1:numel(cfg.case3.representativeElements)
     hold on;
     plot(ctx.thetaDeg, rad2deg(repModels.phaseTruthFull(elementIdx, :)), 'k-', 'LineWidth', 1.6);
     plot(ctx.thetaDeg, rad2deg(repModels.phaseInterpFull(elementIdx, :)), '--', 'LineWidth', 1.4);
-    plot(ctx.thetaDeg, rad2deg(repModels.phaseFitFull(elementIdx, :)), '-.', 'LineWidth', 1.6);
+    plot(ctx.thetaDeg, rad2deg(repModels.phaseFitV1Full(elementIdx, :)), '-.', 'LineWidth', 1.4);
+    plot(ctx.thetaDeg, rad2deg(repModels.phaseFitV2Full(elementIdx, :)), ':', 'LineWidth', 1.8);
     scatter(repModels.calAnglesDeg, rad2deg(repModels.phaseTruthFull(elementIdx, repModels.calIdx)), ...
         36, 'filled');
     grid on;
@@ -323,7 +326,8 @@ for plotIdx = 1:numel(cfg.case3.representativeElements)
     title(sprintf('Case 3: phase reconstruction for element %d', elementIdx));
 end
 xlabel('Angle (deg)');
-legend({'HFSS truth', 'Interpolation', 'Proposed fit', 'Calibration samples'}, 'Location', 'eastoutside');
+legend({'HFSS truth', 'Interpolation', 'Proposed V1 fit', 'Proposed V2 fit', ...
+    'Calibration samples'}, 'Location', 'eastoutside');
 save_figure(fig, fullfile(outDir, 'phase_reconstruction.png'));
 
 fig = figure('Visible', 'off', 'Position', [150 150 1250 820]);
@@ -340,7 +344,8 @@ for angleIdx = 1:numRepAngles
     plot(elemAxis, abs(ctx.AH(:, gridIdx)), 'ko-', 'LineWidth', 1.4);
     plot(elemAxis, abs(ctx.AI(:, gridIdx)), 's-', 'LineWidth', 1.2);
     plot(elemAxis, abs(repModels.AInterp(:, gridIdx)), 'd--', 'LineWidth', 1.2);
-    plot(elemAxis, abs(repModels.AProposed(:, gridIdx)), '^-', 'LineWidth', 1.4);
+    plot(elemAxis, abs(repModels.AProposedV1(:, gridIdx)), '^-', 'LineWidth', 1.2);
+    plot(elemAxis, abs(repModels.AProposedV2(:, gridIdx)), 'v-', 'LineWidth', 1.4);
     grid on;
     xlabel('Element index');
     ylabel('Magnitude');
@@ -351,17 +356,20 @@ for angleIdx = 1:numRepAngles
     plot(elemAxis, rad2deg(unwrap(angle(ctx.AH(:, gridIdx)))), 'ko-', 'LineWidth', 1.4);
     plot(elemAxis, rad2deg(unwrap(angle(ctx.AI(:, gridIdx)))), 's-', 'LineWidth', 1.2);
     plot(elemAxis, rad2deg(unwrap(angle(repModels.AInterp(:, gridIdx)))), 'd--', 'LineWidth', 1.2);
-    plot(elemAxis, rad2deg(unwrap(angle(repModels.AProposed(:, gridIdx)))), '^-', 'LineWidth', 1.4);
+    plot(elemAxis, rad2deg(unwrap(angle(repModels.AProposedV1(:, gridIdx)))), '^-', 'LineWidth', 1.2);
+    plot(elemAxis, rad2deg(unwrap(angle(repModels.AProposedV2(:, gridIdx)))), 'v-', 'LineWidth', 1.4);
     grid on;
     xlabel('Element index');
     ylabel('Phase (deg)');
     title(sprintf('Phase at %.1f deg', queryAngle));
 end
-legend({'HFSS truth', 'Ideal', 'Interpolation', 'Proposed'}, 'Location', 'eastoutside');
+legend({'HFSS truth', 'Ideal', 'Interpolation', 'Proposed V1', 'Proposed V2'}, ...
+    'Location', 'eastoutside');
 save_figure(fig, fullfile(outDir, 'steering_vector_comparison.png'));
 
 caseResult = struct();
 caseResult.outputDir = outDir;
+caseResult.methodLabels = methodNames;
 caseResult.lValues = lValues;
 caseResult.meanUnseenError = meanUnseenError;
 caseResult.representativeModels = repModels;
@@ -373,8 +381,8 @@ rng(cfg.randomSeed + 4, 'twister');
 outDir = local_case_output_dir(cfg, 'case04_calibration_count_sensitivity');
 
 lValues = cfg.case4.lValues;
-methodKeys = {'ideal', 'interp', 'proposed', 'oracle'};
-methodsLegend = {'Ideal', 'Interpolation', 'Proposed', 'HFSS Oracle'};
+methodKeys = {'ideal', 'interp', 'proposed_v1', 'proposed_v2', 'oracle'};
+methodsLegend = {'Ideal', 'Interpolation', 'Proposed V1', 'Proposed V2', 'HFSS Oracle'};
 
 manifoldError = zeros(numel(lValues), numel(methodKeys));
 singleRmse = zeros(numel(lValues), numel(methodKeys));
@@ -398,11 +406,13 @@ for lIdx = 1:numel(lValues)
 
     metricsIdeal = compute_manifold_metrics(ctx.AH(:, models.testIdx), ctx.AI(:, models.testIdx));
     metricsInterp = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AInterp(:, models.testIdx));
-    metricsProposed = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposed(:, models.testIdx));
+    metricsProposedV1 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV1(:, models.testIdx));
+    metricsProposedV2 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV2(:, models.testIdx));
     manifoldError(lIdx, :) = [ ...
         mean(metricsIdeal.relativeError), ...
         mean(metricsInterp.relativeError), ...
-        mean(metricsProposed.relativeError), ...
+        mean(metricsProposedV1.relativeError), ...
+        mean(metricsProposedV2.relativeError), ...
         0];
 
     methods = local_named_methods(ctx, models, methodKeys);
@@ -491,6 +501,7 @@ save_figure(fig, fullfile(outDir, 'calibration_count_sensitivity.png'));
 
 caseResult = struct();
 caseResult.outputDir = outDir;
+caseResult.methodLabels = methodsLegend;
 caseResult.lValues = lValues;
 caseResult.manifoldError = manifoldError;
 caseResult.singleRmse = singleRmse;
@@ -526,11 +537,14 @@ outDir = local_case_output_dir(cfg, 'case05_sampling_strategy_sensitivity');
 
 strategyNames = cfg.case5.strategyNames;
 snrSweep = cfg.case5.snrSweepDb;
+methodKeys = {'proposed_v1', 'proposed_v2'};
+methodLabels = {'Proposed V1', 'Proposed V2'};
+numMethods = numel(methodKeys);
 
-meanUnseenError = zeros(1, numel(strategyNames));
-stdUnseenError = zeros(1, numel(strategyNames));
-meanRmse = zeros(numel(strategyNames), numel(snrSweep));
-stdRmse = zeros(numel(strategyNames), numel(snrSweep));
+meanUnseenError = zeros(numel(strategyNames), numMethods);
+stdUnseenError = zeros(numel(strategyNames), numMethods);
+meanRmse = zeros(numel(strategyNames), numel(snrSweep), numMethods);
+stdRmse = zeros(numel(strategyNames), numel(snrSweep), numMethods);
 details = cell(1, numel(strategyNames));
 
 for strategyIdx = 1:numel(strategyNames)
@@ -542,8 +556,8 @@ for strategyIdx = 1:numel(strategyNames)
         numTrials = 1;
     end
 
-    unseenTrials = zeros(numTrials, 1);
-    rmseTrials = zeros(numTrials, numel(snrSweep));
+    unseenTrials = zeros(numTrials, numMethods);
+    rmseTrials = zeros(numTrials, numel(snrSweep), numMethods);
     details{strategyIdx} = cell(numTrials, 1);
 
     for trialIdx = 1:numTrials
@@ -551,10 +565,15 @@ for strategyIdx = 1:numel(strategyNames)
         calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case5.l, strategyName, seed);
         models = build_sparse_models(ctx, calIdx, cfg.model);
 
-        metricsProposed = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposed(:, models.testIdx));
-        unseenTrials(trialIdx) = mean(metricsProposed.relativeError);
+        metricsProposedV1 = compute_manifold_metrics( ...
+            ctx.AH(:, models.testIdx), models.AProposedV1(:, models.testIdx));
+        metricsProposedV2 = compute_manifold_metrics( ...
+            ctx.AH(:, models.testIdx), models.AProposedV2(:, models.testIdx));
+        unseenTrials(trialIdx, :) = [ ...
+            mean(metricsProposedV1.relativeError), ...
+            mean(metricsProposedV2.relativeError)];
 
-        methods = local_named_methods(ctx, models, {'proposed'});
+        methods = local_named_methods(ctx, models, methodKeys);
         for snrIdx = 1:numel(snrSweep)
             rng(cfg.randomSeed + 900 + strategyIdx * 100 + trialIdx * 10 + snrIdx, 'twister');
             evalCfg = struct();
@@ -566,47 +585,70 @@ for strategyIdx = 1:numel(strategyNames)
             evalCfg.toleranceDeg = cfg.case5.toleranceDeg;
             evalCfg.collectRepresentativeSpectrum = false;
             bench = benchmark_music(ctx, methods, evalCfg);
-            rmseTrials(trialIdx, snrIdx) = bench.methods(1).rmse;
+            for methodIdx = 1:numMethods
+                rmseTrials(trialIdx, snrIdx, methodIdx) = bench.methods(methodIdx).rmse;
+            end
             details{strategyIdx}{trialIdx}.(['snr_' strrep(num2str(snrSweep(snrIdx)), '-', 'm')]) = bench;
         end
     end
 
-    meanUnseenError(strategyIdx) = mean(unseenTrials);
-    stdUnseenError(strategyIdx) = std(unseenTrials);
-    meanRmse(strategyIdx, :) = mean(rmseTrials, 1);
-    stdRmse(strategyIdx, :) = std(rmseTrials, 0, 1);
+    meanUnseenError(strategyIdx, :) = mean(unseenTrials, 1);
+    stdUnseenError(strategyIdx, :) = std(unseenTrials, 0, 1);
+    meanRmse(strategyIdx, :, :) = mean(rmseTrials, 1);
+    stdRmse(strategyIdx, :, :) = std(rmseTrials, 0, 1);
     details{strategyIdx} = struct('unseenTrials', unseenTrials, 'rmseTrials', rmseTrials);
 end
 
-fig = figure('Visible', 'off', 'Position', [140 140 1200 500]);
-tiledlayout(1, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
+fig = figure('Visible', 'off', 'Position', [140 140 1450 520]);
+tiledlayout(1, 3, 'Padding', 'compact', 'TileSpacing', 'compact');
 
 nexttile;
 bar(meanUnseenError);
 hold on;
-errorbar(1:numel(strategyNames), meanUnseenError, stdUnseenError, '.k', 'LineWidth', 1.2);
+numStrategies = numel(strategyNames);
+groupWidth = min(0.8, numMethods / (numMethods + 1.5));
+for methodIdx = 1:numMethods
+    x = (1:numStrategies) - groupWidth / 2 + ...
+        (2 * methodIdx - 1) * groupWidth / (2 * numMethods);
+    errorbar(x, meanUnseenError(:, methodIdx), stdUnseenError(:, methodIdx), ...
+        '.k', 'LineWidth', 1.0);
+end
 grid on;
 set(gca, 'XTick', 1:numel(strategyNames), 'XTickLabel', strategyNames);
 xtickangle(20);
 ylabel('Mean unseen relative error');
 title(sprintf('Case 5: sampling strategy, L = %d', cfg.case5.l));
+legend(methodLabels, 'Location', 'best');
 
 nexttile;
 hold on;
 for strategyIdx = 1:numel(strategyNames)
-    errorbar(snrSweep, meanRmse(strategyIdx, :), stdRmse(strategyIdx, :), ...
+    errorbar(snrSweep, meanRmse(strategyIdx, :, 1), stdRmse(strategyIdx, :, 1), ...
         'o-', 'LineWidth', 1.4, 'MarkerSize', 6);
 end
 grid on;
 xlabel('SNR (dB)');
 ylabel('DOA RMSE (deg)');
-title('Case 5: strategy sensitivity on DOA RMSE');
+title('Case 5: Proposed V1 DOA RMSE');
+legend(strategyNames, 'Location', 'best');
+
+nexttile;
+hold on;
+for strategyIdx = 1:numel(strategyNames)
+    errorbar(snrSweep, meanRmse(strategyIdx, :, 2), stdRmse(strategyIdx, :, 2), ...
+        'o-', 'LineWidth', 1.4, 'MarkerSize', 6);
+end
+grid on;
+xlabel('SNR (dB)');
+ylabel('DOA RMSE (deg)');
+title('Case 5: Proposed V2 DOA RMSE');
 legend(strategyNames, 'Location', 'best');
 save_figure(fig, fullfile(outDir, 'sampling_strategy_sensitivity.png'));
 
 caseResult = struct();
 caseResult.outputDir = outDir;
 caseResult.strategyNames = strategyNames;
+caseResult.methodLabels = methodLabels;
 caseResult.meanUnseenError = meanUnseenError;
 caseResult.stdUnseenError = stdUnseenError;
 caseResult.meanRmse = meanRmse;
@@ -624,7 +666,8 @@ basisTypes = cfg.case6.basisTypes;
 orders = cfg.case6.orders;
 lambdas = cfg.case6.lambdas;
 
-errorCube = zeros(numel(orders), numel(lambdas), numel(basisTypes));
+errorCubeV1 = zeros(numel(orders), numel(lambdas), numel(basisTypes));
+errorCubeV2 = zeros(numel(orders), numel(lambdas), numel(basisTypes));
 
 for basisIdx = 1:numel(basisTypes)
     for orderIdx = 1:numel(orders)
@@ -635,20 +678,25 @@ for basisIdx = 1:numel(basisTypes)
             modelCfg.lambda = lambdas(lambdaIdx);
 
             models = build_sparse_models(ctx, calIdx, modelCfg);
-            metrics = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposed(:, models.testIdx));
-            errorCube(orderIdx, lambdaIdx, basisIdx) = mean(metrics.relativeError);
+            metricsV1 = compute_manifold_metrics( ...
+                ctx.AH(:, models.testIdx), models.AProposedV1(:, models.testIdx));
+            metricsV2 = compute_manifold_metrics( ...
+                ctx.AH(:, models.testIdx), models.AProposedV2(:, models.testIdx));
+            errorCubeV1(orderIdx, lambdaIdx, basisIdx) = mean(metricsV1.relativeError);
+            errorCubeV2(orderIdx, lambdaIdx, basisIdx) = mean(metricsV2.relativeError);
         end
     end
 end
 
-bestCurve = squeeze(min(errorCube, [], 2));
+bestCurveV1 = squeeze(min(errorCubeV1, [], 2));
+bestCurveV2 = squeeze(min(errorCubeV2, [], 2));
 
-fig = figure('Visible', 'off', 'Position', [120 120 1300 820]);
-tiledlayout(2, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
+fig = figure('Visible', 'off', 'Position', [120 100 1450 820]);
+tiledlayout(2, 3, 'Padding', 'compact', 'TileSpacing', 'compact');
 
 for basisIdx = 1:numel(basisTypes)
     nexttile;
-    imagesc(errorCube(:, :, basisIdx));
+    imagesc(errorCubeV1(:, :, basisIdx));
     colorbar;
     set(gca, 'XTick', 1:numel(lambdas), ...
         'XTickLabel', arrayfun(@num2str, lambdas, 'UniformOutput', false), ...
@@ -656,18 +704,42 @@ for basisIdx = 1:numel(basisTypes)
         'YTickLabel', arrayfun(@num2str, orders, 'UniformOutput', false));
     xlabel('\lambda');
     ylabel('Order P');
-    title(sprintf('Case 6: %s basis', basisTypes{basisIdx}));
+    title(sprintf('Case 6: Proposed V1, %s basis', basisTypes{basisIdx}));
 end
 
-nexttile([1 2]);
+nexttile;
 hold on;
 for basisIdx = 1:numel(basisTypes)
-    plot(orders, bestCurve(:, basisIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+    plot(orders, bestCurveV1(:, basisIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
 end
 grid on;
 xlabel('Model order P');
 ylabel('Best unseen relative error over \lambda');
-title(sprintf('Case 6: best error curve at L = %d', cfg.case6.l));
+title(sprintf('Case 6: Proposed V1 best curve, L = %d', cfg.case6.l));
+legend(basisTypes, 'Location', 'best');
+
+for basisIdx = 1:numel(basisTypes)
+    nexttile;
+    imagesc(errorCubeV2(:, :, basisIdx));
+    colorbar;
+    set(gca, 'XTick', 1:numel(lambdas), ...
+        'XTickLabel', arrayfun(@num2str, lambdas, 'UniformOutput', false), ...
+        'YTick', 1:numel(orders), ...
+        'YTickLabel', arrayfun(@num2str, orders, 'UniformOutput', false));
+    xlabel('\lambda');
+    ylabel('Order P');
+    title(sprintf('Case 6: Proposed V2, %s basis', basisTypes{basisIdx}));
+end
+
+nexttile;
+hold on;
+for basisIdx = 1:numel(basisTypes)
+    plot(orders, bestCurveV2(:, basisIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+xlabel('Model order P');
+ylabel('Best unseen relative error over \lambda');
+title(sprintf('Case 6: Proposed V2 best curve, L = %d', cfg.case6.l));
 legend(basisTypes, 'Location', 'best');
 save_figure(fig, fullfile(outDir, 'model_sensitivity.png'));
 
@@ -676,8 +748,13 @@ caseResult.outputDir = outDir;
 caseResult.orders = orders;
 caseResult.lambdas = lambdas;
 caseResult.basisTypes = basisTypes;
-caseResult.errorCube = errorCube;
-caseResult.bestCurve = bestCurve;
+caseResult.methodLabels = {'Proposed V1', 'Proposed V2'};
+caseResult.errorCube = errorCubeV1;
+caseResult.errorCubeV1 = errorCubeV1;
+caseResult.errorCubeV2 = errorCubeV2;
+caseResult.bestCurve = bestCurveV1;
+caseResult.bestCurveV1 = bestCurveV1;
+caseResult.bestCurveV2 = bestCurveV2;
 save(fullfile(outDir, 'case06_results.mat'), 'caseResult');
 end
 
@@ -687,7 +764,7 @@ outDir = local_case_output_dir(cfg, 'case07_single_source_snr');
 
 calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'uniform');
 models = build_sparse_models(ctx, calIdx, cfg.model);
-methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed', 'oracle'});
+methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed_v1', 'proposed_v2', 'oracle'});
 snrSweep = cfg.case7.snrSweepDb;
 evalAngles = local_single_source_eval_angles(ctx, models, cfg);
 
@@ -798,6 +875,7 @@ save_figure(fig, fullfile(outDir, 'representative_spectra.png'));
 caseResult = struct();
 caseResult.outputDir = outDir;
 caseResult.models = models;
+caseResult.methodLabels = {methods.label};
 caseResult.evalAnglesDeg = evalAngles;
 caseResult.snrSweep = snrSweep;
 caseResult.rmse = rmse;
@@ -816,7 +894,7 @@ outDir = local_case_output_dir(cfg, 'case08_single_source_snapshots');
 
 calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'uniform');
 models = build_sparse_models(ctx, calIdx, cfg.model);
-methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed', 'oracle'});
+methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed_v1', 'proposed_v2', 'oracle'});
 evalAngles = local_single_source_eval_angles(ctx, models, cfg);
 
 snapshotSweep = cfg.case8.snapshotSweep;
@@ -888,6 +966,7 @@ save_figure(fig, fullfile(outDir, 'rmse_vs_snapshots.png'));
 caseResult = struct();
 caseResult.outputDir = outDir;
 caseResult.models = models;
+caseResult.methodLabels = {methods.label};
 caseResult.evalAnglesDeg = evalAngles;
 caseResult.snapshotSweep = snapshotSweep;
 caseResult.snrValues = snrValues;
@@ -904,7 +983,7 @@ outDir = local_case_output_dir(cfg, 'case09_two_source_resolution');
 
 calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'uniform');
 models = build_sparse_models(ctx, calIdx, cfg.model);
-methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed', 'oracle'});
+methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed_v1', 'proposed_v2', 'oracle'});
 
 [sourcePairs, pairSelection] = local_case9_source_pairs(cfg.case9, ctx, models.calAnglesDeg);
 pairLabels = local_case9_pair_labels(sourcePairs);
@@ -1043,8 +1122,10 @@ rng(cfg.randomSeed + 10, 'twister');
 outDir = local_case_output_dir(cfg, 'case10_random_split_robustness');
 
 numSplits = cfg.case10.numSplits;
-manifoldError = zeros(numSplits, 3);
-singleRmse = zeros(numSplits, 3);
+methodKeys = {'ideal', 'interp', 'proposed_v1', 'proposed_v2'};
+methodLabels = {'Ideal', 'Interp', 'Proposed V1', 'Proposed V2'};
+manifoldError = zeros(numSplits, numel(methodKeys));
+singleRmse = zeros(numSplits, numel(methodKeys));
 splitAngles = cell(numSplits, 1);
 
 for splitIdx = 1:numSplits
@@ -1055,13 +1136,15 @@ for splitIdx = 1:numSplits
 
     metricsIdeal = compute_manifold_metrics(ctx.AH(:, models.testIdx), ctx.AI(:, models.testIdx));
     metricsInterp = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AInterp(:, models.testIdx));
-    metricsProposed = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposed(:, models.testIdx));
+    metricsProposedV1 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV1(:, models.testIdx));
+    metricsProposedV2 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV2(:, models.testIdx));
     manifoldError(splitIdx, :) = [ ...
         mean(metricsIdeal.relativeError), ...
         mean(metricsInterp.relativeError), ...
-        mean(metricsProposed.relativeError)];
+        mean(metricsProposedV1.relativeError), ...
+        mean(metricsProposedV2.relativeError)];
 
-    methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed'});
+    methods = local_named_methods(ctx, models, methodKeys);
     evalAngles = local_single_source_eval_angles(ctx, models, cfg);
     evalCfg = struct();
     evalCfg.mode = 'single';
@@ -1077,8 +1160,8 @@ for splitIdx = 1:numSplits
     end
 end
 
-[xErr, yErr] = local_box_inputs(manifoldError, {'Ideal', 'Interp', 'Proposed'});
-[xRmse, yRmse] = local_box_inputs(singleRmse, {'Ideal', 'Interp', 'Proposed'});
+[xErr, yErr] = local_box_inputs(manifoldError, methodLabels);
+[xRmse, yRmse] = local_box_inputs(singleRmse, methodLabels);
 
 fig = figure('Visible', 'off', 'Position', [130 130 1100 500]);
 tiledlayout(1, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
@@ -1097,6 +1180,7 @@ save_figure(fig, fullfile(outDir, 'random_split_robustness.png'));
 
 caseResult = struct();
 caseResult.outputDir = outDir;
+caseResult.methodLabels = methodLabels;
 caseResult.manifoldError = manifoldError;
 caseResult.singleRmse = singleRmse;
 caseResult.calibrationAnglesDeg = splitAngles;
@@ -1156,6 +1240,11 @@ fprintf(fid, '- Element spacing lambda: `%.12g`\n', cfg.array.elementSpacingLamb
 fprintf(fid, '- Case 1 high SNR dB: `%.12g`\n', cfg.case1.highSNRDb);
 fprintf(fid, '- Case 9 Monte Carlo: `%d`\n', cfg.case9.monteCarlo);
 fprintf(fid, '- Case 9 separation sweep: `%s`\n\n', mat2str(cfg.case9.separationSweepDeg));
+if isfield(cfg, 'model') && isfield(cfg.model, 'v2')
+    fprintf(fid, '- Proposed V2 enabled: `%d`\n', logical(cfg.model.v2.enabled));
+    fprintf(fid, '- Proposed V2 stage: `%s`\n', cfg.model.v2.stage);
+    fprintf(fid, '- Proposed V2 pair task enabled: `%d`\n\n', logical(cfg.model.v2.pairTaskEnabled));
+end
 fprintf(fid, '## Git Status Short\n\n');
 fprintf(fid, '```text\n%s\n```\n', cfg.run.gitStatusShort);
 end
@@ -1186,6 +1275,24 @@ cfg.eval = local_set_default_field(cfg.eval, 'targetStrideDeg', 2);
 cfg.eval = local_set_default_field(cfg.eval, 'edgeBandDeg', 8);
 cfg.eval = local_set_default_field(cfg.eval, 'highMismatchCount', 12);
 cfg.eval = local_set_default_field(cfg.eval, 'useFullGridForManifoldMetrics', true);
+
+if ~isfield(cfg, 'model') || isempty(cfg.model)
+    cfg.model = struct();
+end
+if ~isfield(cfg.model, 'v2') || isempty(cfg.model.v2)
+    cfg.model.v2 = struct();
+end
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'enabled', true);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'label', 'Proposed V2');
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'stage', 'lite');
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'segmentCentersDeg', [-50 0 50]);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'order', 2);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'lambda', 1e-3);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'candidateMismatchWeights', [1 2 4]);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'candidateEdgeWeights', [0.5 1 2]);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'taskWeight', 0.25);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'taskNeighborhoodDeg', 0.4);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'pairTaskEnabled', false);
 
 if isfield(cfg, 'case9')
     cfg.case9 = local_set_default_field(cfg.case9, 'maxPairsPerSeparation', 21);
@@ -1397,7 +1504,11 @@ for methodIdx = 1:numel(methodKeys)
         case 'interp'
             methods(methodIdx) = local_method('interp', 'Interpolation', models.AInterp);
         case 'proposed'
-            methods(methodIdx) = local_method('proposed', 'Proposed', models.AProposed);
+            methods(methodIdx) = local_method('proposed_v1', 'Proposed V1', models.AProposedV1);
+        case 'proposed_v1'
+            methods(methodIdx) = local_method('proposed_v1', 'Proposed V1', models.AProposedV1);
+        case 'proposed_v2'
+            methods(methodIdx) = local_method('proposed_v2', 'Proposed V2', models.AProposedV2);
         case 'oracle'
             methods(methodIdx) = local_method('oracle', 'HFSS Oracle', ctx.AH);
         otherwise
@@ -1671,31 +1782,54 @@ end
 
 function [exampleIdx, reason] = local_case9_select_example_pair( ...
     bench, methods, separationDeg, targetResolutionProb, pairSelection)
-methodIdx = find(strcmp({methods.name}, 'proposed'), 1, 'first');
-interpIdx = find(strcmp({methods.name}, 'interp'), 1, 'first');
-if isempty(methodIdx)
-    methodIdx = 1;
+primaryIdx = find(strcmp({methods.name}, 'proposed_v2'), 1, 'first');
+if isempty(primaryIdx)
+    primaryIdx = find(strcmp({methods.name}, 'proposed'), 1, 'first');
 end
+if isempty(primaryIdx)
+    primaryIdx = find(strcmp({methods.name}, 'proposed_v1'), 1, 'first');
+end
+if isempty(primaryIdx)
+    primaryIdx = 1;
+end
+interpIdx = find(strcmp({methods.name}, 'interp'), 1, 'first');
+v1Idx = find(strcmp({methods.name}, 'proposed_v1'), 1, 'first');
 
-proposed = bench.methods(methodIdx);
+primary = bench.methods(primaryIdx);
+primaryLabel = methods(primaryIdx).label;
 stateMatrix = [ ...
-    proposed.perTargetUnresolvedRate(:), ...
-    proposed.perTargetMarginalRate(:), ...
-    proposed.perTargetBiasedRate(:), ...
-    proposed.perTargetStableRate(:)];
+    primary.perTargetUnresolvedRate(:), ...
+    primary.perTargetMarginalRate(:), ...
+    primary.perTargetBiasedRate(:), ...
+    primary.perTargetStableRate(:)];
 stateEntropy = -sum(stateMatrix .* log(max(stateMatrix, eps)), 2);
 
-mixedMask = proposed.perTargetResolutionRate > 0.05 & proposed.perTargetResolutionRate < 0.98;
-mismatchScore = zeros(size(proposed.perTargetResolutionRate(:)));
+mixedMask = primary.perTargetResolutionRate > 0.05 & primary.perTargetResolutionRate < 0.98;
+mismatchScore = zeros(size(primary.perTargetResolutionRate(:)));
 if nargin >= 5 && isfield(pairSelection, 'combinedScore')
     mismatchScore = pairSelection.combinedScore(:);
     mismatchScore = mismatchScore / max(max(mismatchScore), eps);
 end
 
+baselineStable = [];
+baselineResolution = [];
+baselineLabels = {};
 if ~isempty(interpIdx)
-    interp = bench.methods(interpIdx);
-    advantage = proposed.perTargetStableRate(:) - interp.perTargetStableRate(:) + ...
-        0.5 * (proposed.perTargetResolutionRate(:) - interp.perTargetResolutionRate(:));
+    baselineStable(:, end+1) = bench.methods(interpIdx).perTargetStableRate(:); %#ok<AGROW>
+    baselineResolution(:, end+1) = bench.methods(interpIdx).perTargetResolutionRate(:); %#ok<AGROW>
+    baselineLabels{end+1} = methods(interpIdx).label; %#ok<AGROW>
+end
+if ~isempty(v1Idx) && v1Idx ~= primaryIdx
+    baselineStable(:, end+1) = bench.methods(v1Idx).perTargetStableRate(:); %#ok<AGROW>
+    baselineResolution(:, end+1) = bench.methods(v1Idx).perTargetResolutionRate(:); %#ok<AGROW>
+    baselineLabels{end+1} = methods(v1Idx).label; %#ok<AGROW>
+end
+
+if ~isempty(baselineStable)
+    bestBaselineStable = max(baselineStable, [], 2);
+    bestBaselineResolution = max(baselineResolution, [], 2);
+    advantage = primary.perTargetStableRate(:) - bestBaselineStable + ...
+        0.5 * (primary.perTargetResolutionRate(:) - bestBaselineResolution);
     candidateMask = mixedMask & advantage > 0.02;
     if any(candidateMask)
         candidateIdx = find(candidateMask);
@@ -1703,27 +1837,28 @@ if ~isempty(interpIdx)
             + 0.15 * mismatchScore(candidateIdx) - 0.02 * separationDeg(candidateIdx);
         [~, bestLocalIdx] = max(score);
         exampleIdx = candidateIdx(bestLocalIdx);
-        reason = sprintf(['Selected [%g, %g] deg because Proposed improves stable/resolution ' ...
-            'behavior over Interpolation while remaining a mixed hard pair.'], ...
-            bench.trueAngleSetsDeg(exampleIdx, 1), bench.trueAngleSetsDeg(exampleIdx, 2));
+        reason = sprintf(['Selected [%g, %g] deg because %s improves stable/resolution ' ...
+            'behavior over %s while remaining a mixed hard pair.'], ...
+            bench.trueAngleSetsDeg(exampleIdx, 1), bench.trueAngleSetsDeg(exampleIdx, 2), ...
+            primaryLabel, strjoin(baselineLabels, '/'));
         return;
     end
 end
 
 candidateMask = mixedMask;
 if ~any(candidateMask)
-    candidateMask = true(size(proposed.perTargetResolutionRate));
+    candidateMask = true(size(primary.perTargetResolutionRate));
 end
 
 candidateIdx = find(candidateMask);
 score = 0.45 * mismatchScore(candidateIdx) + 0.35 * stateEntropy(candidateIdx) ...
-    - abs(proposed.perTargetResolutionRate(candidateIdx) - targetResolutionProb) ...
+    - abs(primary.perTargetResolutionRate(candidateIdx) - targetResolutionProb) ...
     - 0.02 * separationDeg(candidateIdx);
 [~, bestLocalIdx] = max(score);
 exampleIdx = candidateIdx(bestLocalIdx);
 reason = sprintf(['Selected [%g, %g] deg as the hardest available high-mismatch pair; ' ...
-    'no stable Proposed-over-Interpolation advantage pair was found in this run.'], ...
-    bench.trueAngleSetsDeg(exampleIdx, 1), bench.trueAngleSetsDeg(exampleIdx, 2));
+    'no stable %s-over-baseline advantage pair was found in this run.'], ...
+    bench.trueAngleSetsDeg(exampleIdx, 1), bench.trueAngleSetsDeg(exampleIdx, 2), primaryLabel);
 end
 
 function value = local_optional_case9_field(inputStruct, fieldName, defaultValue)
@@ -1735,7 +1870,6 @@ end
 end
 
 function [xValues, yValues] = local_box_inputs(dataMatrix, labels)
-numMethods = size(dataMatrix, 2);
 numSamples = size(dataMatrix, 1);
 
 xValues = categorical(repelem(labels, numSamples));
