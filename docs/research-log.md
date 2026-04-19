@@ -1,4 +1,4 @@
-﻿# 研究变更记录
+# 研究变更记录
 
 这份文档用于长期记录项目里的研究判断、实验变更、代码方向调整和论文表述收束。
 
@@ -16,15 +16,15 @@
 
 ## 最新整理
 
-### 2026-04-19：`local-85dc71c2` Proposed-v2 Lite 与 V1 对照 full paper run
+### 2026-04-19：`2962bc3` Proposed-v2 Lite 与 V1 对照 full paper run
 
-- Pending local hash: `local-85dc71c2`
+- Former pending local hash: mapped to Git code commit `2962bc3`
 - Base HEAD: `b703792`
 - Branch: `codex/proposed-v2`
 - Worktree state: uncommitted code/docs changes; existing `docs/comments.md` and untracked `docs/v1实验结果分析.md` were preserved.
 - Run command: `run_project(1:10, default_config(pwd, 'paper'))`
-- Result path pattern: `results/<case-name>/20260419-123007-local-85dc71c2/`
-- Failed launch logs before final run: `results/full-run-20260419-122739-local-85dc71c2.*` and `results/full-run-20260419-122900-local-85dc71c2.*`; both failed before any case result directory was created because of MATLAB `-batch` quoting / temp script naming.
+- Result path pattern: `results/<case-name>/20260419-123007-2962bc3/`
+- Failed launch logs before final run: `results/full-run-20260419-122739-2962bc3.*` and `results/full-run-20260419-122900-2962bc3.*`; both failed before any case result directory was created because of MATLAB `-batch` quoting / temp script naming.
 - Run scope: all 10 cases, paper profile, no smoke run.
 
 #### 一句话结论
@@ -54,27 +54,27 @@
 
 #### 关键图片
 
-以下图片来自 `20260419-123007-local-85dc71c2` full paper-profile run，并已复制到 `docs/assets/`。
+以下图片来自 `20260419-123007-2962bc3` full paper-profile run，并已复制到 `docs/assets/`。
 
-![case03 unseen v1 v2 paper local](assets/case03-unseen-v1-v2-paper-local-85dc71c2.png)
+![case03 unseen v1 v2 paper local](assets/case03-unseen-v1-v2-paper-2962bc3.png)
 
-![case05 sampling v1 v2 paper local](assets/case05-sampling-v1-v2-paper-local-85dc71c2.png)
+![case05 sampling v1 v2 paper local](assets/case05-sampling-v1-v2-paper-2962bc3.png)
 
-![case06 model sensitivity v1 v2 paper local](assets/case06-model-sensitivity-v1-v2-paper-local-85dc71c2.png)
+![case06 model sensitivity v1 v2 paper local](assets/case06-model-sensitivity-v1-v2-paper-2962bc3.png)
 
-![case07 snr v1 v2 paper local](assets/case07-snr-v1-v2-paper-local-85dc71c2.png)
+![case07 snr v1 v2 paper local](assets/case07-snr-v1-v2-paper-2962bc3.png)
 
-![case07 spectra v1 v2 paper local](assets/case07-spectra-v1-v2-paper-local-85dc71c2.png)
+![case07 spectra v1 v2 paper local](assets/case07-spectra-v1-v2-paper-2962bc3.png)
 
-![case08 snapshots v1 v2 paper local](assets/case08-snapshots-v1-v2-paper-local-85dc71c2.png)
+![case08 snapshots v1 v2 paper local](assets/case08-snapshots-v1-v2-paper-2962bc3.png)
 
-![case09 resolution v1 v2 paper local](assets/case09-resolution-v1-v2-paper-local-85dc71c2.png)
+![case09 resolution v1 v2 paper local](assets/case09-resolution-v1-v2-paper-2962bc3.png)
 
-![case10 random split v1 v2 paper local](assets/case10-random-split-v1-v2-paper-local-85dc71c2.png)
+![case10 random split v1 v2 paper local](assets/case10-random-split-v1-v2-paper-2962bc3.png)
 
 #### 仍然存在的风险或边界
 
-- `local-85dc71c2` 是 pending local hash，不是 Git commit hash；本轮结果来自 uncommitted worktree，不能冒充 clean repo final archive。
+- `2962bc3` 是本批结果映射后的 Git code commit hash；本轮结果来自 uncommitted worktree，不能冒充 clean repo final archive。
 - 本轮实现的是 V2-lite，未启用文档中 Full V2 的双源 pair task 优化、L-BFGS/Adam 迭代或完整 task loss。
 - V2-lite 在部分流形指标和部分高 SNR / 高 snapshots 单源指标上改善 V1，但在 Case 9/10 上没有形成稳定全局优势。
 - 论文表述应收窄为：V2-lite 提供了一个可检验的新建模方向，并在若干指标上缓解 V1 的边缘/高失配问题；不能写成 Full V2 已验证，也不能写成 V2 稳定压过 Interpolation。

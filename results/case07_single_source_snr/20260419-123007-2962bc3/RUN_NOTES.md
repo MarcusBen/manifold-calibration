@@ -1,10 +1,10 @@
 # Run Notes
 
-- Case: `case04_calibration_count_sensitivity`
-- Timestamp: `2026-04-19 12:31:22`
-- Pending local hash: `local-85dc71c2`
+- Case: `case07_single_source_snr`
+- Timestamp: `2026-04-19 12:39:34`
+- Pending local hash: `2962bc3`
 - Base HEAD: `b703792`
-- Run id: `20260419-123007-local-85dc71c2`
+- Run id: `20260419-123007-2962bc3`
 - Command: `run_project(1:10, default_config(pwd, 'paper'))`
 - Notes: `Full paper-profile run for Proposed V2-lite against Proposed V1 baseline.`
 

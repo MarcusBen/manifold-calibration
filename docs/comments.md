@@ -1,4 +1,11 @@
-﻿我按 **`20260419-123007-local-85dc71c2`** 这批结果完整看过了。
+### 2026-04-19：Proposed-v2 Lite 与 V1 对照评阅
+
+- Version hash: `2962bc3`
+- Base HEAD: `b703792`
+- Review target: `20260419-123007-2962bc3` paper-profile full run
+- Review status: V2-lite direction valid but not mature
+
+我按 **`20260419-123007-2962bc3`** 这批结果完整看过了。
 先给你最核心的判断：
 
 **这次 V2-lite 不是“失败”，但也还没有形成决定性突破。**
