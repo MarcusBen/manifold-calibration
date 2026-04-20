@@ -26,8 +26,9 @@
 - Latest reviewed comments hash: `71650f7`
 - Review status: current V3 screening has no matching comments review yet
 - Git code commit hash: `87d7f16`
-- Hash finalization commit hash: pending synchronization
-- Intended published branch: `origin/codex/proposed_v3`
+- Hash finalization commit hash: `c949b16`
+- Published branch: `origin/codex/proposed_v3`
+- Published branch tip: see remote branch after push
 - Historical version folders retained after layout migration: `results/2962bc3/`, `results/71650f7/`, `results/local-8e021ea7/`, `results/local-aa29a0fd/`
 
 ## 当前结果判断
