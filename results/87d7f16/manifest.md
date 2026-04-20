@@ -1,6 +1,6 @@
-# Results Manifest
+﻿# Results Manifest
 
-- Version hash: `local-5a1492f8`
+- Version hash: `87d7f16`
 - Base HEAD: `489efb6`
 - Branch: `codex/proposed_v3`
 - Worktree state: uncommitted code changes; screening run only

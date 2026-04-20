@@ -1,10 +1,10 @@
-# Run Notes
+﻿# Run Notes
 
-- Case: `case09_two_source_resolution`
-- Timestamp: `2026-04-20 13:49:54`
-- Pending local hash: `local-5a1492f8`
+- Case: `case03_unseen_generalization`
+- Timestamp: `2026-04-20 13:43:28`
+- Pending local hash: `87d7f16`
 - Base HEAD: `489efb6`
-- Run id: `20260420-134208-local-5a1492f8`
+- Run id: `20260420-134208-87d7f16`
 - Command: `run_project([3 7 9 10], default_config(pwd, 'paper'))`
 - Notes: `Screening run for Proposed V3 ARD-anchored task refinement; not a full paper-profile result.`
 

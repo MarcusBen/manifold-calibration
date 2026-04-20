@@ -16,16 +16,17 @@
 
 ## 最新整理
 
-> Branch artifact policy: `codex/proposed_v3` 使用 version-first traceable results layout：`results/<version-hash>/<case-name>/`。2026-04-20 当前同步范围包括 `local-5a1492f8` V3 screening、`71650f7` ARD Method 2 full run、`local-8e021ea7` Full V2 C-route full run、`2962bc3` V2-lite run，以及仅含失败启动日志的 `local-aa29a0fd`。
+> Branch artifact policy: `codex/proposed_v3` 使用 version-first traceable results layout：`results/<version-hash>/<case-name>/`。2026-04-20 当前同步范围包括 `87d7f16` V3 screening、`71650f7` ARD Method 2 full run、`local-8e021ea7` Full V2 C-route full run、`2962bc3` V2-lite run，以及仅含失败启动日志的 `local-aa29a0fd`。
 
-### 2026-04-20：`local-5a1492f8` Proposed V3 ARD-anchored screening run
+### 2026-04-20：`87d7f16` Proposed V3 ARD-anchored screening run
 
-- Version hash: `local-5a1492f8`
+- Version hash: `87d7f16`
+- Former pending local hash: `local-5a1492f8`
 - Base HEAD: `489efb6`
 - Branch: `codex/proposed_v3`
 - Worktree state at run time: uncommitted code changes in `default_config.m`, `run_project.m`, and `src/build_sparse_models.m`.
 - Run command: `run_project([3 7 9 10], default_config(pwd, 'paper'))`
-- Result path pattern: `results/local-5a1492f8/<case-name>/`
+- Result path pattern: `results/87d7f16/<case-name>/`
 - Run scope: screening only for Case 3/7/9/10; this is not a full paper-profile result.
 
 #### 一句话结论
@@ -54,15 +55,15 @@
 
 #### 关键图片
 
-以下图片来自 `20260420-134208-local-5a1492f8` screening run，并已复制到 `docs/assets/`。
+以下图片来自 `20260420-134208-87d7f16` screening run，并已复制到 `docs/assets/`。
 
-![case03 v3 edge hard](assets/case03-v3-edge-hard-local-5a1492f8.png)
+![case03 v3 edge hard](assets/case03-v3-edge-hard-87d7f16.png)
 
-![case07 v3 snr](assets/case07-v3-snr-local-5a1492f8.png)
+![case07 v3 snr](assets/case07-v3-snr-87d7f16.png)
 
-![case09 v3 two source](assets/case09-v3-two-source-local-5a1492f8.png)
+![case09 v3 two source](assets/case09-v3-two-source-87d7f16.png)
 
-![case10 v3 random split](assets/case10-v3-random-split-local-5a1492f8.png)
+![case10 v3 random split](assets/case10-v3-random-split-87d7f16.png)
 
 #### 决策与下一步
 
