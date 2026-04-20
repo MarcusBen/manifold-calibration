@@ -1,4 +1,12 @@
-﻿# 项目阶段性判断报告（基于 `20260420-120416-local-c72eabab` 结果）
+﻿# 项目阶段性判断报告（基于 `20260420-120416-71650f7` 结果）
+
+- Version hash: `71650f7`
+- Base HEAD: `588318c`
+- Review target: Git code commit / `20260420-120416-71650f7` paper-profile full run
+- Review status: reviewed; ARD Method 2 is the current matching evaluation baseline
+- Main comments: prioritize restructuring Proposed around an ARD-anchored path; do not make harder cases or 2D DOA the immediate main line.
+- Conflicts with log/code: no direct hash conflict for the ARD batch; `local-8e021ea7` remains a previous pending Full V2 run rather than the latest reviewed result.
+- Next action: design a stronger Proposed variant against ARD before expanding the benchmark scope.
 
 ## 1. 文档目的
 
@@ -369,7 +377,7 @@ $$
 
 ## 9. 最终建议
 
-基于 `20260420-120416-local-c72eabab` 这一批结果，我的最终建议是：
+基于 `20260420-120416-71650f7` 这一批结果，我的最终建议是：
 
 ### 主线选择
 

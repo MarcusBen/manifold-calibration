@@ -16,16 +16,17 @@
 
 ## 最新整理
 
-> Branch artifact policy: `codex/proposed-v2` 保留当前分支的 traceable result batches。2026-04-20 当前同步范围包括 `20260420-091822-local-8e021ea7` Full V2 C-route run 和 `20260420-120416-local-c72eabab` ARD Method 2 run；更早的主线历史结果仍可从 `main` 或历史提交中追溯。
+> Branch artifact policy: `codex/proposed-v2` 保留当前分支的 traceable result batches。2026-04-20 当前同步范围包括 `20260420-091822-local-8e021ea7` Full V2 C-route run 和 `20260420-120416-71650f7` ARD Method 2 run；更早的主线历史结果仍可从 `main` 或历史提交中追溯。
 
-### 2026-04-20：`local-c72eabab` ARD Method 2 同场 full paper run
+### 2026-04-20：`71650f7` ARD Method 2 同场 full paper run
 
-- Version hash: `local-c72eabab`
+- Version hash: `71650f7`
+- Former pending local hash: `local-c72eabab`
 - Base HEAD: `588318c`
 - Branch: `codex/proposed-v2`
 - Run command: `run_project(1:10, default_config(pwd, 'paper'))`
-- Result path pattern: `results/<case-name>/20260420-120416-local-c72eabab/`
-- Worktree state: uncommitted code/docs/results changes; this remains a pending local-hash result, not a clean Git archive.
+- Result path pattern: `results/<case-name>/20260420-120416-71650f7/`
+- Worktree state: this run was generated from uncommitted code/docs/results and later mapped from `local-c72eabab` to Git code commit `71650f7`; it is not a clean Git archive rerun.
 
 #### 一句话结论
 
@@ -56,23 +57,23 @@
 
 #### 关键图片
 
-以下图片来自 `20260420-120416-local-c72eabab` full paper-profile run，并已复制到 `docs/assets/`。
+以下图片来自 `20260420-120416-71650f7` full paper-profile run，并已复制到 `docs/assets/`。
 
-![case03 ard full unseen](assets/case03-ard-full-unseen-local-c72eabab.png)
+![case03 ard full unseen](assets/case03-ard-full-unseen-71650f7.png)
 
-![case03 ard full edge hard](assets/case03-ard-full-edge-hard-local-c72eabab.png)
+![case03 ard full edge hard](assets/case03-ard-full-edge-hard-71650f7.png)
 
-![case04 ard full calibration count](assets/case04-ard-full-calibration-count-local-c72eabab.png)
+![case04 ard full calibration count](assets/case04-ard-full-calibration-count-71650f7.png)
 
-![case05 ard full sampling](assets/case05-ard-full-sampling-local-c72eabab.png)
+![case05 ard full sampling](assets/case05-ard-full-sampling-71650f7.png)
 
-![case07 ard full snr](assets/case07-ard-full-snr-local-c72eabab.png)
+![case07 ard full snr](assets/case07-ard-full-snr-71650f7.png)
 
-![case08 ard full snapshots](assets/case08-ard-full-snapshots-local-c72eabab.png)
+![case08 ard full snapshots](assets/case08-ard-full-snapshots-71650f7.png)
 
-![case09 ard full two source](assets/case09-ard-full-two-source-local-c72eabab.png)
+![case09 ard full two source](assets/case09-ard-full-two-source-71650f7.png)
 
-![case10 ard full random split](assets/case10-ard-full-random-split-local-c72eabab.png)
+![case10 ard full random split](assets/case10-ard-full-random-split-71650f7.png)
 
 #### 仍然存在的风险或边界
 

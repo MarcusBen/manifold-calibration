@@ -1,4 +1,4 @@
-# manifold calibration
+﻿# manifold calibration
 
 这个仓库保存 MATLAB 实验代码、HFSS 数据、可追溯实验结果和论文证据链记录。当前主线是用少量校准角重构未见方向流形，并比较 `Ideal / Interpolation / ARD / Proposed / HFSS Oracle` 在 MUSIC DOA 任务中的表现。
 
@@ -9,25 +9,25 @@
 
 ## 最新摘要
 
-截至 2026-04-20，当前分支 `codex/proposed-v2` 的最新有效评阅批次是 `20260420-120416-local-c72eabab`。这一批把 `array_response_decomposition_algorithm.md` 中可由当前数据支持的 **ARD Method 2** 加为正式同场 baseline，并在 `paper` profile 下重跑 10 个 case。
+截至 2026-04-20，当前分支 `codex/proposed-v2` 的最新有效评阅批次是 `20260420-120416-71650f7`。这一批把 `array_response_decomposition_algorithm.md` 中可由当前数据支持的 **ARD Method 2** 加为正式同场 baseline，并在 `paper` profile 下重跑 10 个 case。
 
 - 默认 HFSS 数据源为 `data/hfss/step0.2deg.csv`，理想阵列基线仍按 `elementSpacingLambda = 0.25` 生成。
 - ARD Method 2 使用 complex correction-vector interpolation：先在校准角计算 `g(theta)=a_HFSS(theta)./a_ideal(theta)`，再在 `u = sin(theta)` 域插值并重构流形。
 - 本轮没有实现 unknown coupling matrix `C` 的 Method 3；不能把当前结果写成完整 array response decomposition 路线已经完成。
 - `Proposed V2` 的 Full V2 C-route 已在前一批 `20260420-091822-local-8e021ea7` 完成同场 full run，但结果没有稳定优于 `Interpolation` 或 `Proposed V1`。
-- 最新 comments 明确基于 `20260420-120416-local-c72eabab`：ARD 已成为强 baseline，下一步优先方向应是重构 Proposed 算法，而不是继续加 case 难度或立即转向 2D DOA。
+- 最新 comments 明确基于 `20260420-120416-71650f7`：ARD 已成为强 baseline，下一步优先方向应是重构 Proposed 算法，而不是继续加 case 难度或立即转向 2D DOA。
 
 ## Version Trace
 
-- Current pending local hash: `local-c72eabab`
-- Current pending run: `results/<case-name>/20260420-120416-local-c72eabab/`
+- Former pending local hash: mapped to `71650f7`
+- Current traceable run: `results/<case-name>/20260420-120416-71650f7/`
 - Previous pending run on this branch: `results/<case-name>/20260420-091822-local-8e021ea7/`
 - Base HEAD for both 2026-04-20 runs: `588318c`
 - Working branch: `codex/proposed-v2`
-- Latest reviewed comments hash: `local-c72eabab`
-- Review status: comments match the current ARD run before Git hash finalization
-- Git code commit hash: pending synchronization
-- Hash finalization commit hash: pending synchronization
+- Latest reviewed comments hash: `71650f7`
+- Review status: comments match the current ARD code/results commit; final branch also includes hash-finalization metadata
+- Git code commit hash: `71650f7`
+- Hash finalization commit hash: this metadata commit; see final published branch tip
 - Published branch: `origin/codex/proposed-v2`
 
 ## 当前结果判断
@@ -39,7 +39,7 @@
 
 ## 仍需保留的边界
 
-- `local-c72eabab` 仍是 pending local hash；同步后需要映射到真实 Git code commit hash。
+- `71650f7` 是 `local-c72eabab` 映射后的 Git code commit hash；该批运行原始生成时仍来自 dirty worktree，不是 clean repo 重新运行结果。
 - ARD Method 2 同时校正幅度和相位，不是当前 phase-only Interpolation 的同类预算对照；论文里应写成更强的 complex correction-vector baseline。
 - 当前 Proposed V2 / Full V2 C-route 不能写成稳定胜过 V1、Interpolation 或 ARD；它更像一个已验证但暂未成功的 task-supervised 路线。
 - 2026-04-20 的最新阶段判断是：1D benchmark 已经足够成熟，主要瓶颈在 Proposed 算法结构本身，而不是 case 难度不足。

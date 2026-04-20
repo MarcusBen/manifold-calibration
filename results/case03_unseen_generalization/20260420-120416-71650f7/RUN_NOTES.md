@@ -1,10 +1,10 @@
-# Run Notes
+﻿# Run Notes
 
-- Case: `case05_sampling_strategy_sensitivity`
-- Timestamp: `2026-04-20 12:09:46`
-- Pending local hash: `local-c72eabab`
+- Case: `case03_unseen_generalization`
+- Timestamp: `2026-04-20 12:05:00`
+- Git code commit hash: `71650f7`
 - Base HEAD: `588318c`
-- Run id: `20260420-120416-local-c72eabab`
+- Run id: `20260420-120416-71650f7`
 - Command: `run_project(1:10, default_config(pwd, 'paper'))`
 - Notes: `Full paper-profile rerun with ARD Method-2 included in the official method lists; merged local-e866e3df outputs will be deleted after validation.`
 

@@ -1,10 +1,10 @@
-# Run Notes
+﻿# Run Notes
 
-- Case: `case02_dominant_mismatch`
-- Timestamp: `2026-04-20 12:04:52`
-- Pending local hash: `local-c72eabab`
+- Case: `case10_random_split_robustness`
+- Timestamp: `2026-04-20 12:25:38`
+- Git code commit hash: `71650f7`
 - Base HEAD: `588318c`
-- Run id: `20260420-120416-local-c72eabab`
+- Run id: `20260420-120416-71650f7`
 - Command: `run_project(1:10, default_config(pwd, 'paper'))`
 - Notes: `Full paper-profile rerun with ARD Method-2 included in the official method lists; merged local-e866e3df outputs will be deleted after validation.`
 
