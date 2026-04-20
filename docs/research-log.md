@@ -16,7 +16,136 @@
 
 ## 最新整理
 
-> Branch artifact policy: `codex/proposed-v2` 只保留 `20260419-123007-2962bc3` 这一批新分支实验结果和对应 `docs/assets` 图片；更早的历史结果仍可从 `main` 或历史提交中追溯。
+> Branch artifact policy: `codex/proposed-v2` 保留当前分支的 traceable result batches。2026-04-20 当前同步范围包括 `20260420-091822-local-8e021ea7` Full V2 C-route run 和 `20260420-120416-local-c72eabab` ARD Method 2 run；更早的主线历史结果仍可从 `main` 或历史提交中追溯。
+
+### 2026-04-20：`local-c72eabab` ARD Method 2 同场 full paper run
+
+- Version hash: `local-c72eabab`
+- Base HEAD: `588318c`
+- Branch: `codex/proposed-v2`
+- Run command: `run_project(1:10, default_config(pwd, 'paper'))`
+- Result path pattern: `results/<case-name>/20260420-120416-local-c72eabab/`
+- Worktree state: uncommitted code/docs/results changes; this remains a pending local-hash result, not a clean Git archive.
+
+#### 一句话结论
+
+本轮把 `array_response_decomposition_algorithm.md` 中可由当前数据支持的 **ARD Method 2** 加为正式同场 baseline，并重新运行 paper profile 全部 10 个 case。ARD 使用 complex correction-vector interpolation：计算 \(g(\theta_l)=a_{\mathrm{HFSS}}(\theta_l)\oslash a_{\mathrm{ideal}}(\theta_l)\)，在 `u = sin(theta)` 域插值，再重构 \(\hat a_{\mathrm{ARD}}(\theta)=a_{\mathrm{ideal}}(\theta)\odot \hat g(\theta)\)。本轮没有实现 unknown coupling matrix `C` 的 Method 3。
+
+#### 代码与行为变化
+
+- `build_sparse_models` 新增 `models.AARD` 和 `models.ardModel`；ARD 在校准角数值精确穿过 HFSS，检查中最大校准角误差约 `4.36e-16`。
+- `local_named_methods` 支持 `ard`，标签为 `ARD`。
+- Case 3/4/7/8/9 的正式方法列表为 `Ideal / Interpolation / ARD / Proposed V1 / Proposed V2 / HFSS Oracle`。
+- Case 5 的方法列表为 `ARD / Proposed V1 / Proposed V2`；Case 10 为 `Ideal / Interp / ARD / Proposed V1 / Proposed V2`。
+- 先前合并脚本结果和失败结果已删除；本条记录的是同场全量重跑结果，不再使用合并版数值。
+
+#### 全量运行与验收
+
+- 10 个 case 均生成 `.mat`、`.png` 和 `RUN_NOTES.md`。
+- Case 3/4/5/7/8/9/10 的 `.mat` 均包含 `ARD` 方法标签。
+- Case 9: `taskEvalOverlapCount = 0`，最终评估 pair 数为 `152`，确认 Full V2 held-out task pairs 仍未泄漏进正式 Case 9 评估。
+- 文档图片已复制到 `docs/assets/`；旧合并图片已删除。
+
+#### 结果摘要
+
+- Case 3 在 `L = 9` 时，mean unseen relative error 为 `Ideal 0.3210 / Interpolation 0.0447 / ARD 0.0010 / Proposed V1 0.0453 / Proposed V2 0.1054 / HFSS Oracle 0`；ARD 在流形重构指标上显著接近 Oracle。
+- Case 7 在 `SNR = 20 dB` 时，RMSE 为 `Ideal 3.7502 / Interpolation 0.0016 / ARD 0.0037 / Proposed V1 0.0140 / Proposed V2 0.0114 / HFSS Oracle 0.0037 deg`。
+- Case 8 在 `SNR = 10 dB, snapshots = 1000` 时，RMSE 为 `3.7545 / 0.0464 / ARD 0.0469 / 0.0606 / 0.0593 / 0.0473 deg`。
+- Case 9 mean resolution 为 `Ideal 0.0987 / Interpolation 0.1262 / ARD 0.1245 / Proposed V1 0.1268 / Proposed V2 0.1148 / HFSS Oracle 0.1238`；ARD 接近 Oracle/Interpolation，但不稳定超过 Proposed V1。
+- Case 10 平均 manifold error 为 `Ideal 0.3214 / Interp 0.0459 / ARD 0.0056 / Proposed V1 0.0461 / Proposed V2 0.1025`；平均 single-source RMSE 为 `3.7287 / 0.1262 / ARD 0.1035 / 0.1138 / 0.1461 deg`。
+
+#### 关键图片
+
+以下图片来自 `20260420-120416-local-c72eabab` full paper-profile run，并已复制到 `docs/assets/`。
+
+![case03 ard full unseen](assets/case03-ard-full-unseen-local-c72eabab.png)
+
+![case03 ard full edge hard](assets/case03-ard-full-edge-hard-local-c72eabab.png)
+
+![case04 ard full calibration count](assets/case04-ard-full-calibration-count-local-c72eabab.png)
+
+![case05 ard full sampling](assets/case05-ard-full-sampling-local-c72eabab.png)
+
+![case07 ard full snr](assets/case07-ard-full-snr-local-c72eabab.png)
+
+![case08 ard full snapshots](assets/case08-ard-full-snapshots-local-c72eabab.png)
+
+![case09 ard full two source](assets/case09-ard-full-two-source-local-c72eabab.png)
+
+![case10 ard full random split](assets/case10-ard-full-random-split-local-c72eabab.png)
+
+#### 仍然存在的风险或边界
+
+- ARD Method 2 同时校正幅度和相位，因此不是当前 phase-only Interpolation 的同类对照；论文表述需要明确它是更强的 complex correction-vector baseline。
+- ARD 在流形重构和 Case 10 单源随机 split 上很强，但在 Case 9 双源 resolution 上只接近 Oracle/Interpolation，并未稳定压过 Proposed V1。
+- Method 3 的 coupling matrix `C` 版本仍未实现；如需声称“array response decomposition 全路线”，后续需要单独研究 `C` 的估计约束和正则化。
+
+### 2026-04-20：`local-8e021ea7` Full V2 C-route 替代 V2-lite full paper run
+
+- Version hash: `local-8e021ea7`
+- Base HEAD: `588318c`
+- Branch: `codex/proposed-v2`
+- Worktree state: uncommitted code changes plus untracked reference file `C_route_full_v2_improvement_plan.md`; earlier intermediate run directories under `20260419-135127-local-aa29a0fd` were preserved.
+- Run command: `run_project(1:10, default_config(pwd, 'paper'))`
+- Result path pattern: `results/<case-name>/20260420-091822-local-8e021ea7/`
+- Run scope: all 10 cases, paper profile, no smoke run.
+
+#### 一句话结论
+
+本轮把公开标签 `Proposed V2` 从 V2-lite 替换为 **Full V2 C-route**：三段软门控相位模型保留为 Stage-I initializer，最终 `AProposedV2` 经过 held-out HFSS 单源/双源 task loss 的 SPSA + Adam-moment 细化。Full V2 已经完成可追溯全量运行，但结果没有稳定优于 `Interpolation` 或 `Proposed V1`，因此论文表述必须收窄为“已实现并验证 task-supervised Full V2 路线，目前证据不足以声称 V2 全局最优”。
+
+#### 代码与行为变化
+
+- `default_config` 中 `cfg.model.v2.stage = 'full'`，`pairTaskEnabled = true`，paper profile 使用 `numSpsaIterations = 24`。
+- `build_sparse_models` 现在保留 `AProposedV2Init` / `phaseFitV2InitFull` 作为 Stage-I 回看字段，`AProposedV2` / `phaseFitV2Full` 则保存 Full V2 任务细化后的结果。
+- Full V2 objective 包含 complex calibration、smooth/reg、single-source subspace/peak、pair subspace/peak 和 midpoint suppression；训练协方差使用 HFSS truth exact covariance，不使用随机 snapshots。
+- `v2Diagnostics` 保存 held-out single angles、task pairs、objective weights、objective history、initial/final objective 和是否 fallback 到 initializer。
+- Case 9 在正式评估 pair 中排除 `models.v2Diagnostics.taskPairsDeg`，结果保存 `taskPairsDeg`、`taskExcludedPairCount` 和 `taskEvalOverlapCount`。
+- Case 3 新增 edge-band unseen error 与 worst-10% unseen error；Case 6 改为 Full V2 task hyperparameter sensitivity；Case 7/8 新增 edge/high-mismatch 子集 RMSE、mean absolute bias 和 P90 absolute error。
+
+#### 全量运行与验收
+
+- 10 个 case 均生成 `.mat`、`.png` 和 `RUN_NOTES.md`。
+- Case 3/4/7/8/9 的方法标签包含 `Ideal / Interpolation / Proposed V1 / Proposed V2 / HFSS Oracle`；Case 10 使用 `Ideal / Interp / Proposed V1 / Proposed V2`。
+- Case 9: `taskExcludedPairCount = 16`，`taskEvalOverlapCount = 0`，最终评估 pair 数为 `152`，确认 held-out pair task 没有泄漏进正式 Case 9 评估。
+- 中间 run `local-aa29a0fd` 跑完了 10 个 case，但 Case 9 的 `taskEvalOverlapCount` 字段当时记录的是“排除数量”而不是“最终重叠数量”；代码修正后使用 `local-8e021ea7` 重新全量运行，本条只把 `local-8e021ea7` 作为有效验收 run。
+
+#### 结果摘要
+
+- Case 3 在 `L = 9` 时，mean unseen relative error 为 `Ideal 0.3210 / Interpolation 0.0447 / Proposed V1 0.0453 / Proposed V2 0.1054 / HFSS Oracle 0`；edge-band error 为 `0.5499 / 0.0479 / 0.0480 / 0.0990 / 0`。
+- Case 7 在 `SNR = 20 dB` 时，RMSE 为 `Ideal 3.7501 / Interpolation 0.0043 / Proposed V1 0.0137 / Proposed V2 0.0136 / HFSS Oracle 0.0043 deg`。
+- Case 8 在 `SNR = 10 dB, snapshots = 1000` 时，RMSE 为 `3.7542 / 0.0466 / 0.0596 / 0.0619 / 0.0464 deg`。
+- Case 9 mean resolution 为 `Ideal 0.0987 / Interpolation 0.1262 / Proposed V1 0.1274 / Proposed V2 0.1168 / HFSS Oracle 0.1231`；mean stable rate 为 `0.0057 / 0.0370 / 0.0359 / 0.0243 / 0.0336`。
+- Case 10 平均 manifold error 为 `Ideal 0.3214 / Interp 0.0459 / Proposed V1 0.0461 / Proposed V2 0.1025`；平均 single-source RMSE 为 `3.7287 / 0.1262 / 0.1138 / 0.1457 deg`。
+
+#### 关键图片
+
+以下图片来自 `20260420-091822-local-8e021ea7` full paper-profile run，并已复制到 `docs/assets/`。
+
+![case03 unseen full v2](assets/case03-unseen-error-full-v2-local-8e021ea7.png)
+
+![case03 edge hard full v2](assets/case03-edge-hard-full-v2-local-8e021ea7.png)
+
+![case06 v2 task sensitivity](assets/case06-v2-task-sensitivity-local-8e021ea7.png)
+
+![case07 snr full v2](assets/case07-snr-full-v2-local-8e021ea7.png)
+
+![case07 edge hard snr full v2](assets/case07-edge-hard-snr-full-v2-local-8e021ea7.png)
+
+![case08 snapshots full v2](assets/case08-snapshots-full-v2-local-8e021ea7.png)
+
+![case08 edge hard snapshots full v2](assets/case08-edge-hard-snapshots-full-v2-local-8e021ea7.png)
+
+![case09 two source full v2](assets/case09-two-source-full-v2-local-8e021ea7.png)
+
+![case10 random split full v2](assets/case10-random-split-full-v2-local-8e021ea7.png)
+
+#### 仍然存在的风险或边界
+
+- Full V2 使用 `heldout_hfss` task set，因此它是更强的 task-supervised 方法，不再与 `Interpolation` / `Proposed V1` 完全同预算。
+- 当前 Full V2 在 Case 3/8/9/10 没有稳定胜过 V1 或 Interpolation，尤其 Case 9 mean resolution 和 stable rate 均低于 V1；论文主张需要据此收窄。
+- 本轮没有连续优化 gate centers/beta，只优化固定门控结构下的分段 Chebyshev 系数；如果继续走 C-route，下一步应优先诊断 task loss 权重和 pair task 是否把单源/流形泛化拉坏。
+- 当前结果来自 dirty worktree 的 pending local hash；上传同步时需要由 `project-github-sync` 把 `local-8e021ea7` 替换为真实 Git commit hash。
 
 ### 2026-04-19：`2962bc3` Proposed-v2 Lite 与 V1 对照 full paper run
 

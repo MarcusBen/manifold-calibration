@@ -266,8 +266,10 @@ rng(cfg.randomSeed + 3, 'twister');
 outDir = local_case_output_dir(cfg, 'case03_unseen_generalization');
 
 lValues = cfg.case3.lValues;
-methodNames = {'Ideal', 'Interpolation', 'Proposed V1', 'Proposed V2', 'HFSS Oracle'};
+methodNames = {'Ideal', 'Interpolation', 'ARD', 'Proposed V1', 'Proposed V2', 'HFSS Oracle'};
 meanUnseenError = zeros(numel(lValues), numel(methodNames));
+edgeUnseenError = zeros(numel(lValues), numel(methodNames));
+worst10UnseenError = zeros(numel(lValues), numel(methodNames));
 storedModels = cell(1, numel(lValues));
 
 for lIdx = 1:numel(lValues)
@@ -277,15 +279,34 @@ for lIdx = 1:numel(lValues)
 
     metricsIdeal = compute_manifold_metrics(ctx.AH(:, models.testIdx), ctx.AI(:, models.testIdx));
     metricsInterp = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AInterp(:, models.testIdx));
+    metricsARD = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AARD(:, models.testIdx));
     metricsProposedV1 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV1(:, models.testIdx));
     metricsProposedV2 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV2(:, models.testIdx));
+    perMethodError = [ ...
+        metricsIdeal.relativeError(:), ...
+        metricsInterp.relativeError(:), ...
+        metricsARD.relativeError(:), ...
+        metricsProposedV1.relativeError(:), ...
+        metricsProposedV2.relativeError(:), ...
+        zeros(numel(models.testIdx), 1)];
 
     meanUnseenError(lIdx, :) = [ ...
         mean(metricsIdeal.relativeError), ...
         mean(metricsInterp.relativeError), ...
+        mean(metricsARD.relativeError), ...
         mean(metricsProposedV1.relativeError), ...
         mean(metricsProposedV2.relativeError), ...
         0];
+    edgeMask = abs(models.testAnglesDeg(:)) >= max(abs(ctx.thetaDeg)) - cfg.eval.edgeBandDeg;
+    if ~any(edgeMask)
+        edgeMask = true(numel(models.testIdx), 1);
+    end
+    [~, hardOrder] = sort(metricsIdeal.relativeError(:), 'descend');
+    worstCount = max(1, ceil(0.10 * numel(hardOrder)));
+    worstMask = false(numel(models.testIdx), 1);
+    worstMask(hardOrder(1:worstCount)) = true;
+    edgeUnseenError(lIdx, :) = mean(perMethodError(edgeMask, :), 1);
+    worst10UnseenError(lIdx, :) = mean(perMethodError(worstMask, :), 1);
 end
 
 repL = cfg.case3.representativeL;
@@ -308,6 +329,30 @@ ylabel('Mean unseen relative error');
 title('Case 3: unseen-direction manifold generalization');
 legend(methodNames, 'Location', 'best');
 save_figure(fig, fullfile(outDir, 'unseen_error_vs_L.png'));
+
+fig = figure('Visible', 'off', 'Position', [125 125 1250 520]);
+tiledlayout(1, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
+nexttile;
+hold on;
+for methodIdx = 1:numel(methodNames)
+    plot(lValues, edgeUnseenError(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+xlabel('Number of calibration angles L');
+ylabel('Mean edge-band unseen relative error');
+title(sprintf('Case 3: edge-band error, |angle| >= %.1f deg', max(abs(ctx.thetaDeg)) - cfg.eval.edgeBandDeg));
+
+nexttile;
+hold on;
+for methodIdx = 1:numel(methodNames)
+    plot(lValues, worst10UnseenError(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+xlabel('Number of calibration angles L');
+ylabel('Mean worst-10% unseen relative error');
+title('Case 3: hardest unseen angles by Ideal mismatch');
+legend(methodNames, 'Location', 'best');
+save_figure(fig, fullfile(outDir, 'edge_and_hard_unseen_error.png'));
 
 fig = figure('Visible', 'off', 'Position', [140 140 1200 700]);
 tiledlayout(numel(cfg.case3.representativeElements), 1, 'Padding', 'compact', 'TileSpacing', 'compact');
@@ -344,6 +389,7 @@ for angleIdx = 1:numRepAngles
     plot(elemAxis, abs(ctx.AH(:, gridIdx)), 'ko-', 'LineWidth', 1.4);
     plot(elemAxis, abs(ctx.AI(:, gridIdx)), 's-', 'LineWidth', 1.2);
     plot(elemAxis, abs(repModels.AInterp(:, gridIdx)), 'd--', 'LineWidth', 1.2);
+    plot(elemAxis, abs(repModels.AARD(:, gridIdx)), 'x-', 'LineWidth', 1.2);
     plot(elemAxis, abs(repModels.AProposedV1(:, gridIdx)), '^-', 'LineWidth', 1.2);
     plot(elemAxis, abs(repModels.AProposedV2(:, gridIdx)), 'v-', 'LineWidth', 1.4);
     grid on;
@@ -356,6 +402,7 @@ for angleIdx = 1:numRepAngles
     plot(elemAxis, rad2deg(unwrap(angle(ctx.AH(:, gridIdx)))), 'ko-', 'LineWidth', 1.4);
     plot(elemAxis, rad2deg(unwrap(angle(ctx.AI(:, gridIdx)))), 's-', 'LineWidth', 1.2);
     plot(elemAxis, rad2deg(unwrap(angle(repModels.AInterp(:, gridIdx)))), 'd--', 'LineWidth', 1.2);
+    plot(elemAxis, rad2deg(unwrap(angle(repModels.AARD(:, gridIdx)))), 'x-', 'LineWidth', 1.2);
     plot(elemAxis, rad2deg(unwrap(angle(repModels.AProposedV1(:, gridIdx)))), '^-', 'LineWidth', 1.2);
     plot(elemAxis, rad2deg(unwrap(angle(repModels.AProposedV2(:, gridIdx)))), 'v-', 'LineWidth', 1.4);
     grid on;
@@ -363,7 +410,7 @@ for angleIdx = 1:numRepAngles
     ylabel('Phase (deg)');
     title(sprintf('Phase at %.1f deg', queryAngle));
 end
-legend({'HFSS truth', 'Ideal', 'Interpolation', 'Proposed V1', 'Proposed V2'}, ...
+legend({'HFSS truth', 'Ideal', 'Interpolation', 'ARD', 'Proposed V1', 'Proposed V2'}, ...
     'Location', 'eastoutside');
 save_figure(fig, fullfile(outDir, 'steering_vector_comparison.png'));
 
@@ -372,6 +419,8 @@ caseResult.outputDir = outDir;
 caseResult.methodLabels = methodNames;
 caseResult.lValues = lValues;
 caseResult.meanUnseenError = meanUnseenError;
+caseResult.edgeUnseenError = edgeUnseenError;
+caseResult.worst10UnseenError = worst10UnseenError;
 caseResult.representativeModels = repModels;
 save(fullfile(outDir, 'case03_results.mat'), 'caseResult');
 end
@@ -381,8 +430,8 @@ rng(cfg.randomSeed + 4, 'twister');
 outDir = local_case_output_dir(cfg, 'case04_calibration_count_sensitivity');
 
 lValues = cfg.case4.lValues;
-methodKeys = {'ideal', 'interp', 'proposed_v1', 'proposed_v2', 'oracle'};
-methodsLegend = {'Ideal', 'Interpolation', 'Proposed V1', 'Proposed V2', 'HFSS Oracle'};
+methodKeys = {'ideal', 'interp', 'ard', 'proposed_v1', 'proposed_v2', 'oracle'};
+methodsLegend = {'Ideal', 'Interpolation', 'ARD', 'Proposed V1', 'Proposed V2', 'HFSS Oracle'};
 
 manifoldError = zeros(numel(lValues), numel(methodKeys));
 singleRmse = zeros(numel(lValues), numel(methodKeys));
@@ -406,11 +455,13 @@ for lIdx = 1:numel(lValues)
 
     metricsIdeal = compute_manifold_metrics(ctx.AH(:, models.testIdx), ctx.AI(:, models.testIdx));
     metricsInterp = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AInterp(:, models.testIdx));
+    metricsARD = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AARD(:, models.testIdx));
     metricsProposedV1 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV1(:, models.testIdx));
     metricsProposedV2 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV2(:, models.testIdx));
     manifoldError(lIdx, :) = [ ...
         mean(metricsIdeal.relativeError), ...
         mean(metricsInterp.relativeError), ...
+        mean(metricsARD.relativeError), ...
         mean(metricsProposedV1.relativeError), ...
         mean(metricsProposedV2.relativeError), ...
         0];
@@ -537,8 +588,8 @@ outDir = local_case_output_dir(cfg, 'case05_sampling_strategy_sensitivity');
 
 strategyNames = cfg.case5.strategyNames;
 snrSweep = cfg.case5.snrSweepDb;
-methodKeys = {'proposed_v1', 'proposed_v2'};
-methodLabels = {'Proposed V1', 'Proposed V2'};
+methodKeys = {'ard', 'proposed_v1', 'proposed_v2'};
+methodLabels = {'ARD', 'Proposed V1', 'Proposed V2'};
 numMethods = numel(methodKeys);
 
 meanUnseenError = zeros(numel(strategyNames), numMethods);
@@ -569,7 +620,10 @@ for strategyIdx = 1:numel(strategyNames)
             ctx.AH(:, models.testIdx), models.AProposedV1(:, models.testIdx));
         metricsProposedV2 = compute_manifold_metrics( ...
             ctx.AH(:, models.testIdx), models.AProposedV2(:, models.testIdx));
+        metricsARD = compute_manifold_metrics( ...
+            ctx.AH(:, models.testIdx), models.AARD(:, models.testIdx));
         unseenTrials(trialIdx, :) = [ ...
+            mean(metricsARD.relativeError), ...
             mean(metricsProposedV1.relativeError), ...
             mean(metricsProposedV2.relativeError)];
 
@@ -629,13 +683,13 @@ end
 grid on;
 xlabel('SNR (dB)');
 ylabel('DOA RMSE (deg)');
-title('Case 5: Proposed V1 DOA RMSE');
+title('Case 5: ARD DOA RMSE');
 legend(strategyNames, 'Location', 'best');
 
 nexttile;
 hold on;
 for strategyIdx = 1:numel(strategyNames)
-    errorbar(snrSweep, meanRmse(strategyIdx, :, 2), stdRmse(strategyIdx, :, 2), ...
+    errorbar(snrSweep, meanRmse(strategyIdx, :, 3), stdRmse(strategyIdx, :, 3), ...
         'o-', 'LineWidth', 1.4, 'MarkerSize', 6);
 end
 grid on;
@@ -662,99 +716,103 @@ rng(cfg.randomSeed + 6, 'twister');
 outDir = local_case_output_dir(cfg, 'case06_model_sensitivity');
 
 calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case6.l, 'uniform');
-basisTypes = cfg.case6.basisTypes;
-orders = cfg.case6.orders;
-lambdas = cfg.case6.lambdas;
+lambdaSingleValues = cfg.case6.lambdaSingleValues;
+lambdaPairValues = cfg.case6.lambdaPairValues;
+lambdaMidValues = cfg.case6.lambdaMidValues;
+taskPairCounts = cfg.case6.taskPairCounts;
 
-errorCubeV1 = zeros(numel(orders), numel(lambdas), numel(basisTypes));
-errorCubeV2 = zeros(numel(orders), numel(lambdas), numel(basisTypes));
+baseModels = build_sparse_models(ctx, calIdx, cfg.model);
+metricsV1 = compute_manifold_metrics(ctx.AH(:, baseModels.testIdx), baseModels.AProposedV1(:, baseModels.testIdx));
+v1ReferenceError = mean(metricsV1.relativeError);
 
-for basisIdx = 1:numel(basisTypes)
-    for orderIdx = 1:numel(orders)
-        for lambdaIdx = 1:numel(lambdas)
-            modelCfg = cfg.model;
-            modelCfg.basisType = basisTypes{basisIdx};
-            modelCfg.order = orders(orderIdx);
-            modelCfg.lambda = lambdas(lambdaIdx);
+errorCubeV2 = zeros(numel(lambdaSingleValues), numel(lambdaPairValues), ...
+    numel(lambdaMidValues), numel(taskPairCounts));
+objectiveInitial = zeros(size(errorCubeV2));
+objectiveFinal = zeros(size(errorCubeV2));
 
-            models = build_sparse_models(ctx, calIdx, modelCfg);
-            metricsV1 = compute_manifold_metrics( ...
-                ctx.AH(:, models.testIdx), models.AProposedV1(:, models.testIdx));
-            metricsV2 = compute_manifold_metrics( ...
-                ctx.AH(:, models.testIdx), models.AProposedV2(:, models.testIdx));
-            errorCubeV1(orderIdx, lambdaIdx, basisIdx) = mean(metricsV1.relativeError);
-            errorCubeV2(orderIdx, lambdaIdx, basisIdx) = mean(metricsV2.relativeError);
+for singleIdx = 1:numel(lambdaSingleValues)
+    for pairIdx = 1:numel(lambdaPairValues)
+        for midIdx = 1:numel(lambdaMidValues)
+            for countIdx = 1:numel(taskPairCounts)
+                modelCfg = cfg.model;
+                modelCfg.v2.lambdaSingle = lambdaSingleValues(singleIdx);
+                modelCfg.v2.lambdaPair = lambdaPairValues(pairIdx);
+                modelCfg.v2.lambdaMid = lambdaMidValues(midIdx);
+                modelCfg.v2.taskPairCount = taskPairCounts(countIdx);
+                modelCfg.v2.numSpsaIterations = cfg.case6.case6V2Iterations;
+                models = build_sparse_models(ctx, calIdx, modelCfg);
+                metricsV2 = compute_manifold_metrics( ...
+                    ctx.AH(:, models.testIdx), models.AProposedV2(:, models.testIdx));
+                errorCubeV2(singleIdx, pairIdx, midIdx, countIdx) = mean(metricsV2.relativeError);
+                objectiveInitial(singleIdx, pairIdx, midIdx, countIdx) = models.v2Diagnostics.initialObjective;
+                objectiveFinal(singleIdx, pairIdx, midIdx, countIdx) = models.v2Diagnostics.finalObjective;
+            end
         end
     end
 end
 
-bestCurveV1 = squeeze(min(errorCubeV1, [], 2));
-bestCurveV2 = squeeze(min(errorCubeV2, [], 2));
-
-fig = figure('Visible', 'off', 'Position', [120 100 1450 820]);
-tiledlayout(2, 3, 'Padding', 'compact', 'TileSpacing', 'compact');
-
-for basisIdx = 1:numel(basisTypes)
-    nexttile;
-    imagesc(errorCubeV1(:, :, basisIdx));
-    colorbar;
-    set(gca, 'XTick', 1:numel(lambdas), ...
-        'XTickLabel', arrayfun(@num2str, lambdas, 'UniformOutput', false), ...
-        'YTick', 1:numel(orders), ...
-        'YTickLabel', arrayfun(@num2str, orders, 'UniformOutput', false));
-    xlabel('\lambda');
-    ylabel('Order P');
-    title(sprintf('Case 6: Proposed V1, %s basis', basisTypes{basisIdx}));
+bestByTaskPairCount = zeros(numel(taskPairCounts), 1);
+for countIdx = 1:numel(taskPairCounts)
+    slice = errorCubeV2(:, :, :, countIdx);
+    bestByTaskPairCount(countIdx) = min(slice(:));
 end
+singlePairBest = squeeze(min(min(errorCubeV2, [], 4), [], 3));
+pairMidBest = squeeze(min(min(errorCubeV2, [], 4), [], 1));
+
+fig = figure('Visible', 'off', 'Position', [120 100 1350 780]);
+tiledlayout(2, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
 
 nexttile;
-hold on;
-for basisIdx = 1:numel(basisTypes)
-    plot(orders, bestCurveV1(:, basisIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
-end
+bar([v1ReferenceError, min(errorCubeV2(:))]);
 grid on;
-xlabel('Model order P');
-ylabel('Best unseen relative error over \lambda');
-title(sprintf('Case 6: Proposed V1 best curve, L = %d', cfg.case6.l));
-legend(basisTypes, 'Location', 'best');
-
-for basisIdx = 1:numel(basisTypes)
-    nexttile;
-    imagesc(errorCubeV2(:, :, basisIdx));
-    colorbar;
-    set(gca, 'XTick', 1:numel(lambdas), ...
-        'XTickLabel', arrayfun(@num2str, lambdas, 'UniformOutput', false), ...
-        'YTick', 1:numel(orders), ...
-        'YTickLabel', arrayfun(@num2str, orders, 'UniformOutput', false));
-    xlabel('\lambda');
-    ylabel('Order P');
-    title(sprintf('Case 6: Proposed V2, %s basis', basisTypes{basisIdx}));
-end
+set(gca, 'XTickLabel', {'Proposed V1', 'Best Full V2'});
+ylabel('Mean unseen relative error');
+title(sprintf('Case 6: V1 reference vs Full V2, L = %d', cfg.case6.l));
 
 nexttile;
-hold on;
-for basisIdx = 1:numel(basisTypes)
-    plot(orders, bestCurveV2(:, basisIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
-end
+plot(taskPairCounts, bestByTaskPairCount, 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
 grid on;
-xlabel('Model order P');
-ylabel('Best unseen relative error over \lambda');
-title(sprintf('Case 6: Proposed V2 best curve, L = %d', cfg.case6.l));
-legend(basisTypes, 'Location', 'best');
+xlabel('Held-out task pair count');
+ylabel('Best Full V2 unseen error');
+title('Case 6: task pair count sensitivity');
+
+nexttile;
+imagesc(singlePairBest);
+colorbar;
+set(gca, 'XTick', 1:numel(lambdaPairValues), ...
+    'XTickLabel', arrayfun(@num2str, lambdaPairValues, 'UniformOutput', false), ...
+    'YTick', 1:numel(lambdaSingleValues), ...
+    'YTickLabel', arrayfun(@num2str, lambdaSingleValues, 'UniformOutput', false));
+xlabel('\lambda_{pair}');
+ylabel('\lambda_{single}');
+title('Best over \lambda_{mid} and task pair count');
+
+nexttile;
+imagesc(pairMidBest);
+colorbar;
+set(gca, 'XTick', 1:numel(lambdaMidValues), ...
+    'XTickLabel', arrayfun(@num2str, lambdaMidValues, 'UniformOutput', false), ...
+    'YTick', 1:numel(lambdaPairValues), ...
+    'YTickLabel', arrayfun(@num2str, lambdaPairValues, 'UniformOutput', false));
+xlabel('\lambda_{mid}');
+ylabel('\lambda_{pair}');
+title('Best over \lambda_{single} and task pair count');
 save_figure(fig, fullfile(outDir, 'model_sensitivity.png'));
 
 caseResult = struct();
 caseResult.outputDir = outDir;
-caseResult.orders = orders;
-caseResult.lambdas = lambdas;
-caseResult.basisTypes = basisTypes;
-caseResult.methodLabels = {'Proposed V1', 'Proposed V2'};
-caseResult.errorCube = errorCubeV1;
-caseResult.errorCubeV1 = errorCubeV1;
+caseResult.methodLabels = {'Proposed V1', 'Full Proposed V2'};
+caseResult.lambdaSingleValues = lambdaSingleValues;
+caseResult.lambdaPairValues = lambdaPairValues;
+caseResult.lambdaMidValues = lambdaMidValues;
+caseResult.taskPairCounts = taskPairCounts;
+caseResult.case6V2Iterations = cfg.case6.case6V2Iterations;
+caseResult.v1ReferenceError = v1ReferenceError;
+caseResult.errorCube = errorCubeV2;
 caseResult.errorCubeV2 = errorCubeV2;
-caseResult.bestCurve = bestCurveV1;
-caseResult.bestCurveV1 = bestCurveV1;
-caseResult.bestCurveV2 = bestCurveV2;
+caseResult.objectiveInitial = objectiveInitial;
+caseResult.objectiveFinal = objectiveFinal;
+caseResult.bestByTaskPairCount = bestByTaskPairCount;
 save(fullfile(outDir, 'case06_results.mat'), 'caseResult');
 end
 
@@ -764,14 +822,21 @@ outDir = local_case_output_dir(cfg, 'case07_single_source_snr');
 
 calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'uniform');
 models = build_sparse_models(ctx, calIdx, cfg.model);
-methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed_v1', 'proposed_v2', 'oracle'});
+methods = local_named_methods(ctx, models, {'ideal', 'interp', 'ard', 'proposed_v1', 'proposed_v2', 'oracle'});
 snrSweep = cfg.case7.snrSweepDb;
 evalAngles = local_single_source_eval_angles(ctx, models, cfg);
+evalSubsets = local_doa_eval_subsets(ctx, evalAngles, cfg);
 
 rmse = zeros(numel(snrSweep), numel(methods));
 successRate = zeros(numel(snrSweep), numel(methods));
 meanAbsBias = zeros(numel(snrSweep), numel(methods));
 p90AbsError = zeros(numel(snrSweep), numel(methods));
+edgeRmse = zeros(numel(snrSweep), numel(methods));
+edgeMeanAbsBias = zeros(numel(snrSweep), numel(methods));
+edgeP90AbsError = zeros(numel(snrSweep), numel(methods));
+hardRmse = zeros(numel(snrSweep), numel(methods));
+hardMeanAbsBias = zeros(numel(snrSweep), numel(methods));
+hardP90AbsError = zeros(numel(snrSweep), numel(methods));
 details = cell(1, numel(snrSweep));
 
 for snrIdx = 1:numel(snrSweep)
@@ -791,6 +856,12 @@ for snrIdx = 1:numel(snrSweep)
         successRate(snrIdx, methodIdx) = bench.methods(methodIdx).successRate;
         meanAbsBias(snrIdx, methodIdx) = mean(bench.methods(methodIdx).perTargetAbsBias);
         p90AbsError(snrIdx, methodIdx) = bench.methods(methodIdx).p90AbsError;
+        edgeRmse(snrIdx, methodIdx) = mean(bench.methods(methodIdx).perTargetRmse(evalSubsets.edgeMask));
+        edgeMeanAbsBias(snrIdx, methodIdx) = mean(bench.methods(methodIdx).perTargetAbsBias(evalSubsets.edgeMask));
+        edgeP90AbsError(snrIdx, methodIdx) = mean(bench.methods(methodIdx).perTargetP90AbsError(evalSubsets.edgeMask));
+        hardRmse(snrIdx, methodIdx) = mean(bench.methods(methodIdx).perTargetRmse(evalSubsets.highMismatchMask));
+        hardMeanAbsBias(snrIdx, methodIdx) = mean(bench.methods(methodIdx).perTargetAbsBias(evalSubsets.highMismatchMask));
+        hardP90AbsError(snrIdx, methodIdx) = mean(bench.methods(methodIdx).perTargetP90AbsError(evalSubsets.highMismatchMask));
     end
 end
 
@@ -841,6 +912,24 @@ legend({methods.label}, 'Location', 'best');
 local_add_truth_scan_sgtitle('Case 7: single-source SNR sweep');
 save_figure(fig, fullfile(outDir, 'rmse_and_success_vs_snr.png'));
 
+fig = figure('Visible', 'off', 'Position', [135 135 1280 840]);
+tiledlayout(2, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
+nexttile;
+local_plot_method_curves(snrSweep, edgeMeanAbsBias, methods, 'SNR (dB)', ...
+    'Mean absolute bias (deg)', 'Case 7: edge-band bias vs SNR');
+nexttile;
+local_plot_method_curves(snrSweep, hardMeanAbsBias, methods, 'SNR (dB)', ...
+    'Mean absolute bias (deg)', 'Case 7: high-mismatch bias vs SNR');
+nexttile;
+local_plot_method_curves(snrSweep, edgeP90AbsError, methods, 'SNR (dB)', ...
+    'Mean P90 absolute error (deg)', 'Case 7: edge-band tail error');
+nexttile;
+local_plot_method_curves(snrSweep, hardP90AbsError, methods, 'SNR (dB)', ...
+    'Mean P90 absolute error (deg)', 'Case 7: high-mismatch tail error');
+legend({methods.label}, 'Location', 'best');
+local_add_truth_scan_sgtitle('Case 7: task-relevant edge/high-mismatch subsets');
+save_figure(fig, fullfile(outDir, 'edge_hard_metrics_vs_snr.png'));
+
 [exampleAngle, exampleSelectionReason] = local_case7_example_angle(ctx, models, evalAngles, cfg.case7);
 
 fig = figure('Visible', 'off', 'Position', [150 150 1200 760]);
@@ -882,6 +971,13 @@ caseResult.rmse = rmse;
 caseResult.successRate = successRate;
 caseResult.meanAbsBias = meanAbsBias;
 caseResult.p90AbsError = p90AbsError;
+caseResult.evalSubsets = evalSubsets;
+caseResult.edgeRmse = edgeRmse;
+caseResult.edgeMeanAbsBias = edgeMeanAbsBias;
+caseResult.edgeP90AbsError = edgeP90AbsError;
+caseResult.highMismatchRmse = hardRmse;
+caseResult.highMismatchMeanAbsBias = hardMeanAbsBias;
+caseResult.highMismatchP90AbsError = hardP90AbsError;
 caseResult.exampleAngleDeg = exampleAngle;
 caseResult.exampleSelectionReason = exampleSelectionReason;
 caseResult.details = details;
@@ -894,14 +990,21 @@ outDir = local_case_output_dir(cfg, 'case08_single_source_snapshots');
 
 calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'uniform');
 models = build_sparse_models(ctx, calIdx, cfg.model);
-methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed_v1', 'proposed_v2', 'oracle'});
+methods = local_named_methods(ctx, models, {'ideal', 'interp', 'ard', 'proposed_v1', 'proposed_v2', 'oracle'});
 evalAngles = local_single_source_eval_angles(ctx, models, cfg);
+evalSubsets = local_doa_eval_subsets(ctx, evalAngles, cfg);
 
 snapshotSweep = cfg.case8.snapshotSweep;
 snrValues = cfg.case8.snrValuesDb;
 rmse = zeros(numel(snapshotSweep), numel(methods), numel(snrValues));
 meanAbsBias = zeros(numel(snapshotSweep), numel(methods), numel(snrValues));
 p90AbsError = zeros(numel(snapshotSweep), numel(methods), numel(snrValues));
+edgeRmse = zeros(numel(snapshotSweep), numel(methods), numel(snrValues));
+edgeMeanAbsBias = zeros(numel(snapshotSweep), numel(methods), numel(snrValues));
+edgeP90AbsError = zeros(numel(snapshotSweep), numel(methods), numel(snrValues));
+hardRmse = zeros(numel(snapshotSweep), numel(methods), numel(snrValues));
+hardMeanAbsBias = zeros(numel(snapshotSweep), numel(methods), numel(snrValues));
+hardP90AbsError = zeros(numel(snapshotSweep), numel(methods), numel(snrValues));
 details = cell(numel(snrValues), numel(snapshotSweep));
 
 for snrIdx = 1:numel(snrValues)
@@ -921,6 +1024,17 @@ for snrIdx = 1:numel(snrValues)
             rmse(snapIdx, methodIdx, snrIdx) = bench.methods(methodIdx).rmse;
             meanAbsBias(snapIdx, methodIdx, snrIdx) = mean(bench.methods(methodIdx).perTargetAbsBias);
             p90AbsError(snapIdx, methodIdx, snrIdx) = bench.methods(methodIdx).p90AbsError;
+            edgeRmse(snapIdx, methodIdx, snrIdx) = mean(bench.methods(methodIdx).perTargetRmse(evalSubsets.edgeMask));
+            edgeMeanAbsBias(snapIdx, methodIdx, snrIdx) = ...
+                mean(bench.methods(methodIdx).perTargetAbsBias(evalSubsets.edgeMask));
+            edgeP90AbsError(snapIdx, methodIdx, snrIdx) = ...
+                mean(bench.methods(methodIdx).perTargetP90AbsError(evalSubsets.edgeMask));
+            hardRmse(snapIdx, methodIdx, snrIdx) = ...
+                mean(bench.methods(methodIdx).perTargetRmse(evalSubsets.highMismatchMask));
+            hardMeanAbsBias(snapIdx, methodIdx, snrIdx) = ...
+                mean(bench.methods(methodIdx).perTargetAbsBias(evalSubsets.highMismatchMask));
+            hardP90AbsError(snapIdx, methodIdx, snrIdx) = ...
+                mean(bench.methods(methodIdx).perTargetP90AbsError(evalSubsets.highMismatchMask));
         end
     end
 end
@@ -963,6 +1077,22 @@ legend({methods.label}, 'Location', 'eastoutside');
 local_add_truth_scan_sgtitle('Case 8: snapshots reduce variance; estimator-manifold bias can remain');
 save_figure(fig, fullfile(outDir, 'rmse_vs_snapshots.png'));
 
+fig = figure('Visible', 'off', 'Position', [145 145 1380 820]);
+tiledlayout(numel(snrValues), 2, 'Padding', 'compact', 'TileSpacing', 'compact');
+for snrIdx = 1:numel(snrValues)
+    nexttile;
+    local_plot_method_curves(snapshotSweep, edgeMeanAbsBias(:, :, snrIdx), methods, ...
+        'Snapshots', 'Mean absolute bias (deg)', ...
+        sprintf('Case 8: edge-band bias, SNR = %g dB', snrValues(snrIdx)));
+    nexttile;
+    local_plot_method_curves(snapshotSweep, hardMeanAbsBias(:, :, snrIdx), methods, ...
+        'Snapshots', 'Mean absolute bias (deg)', ...
+        sprintf('Case 8: high-mismatch bias, SNR = %g dB', snrValues(snrIdx)));
+end
+legend({methods.label}, 'Location', 'eastoutside');
+local_add_truth_scan_sgtitle('Case 8: edge/high-mismatch bias under snapshot sweep');
+save_figure(fig, fullfile(outDir, 'edge_hard_metrics_vs_snapshots.png'));
+
 caseResult = struct();
 caseResult.outputDir = outDir;
 caseResult.models = models;
@@ -973,6 +1103,13 @@ caseResult.snrValues = snrValues;
 caseResult.rmse = rmse;
 caseResult.meanAbsBias = meanAbsBias;
 caseResult.p90AbsError = p90AbsError;
+caseResult.evalSubsets = evalSubsets;
+caseResult.edgeRmse = edgeRmse;
+caseResult.edgeMeanAbsBias = edgeMeanAbsBias;
+caseResult.edgeP90AbsError = edgeP90AbsError;
+caseResult.highMismatchRmse = hardRmse;
+caseResult.highMismatchMeanAbsBias = hardMeanAbsBias;
+caseResult.highMismatchP90AbsError = hardP90AbsError;
 caseResult.details = details;
 save(fullfile(outDir, 'case08_results.mat'), 'caseResult');
 end
@@ -983,9 +1120,13 @@ outDir = local_case_output_dir(cfg, 'case09_two_source_resolution');
 
 calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'uniform');
 models = build_sparse_models(ctx, calIdx, cfg.model);
-methods = local_named_methods(ctx, models, {'ideal', 'interp', 'proposed_v1', 'proposed_v2', 'oracle'});
+methods = local_named_methods(ctx, models, {'ideal', 'interp', 'ard', 'proposed_v1', 'proposed_v2', 'oracle'});
 
 [sourcePairs, pairSelection] = local_case9_source_pairs(cfg.case9, ctx, models.calAnglesDeg);
+taskPairsDeg = local_v2_task_pairs_from_models(models);
+[sourcePairs, pairSelection, taskExcludedPairCount] = local_exclude_task_pairs_from_case9( ...
+    sourcePairs, pairSelection, taskPairsDeg);
+taskEvalOverlapCount = local_count_task_eval_overlap(sourcePairs, taskPairsDeg);
 pairLabels = local_case9_pair_labels(sourcePairs);
 separationDeg = round(sourcePairs(:, 2) - sourcePairs(:, 1), 10);
 pairCenterDeg = mean(sourcePairs, 2);
@@ -1097,6 +1238,9 @@ caseResult.sourcePairsDeg = sourcePairs;
 caseResult.sourcePairLabels = pairLabels;
 caseResult.pairSelectionMode = pairSelection.mode;
 caseResult.pairSelectionScores = pairSelection;
+caseResult.taskPairsDeg = taskPairsDeg;
+caseResult.taskExcludedPairCount = taskExcludedPairCount;
+caseResult.taskEvalOverlapCount = taskEvalOverlapCount;
 caseResult.separationDeg = separationDeg;
 caseResult.pairCenterDeg = pairCenterDeg;
 caseResult.resolutionProb = resolutionProb;
@@ -1122,8 +1266,8 @@ rng(cfg.randomSeed + 10, 'twister');
 outDir = local_case_output_dir(cfg, 'case10_random_split_robustness');
 
 numSplits = cfg.case10.numSplits;
-methodKeys = {'ideal', 'interp', 'proposed_v1', 'proposed_v2'};
-methodLabels = {'Ideal', 'Interp', 'Proposed V1', 'Proposed V2'};
+methodKeys = {'ideal', 'interp', 'ard', 'proposed_v1', 'proposed_v2'};
+methodLabels = {'Ideal', 'Interp', 'ARD', 'Proposed V1', 'Proposed V2'};
 manifoldError = zeros(numSplits, numel(methodKeys));
 singleRmse = zeros(numSplits, numel(methodKeys));
 splitAngles = cell(numSplits, 1);
@@ -1136,11 +1280,13 @@ for splitIdx = 1:numSplits
 
     metricsIdeal = compute_manifold_metrics(ctx.AH(:, models.testIdx), ctx.AI(:, models.testIdx));
     metricsInterp = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AInterp(:, models.testIdx));
+    metricsARD = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AARD(:, models.testIdx));
     metricsProposedV1 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV1(:, models.testIdx));
     metricsProposedV2 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV2(:, models.testIdx));
     manifoldError(splitIdx, :) = [ ...
         mean(metricsIdeal.relativeError), ...
         mean(metricsInterp.relativeError), ...
+        mean(metricsARD.relativeError), ...
         mean(metricsProposedV1.relativeError), ...
         mean(metricsProposedV2.relativeError)];
 
@@ -1240,10 +1386,18 @@ fprintf(fid, '- Element spacing lambda: `%.12g`\n', cfg.array.elementSpacingLamb
 fprintf(fid, '- Case 1 high SNR dB: `%.12g`\n', cfg.case1.highSNRDb);
 fprintf(fid, '- Case 9 Monte Carlo: `%d`\n', cfg.case9.monteCarlo);
 fprintf(fid, '- Case 9 separation sweep: `%s`\n\n', mat2str(cfg.case9.separationSweepDeg));
+if isfield(cfg, 'model') && isfield(cfg.model, 'ard')
+    fprintf(fid, '- ARD enabled: `%d`\n', logical(cfg.model.ard.enabled));
+    fprintf(fid, '- ARD method: `%s`\n', cfg.model.ard.method);
+    fprintf(fid, '- ARD note: `Method 2 complex correction-vector interpolation; no unknown coupling matrix C is estimated.`\n\n');
+end
 if isfield(cfg, 'model') && isfield(cfg.model, 'v2')
     fprintf(fid, '- Proposed V2 enabled: `%d`\n', logical(cfg.model.v2.enabled));
     fprintf(fid, '- Proposed V2 stage: `%s`\n', cfg.model.v2.stage);
     fprintf(fid, '- Proposed V2 pair task enabled: `%d`\n\n', logical(cfg.model.v2.pairTaskEnabled));
+    fprintf(fid, '- Proposed V2 task data mode: `%s`\n', cfg.model.v2.taskDataMode);
+    fprintf(fid, '- Proposed V2 SPSA iterations: `%d`\n', cfg.model.v2.numSpsaIterations);
+    fprintf(fid, '- Proposed V2 note: `heldout_hfss uses extra task-supervised HFSS truth and is not same-budget with V1/Interpolation.`\n\n');
 end
 fprintf(fid, '## Git Status Short\n\n');
 fprintf(fid, '```text\n%s\n```\n', cfg.run.gitStatusShort);
@@ -1282,9 +1436,15 @@ end
 if ~isfield(cfg.model, 'v2') || isempty(cfg.model.v2)
     cfg.model.v2 = struct();
 end
+if ~isfield(cfg.model, 'ard') || isempty(cfg.model.ard)
+    cfg.model.ard = struct();
+end
+cfg.model.ard = local_set_default_field(cfg.model.ard, 'enabled', true);
+cfg.model.ard = local_set_default_field(cfg.model.ard, 'label', 'ARD');
+cfg.model.ard = local_set_default_field(cfg.model.ard, 'method', 'complex_correction_vector');
 cfg.model.v2 = local_set_default_field(cfg.model.v2, 'enabled', true);
 cfg.model.v2 = local_set_default_field(cfg.model.v2, 'label', 'Proposed V2');
-cfg.model.v2 = local_set_default_field(cfg.model.v2, 'stage', 'lite');
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'stage', 'full');
 cfg.model.v2 = local_set_default_field(cfg.model.v2, 'segmentCentersDeg', [-50 0 50]);
 cfg.model.v2 = local_set_default_field(cfg.model.v2, 'order', 2);
 cfg.model.v2 = local_set_default_field(cfg.model.v2, 'lambda', 1e-3);
@@ -1292,7 +1452,24 @@ cfg.model.v2 = local_set_default_field(cfg.model.v2, 'candidateMismatchWeights',
 cfg.model.v2 = local_set_default_field(cfg.model.v2, 'candidateEdgeWeights', [0.5 1 2]);
 cfg.model.v2 = local_set_default_field(cfg.model.v2, 'taskWeight', 0.25);
 cfg.model.v2 = local_set_default_field(cfg.model.v2, 'taskNeighborhoodDeg', 0.4);
-cfg.model.v2 = local_set_default_field(cfg.model.v2, 'pairTaskEnabled', false);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'pairTaskEnabled', true);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'taskDataMode', 'heldout_hfss');
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'taskScanStrideDeg', 1);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'taskSingleHeldoutCount', 12);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'taskPairSeparationDeg', [4 5 6 8 10]);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'taskPairCount', 16);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'taskSnrDb', 25);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'numSpsaIterations', 18);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'learningRate', 0.035);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'perturbationScale', 0.025);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'lambdaCal', 1);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'lambdaSmooth', 1e-3);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'lambdaSingle', 0.15);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'lambdaPair', 0.20);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'lambdaMid', 0.08);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'lambdaReg', 1e-4);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'softmaxGamma', 8);
+cfg.model.v2 = local_set_default_field(cfg.model.v2, 'midMargin', 0.2);
 
 if isfield(cfg, 'case9')
     cfg.case9 = local_set_default_field(cfg.case9, 'maxPairsPerSeparation', 21);
@@ -1308,6 +1485,13 @@ if isfield(cfg, 'case7')
 end
 if isfield(cfg, 'case8')
     cfg.case8 = local_set_default_field(cfg.case8, 'toleranceDeg', 0.5);
+end
+if isfield(cfg, 'case6')
+    cfg.case6 = local_set_default_field(cfg.case6, 'lambdaSingleValues', [0 0.15]);
+    cfg.case6 = local_set_default_field(cfg.case6, 'lambdaPairValues', [0 0.20]);
+    cfg.case6 = local_set_default_field(cfg.case6, 'lambdaMidValues', [0 0.08]);
+    cfg.case6 = local_set_default_field(cfg.case6, 'taskPairCounts', [0 16]);
+    cfg.case6 = local_set_default_field(cfg.case6, 'case6V2Iterations', 10);
 end
 end
 
@@ -1386,6 +1570,43 @@ else
         'String', sprintf('%s\n%s', mainTitle, subtitle), ...
         'EdgeColor', 'none', 'HorizontalAlignment', 'center', 'FontWeight', 'bold');
 end
+end
+
+function subsets = local_doa_eval_subsets(ctx, evalAngles, cfg)
+evalAngles = evalAngles(:);
+evalIdx = local_angle_indices(ctx.thetaDeg, evalAngles);
+metrics = compute_manifold_metrics(ctx.AH(:, evalIdx), ctx.AI(:, evalIdx));
+
+edgeThreshold = max(abs(ctx.thetaDeg)) - cfg.eval.edgeBandDeg;
+edgeMask = abs(evalAngles) >= edgeThreshold;
+if ~any(edgeMask)
+    edgeMask = true(size(evalAngles));
+end
+
+[~, hardOrder] = sort(metrics.relativeError(:), 'descend');
+hardCount = min(max(1, cfg.eval.highMismatchCount), numel(hardOrder));
+highMismatchMask = false(size(evalAngles));
+highMismatchMask(hardOrder(1:hardCount)) = true;
+
+subsets = struct();
+subsets.evalAnglesDeg = evalAngles;
+subsets.edgeThresholdDeg = edgeThreshold;
+subsets.edgeMask = edgeMask;
+subsets.edgeAnglesDeg = evalAngles(edgeMask);
+subsets.highMismatchMask = highMismatchMask;
+subsets.highMismatchAnglesDeg = evalAngles(highMismatchMask);
+subsets.idealRelativeError = metrics.relativeError(:);
+end
+
+function local_plot_method_curves(xValues, yMatrix, methods, xLabelText, yLabelText, titleText)
+hold on;
+for methodIdx = 1:numel(methods)
+    plot(xValues, yMatrix(:, methodIdx), 'o-', 'LineWidth', 1.5, 'MarkerSize', 7);
+end
+grid on;
+xlabel(xLabelText);
+ylabel(yLabelText);
+title(titleText);
 end
 
 function [sourcePairs, pairSelection] = local_case4_source_pairs(caseCfg, ctx, calAnglesDeg)
@@ -1503,6 +1724,8 @@ for methodIdx = 1:numel(methodKeys)
             methods(methodIdx) = local_method('ideal', 'Ideal', ctx.AI);
         case 'interp'
             methods(methodIdx) = local_method('interp', 'Interpolation', models.AInterp);
+        case 'ard'
+            methods(methodIdx) = local_method('ard', 'ARD', models.AARD);
         case 'proposed'
             methods(methodIdx) = local_method('proposed_v1', 'Proposed V1', models.AProposedV1);
         case 'proposed_v1'
@@ -1614,6 +1837,67 @@ pairSelection.mode = selectionMode;
 pairSelection.preLimitPairCount = size(preLimitPairs, 1);
 pairSelection.selectedOriginalIndex = selectedIdx(:);
 pairSelection = local_case9_subset_pair_selection(pairSelection, selectedIdx);
+end
+
+function taskPairsDeg = local_v2_task_pairs_from_models(models)
+taskPairsDeg = zeros(0, 2);
+if isfield(models, 'v2Diagnostics') && isfield(models.v2Diagnostics, 'taskPairsDeg') && ...
+        ~isempty(models.v2Diagnostics.taskPairsDeg)
+    taskPairsDeg = sort(models.v2Diagnostics.taskPairsDeg, 2);
+end
+end
+
+function [sourcePairs, pairSelection, excludedCount] = local_exclude_task_pairs_from_case9( ...
+    sourcePairs, pairSelection, taskPairsDeg)
+excludedCount = 0;
+if isempty(taskPairsDeg) || isempty(sourcePairs)
+    return;
+end
+
+taskPairsDeg = sort(round(taskPairsDeg, 10), 2);
+sourceRounded = sort(round(sourcePairs, 10), 2);
+keepMask = true(size(sourcePairs, 1), 1);
+for pairIdx = 1:size(sourceRounded, 1)
+    overlaps = all(abs(taskPairsDeg - sourceRounded(pairIdx, :)) < 1e-9, 2);
+    if any(overlaps)
+        keepMask(pairIdx) = false;
+        excludedCount = excludedCount + 1;
+    end
+end
+
+sourcePairs = sourcePairs(keepMask, :);
+pairSelection = local_case9_filter_pair_selection_by_mask(pairSelection, keepMask);
+end
+
+function overlapCount = local_count_task_eval_overlap(sourcePairs, taskPairsDeg)
+overlapCount = 0;
+if isempty(taskPairsDeg) || isempty(sourcePairs)
+    return;
+end
+
+taskPairsDeg = sort(round(taskPairsDeg, 10), 2);
+sourceRounded = sort(round(sourcePairs, 10), 2);
+for pairIdx = 1:size(sourceRounded, 1)
+    overlaps = all(abs(taskPairsDeg - sourceRounded(pairIdx, :)) < 1e-9, 2);
+    if any(overlaps)
+        overlapCount = overlapCount + 1;
+    end
+end
+end
+
+function pairSelection = local_case9_filter_pair_selection_by_mask(pairSelection, keepMask)
+fieldsToFilter = {'sourcePairsDeg', 'pairMismatchScore', 'edgeScore', ...
+    'calDistanceScore', 'combinedScore', 'selectedOriginalIndex'};
+for fieldIdx = 1:numel(fieldsToFilter)
+    fieldName = fieldsToFilter{fieldIdx};
+    if isfield(pairSelection, fieldName)
+        values = pairSelection.(fieldName);
+        if size(values, 1) == numel(keepMask)
+            pairSelection.(fieldName) = values(keepMask, :);
+        end
+    end
+end
+pairSelection.taskExcludedCount = sum(~keepMask);
 end
 
 function candidatePairs = local_case9_generate_pairs(thetaGrid, separationSweepDeg)

@@ -45,10 +45,14 @@ cfg.model.order = 3;
 cfg.model.lambda = 1e-3;
 cfg.model.interpMethod = 'spline';
 cfg.model.regularization = 'order-weighted';
+cfg.model.ard = struct();
+cfg.model.ard.enabled = true;
+cfg.model.ard.label = 'ARD';
+cfg.model.ard.method = 'complex_correction_vector';
 cfg.model.v2 = struct();
 cfg.model.v2.enabled = true;
 cfg.model.v2.label = 'Proposed V2';
-cfg.model.v2.stage = 'lite';
+cfg.model.v2.stage = 'full';
 cfg.model.v2.segmentCentersDeg = [-50 0 50];
 cfg.model.v2.order = 2;
 cfg.model.v2.lambda = 1e-3;
@@ -56,7 +60,24 @@ cfg.model.v2.candidateMismatchWeights = [1 2 4];
 cfg.model.v2.candidateEdgeWeights = [0.5 1 2];
 cfg.model.v2.taskWeight = 0.25;
 cfg.model.v2.taskNeighborhoodDeg = 0.4;
-cfg.model.v2.pairTaskEnabled = false;
+cfg.model.v2.pairTaskEnabled = true;
+cfg.model.v2.taskDataMode = 'heldout_hfss';
+cfg.model.v2.taskScanStrideDeg = 1;
+cfg.model.v2.taskSingleHeldoutCount = 12;
+cfg.model.v2.taskPairSeparationDeg = [4 5 6 8 10];
+cfg.model.v2.taskPairCount = 16;
+cfg.model.v2.taskSnrDb = 25;
+cfg.model.v2.numSpsaIterations = 18;
+cfg.model.v2.learningRate = 0.035;
+cfg.model.v2.perturbationScale = 0.025;
+cfg.model.v2.lambdaCal = 1;
+cfg.model.v2.lambdaSmooth = 1e-3;
+cfg.model.v2.lambdaSingle = 0.15;
+cfg.model.v2.lambdaPair = 0.20;
+cfg.model.v2.lambdaMid = 0.08;
+cfg.model.v2.lambdaReg = 1e-4;
+cfg.model.v2.softmaxGamma = 8;
+cfg.model.v2.midMargin = 0.2;
 
 cfg.case1 = struct();
 cfg.case1.exampleAngleDeg = 25; % Manual fallback only; default Case 1 selects a stress angle from the high-SNR sweep.
@@ -103,6 +124,11 @@ cfg.case6.l = 9;
 cfg.case6.orders = 1:5;
 cfg.case6.lambdas = [0 1e-4 1e-3 1e-2 1e-1];
 cfg.case6.basisTypes = {'polynomial', 'chebyshev'};
+cfg.case6.lambdaSingleValues = [0 0.15];
+cfg.case6.lambdaPairValues = [0 0.20];
+cfg.case6.lambdaMidValues = [0 0.08];
+cfg.case6.taskPairCounts = [0 16];
+cfg.case6.case6V2Iterations = 10;
 
 cfg.case7 = struct();
 cfg.case7.snrSweepDb = -15:5:20;
@@ -153,6 +179,7 @@ switch lower(strtrim(profileName))
         cfg.case7.monteCarlo = 200;
         cfg.case8.monteCarlo = 200;
         cfg.case9.monteCarlo = 300;
+        cfg.model.v2.numSpsaIterations = 24;
     otherwise
         error('Unknown default_config profile: %s', profileName);
 end
