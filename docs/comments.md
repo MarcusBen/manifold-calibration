@@ -1,401 +1,350 @@
-﻿# 项目阶段性判断报告（基于 `20260420-120416-71650f7` 结果）
+﻿# 项目阶段性判断报告（基于 `local-1539bcdf` V3-Revised screening）
 
-- Version hash: `71650f7`
-- Base HEAD: `588318c`
-- Review target: Git code commit / `20260420-120416-71650f7` paper-profile full run
-- Review status: reviewed; ARD Method 2 is the current matching evaluation baseline
-- Main comments: prioritize restructuring Proposed around an ARD-anchored path; do not make harder cases or 2D DOA the immediate main line.
-- Conflicts with log/code: no direct hash conflict for the ARD batch; `local-8e021ea7` remains a previous pending Full V2 run rather than the latest reviewed result.
-- Next action: design a stronger Proposed variant against ARD before expanding the benchmark scope.
+- Version hash: `local-1539bcdf`
+- Base HEAD: `7a31dd1`
+- Review target: pending local run / `results/local-1539bcdf/` V3-Revised guarded screening
+- Review status: reviewed; current comments match the pending V3-Revised screening batch
+- Main comments: V3-Revised is a successful safety repair with initial task-gain recovery, but Case 9 is not fully won yet.
+- Conflicts with log/code: no direct conflict with `docs/research-log.md`; both say this is screening only and should not enter full `1:10` yet.
+- Next action: keep the guard system stable and tune only the Case 9 pair-task surrogate, stable-rate alignment, and task-pair distribution.
 
-## 1. 文档目的
+## 原始评阅正文
 
-本文档基于最新一次完整同场运行结果，对当前项目所处阶段进行判断，并回答如下核心问题：
+我按你这次最新项目的 **代码 + results + research-log** 看完了，**不把 comments 当依据**，只看你基于 `proposed_algorithm_v3_initial_screening.md` 做出来的最新进展。
 
-1. 当前项目是否已经取得阶段性成果；
-2. 新加入的对比算法 `array_response_decomposition_algorithm`（简称 ARD Method 2）对项目判断产生了什么影响；
-3. 下一步应该优先：
-   - 改进 Proposed 算法，
-   - 继续增加 case 难度，
-   - 还是转向 2D DOA；
-4. 应如何组织后续研究路线。
+先给一句总判断：
 
-本文档只依据最新一批结果进行判断，不依赖更早版本的日志作为结论依据。
+**这次是一次“明显有效的修正”，而且修正方向是正确的。**
+它没有把 V3 直接做成最终算法，但它已经把 V3 从“明显不安全、会拉坏几何”的版本，推进成了“几何上基本守住、Case 9 开始出现收益苗头”的版本。
 
----
+这比你上一个 `87d7f16` screening 进展明显。
 
-## 2. 当前项目已经取得的成果
+------
 
-### 2.1 问题本身已经被证明成立
+# 一、这次最新进展，最核心的变化是什么
 
-当前项目已经较为明确地证明：
+如果把你最新这一版 `local-1539bcdf` 和上一版 `87d7f16` 直接比较，最重要的变化不是“Case 9 突然变得很强”，而是：
 
-- 理想流形与 HFSS 真值流形之间存在明显模型失配；
-- 在高 SNR、高快拍条件下，这种失配会留下稳定的 DOA 偏差地板；
-- 错误流形的影响不能通过单纯提高 SNR 或 snapshots 自动消除。
+> **V3 的“安全性问题”基本被修掉了。**
 
-因此，项目研究对象本身是成立的，不属于“人为制造问题”。
+也就是说，你这次改动真正解决的是：
 
----
+- 不再明显破坏 ARD 在校准角上的精确性
+- 不再明显拉坏全局未见方向几何
+- 不再在 Case 10 随机 split 上出现明显泛化崩坏
+- 同时在 Case 9 上开始拿到一点任务收益
 
-### 2.2 相位主导假设已经被验证
+这就是这次最重要的进展。
 
-现有结果已经表明，在当前阵列与 HFSS 数据下，理想流形与真实流形之间的主要差异来自相位残差，而非幅度残差。
+------
 
-这意味着：
+# 二、这次最值得肯定的地方
 
-- 当前流形修正路线在物理上是有支撑的；
-- 后续 Proposed 算法仍可以以“相位主导 + 结构化建模”为核心；
-- 不必贸然转向复杂的全幅相黑箱建模。
+## 1. 校准角保护做对了
 
----
+上一版 `87d7f16` 最致命的问题之一，就是：
 
-### 2.3 Benchmark 体系已经足够成熟
+- V3 的 task residual 把 ARD 在校准角上的精确穿越性质拉坏了
+- representative Case 3 模型里，校准角误差能到 **`2.54e-2`**
 
-当前项目的 10 个 case 已经形成了较完整的验证链条：
+而这次 `local-1539bcdf` 的 log 里，guard metrics 变成了：
 
-- **Case 1 / 2**：问题成立性与失配主导机理；
-- **Case 3**：未见方向泛化；
-- **Case 4**：校准数量敏感性（严格公共测试集 hard version）；
-- **Case 5**：采样策略；
-- **Case 6**：模型/超参数敏感性；
-- **Case 7 / 8**：高 SNR、高快拍下的单源偏差地板；
-- **Case 9**：近阈值双源分辨；
-- **Case 10**：随机划分稳健性。
+- calibration drift：**`1.81e-16`**
+- anchor RMS drift：**`0.001747`**
+- guard relative excess：**`0.001159`**
 
-这意味着：
+这说明你这次引入的：
 
-> 你现在已经拥有一套足够成熟的 1D 基准评测体系，后续不再需要频繁大改 case 才能验证新算法。
+- calibration-null gate
+- trust-radius residual
+- stronger anchor
+- guard-based fallback
 
----
+不是摆设，是真正起作用了。
 
-## 3. 新加入 ARD baseline 后，项目判断发生了什么变化
+**这是这次最成功的改动。**
 
-这是本轮最重要的部分。
+------
 
-### 3.1 ARD 是一个明显更强的 baseline
+## 2. Case 3 被明显救回来了
 
-本轮新加入的是 `array_response_decomposition_algorithm` 中可由现有数据支持的 **ARD Method 2**。从结果看，ARD 不是一个“凑数 baseline”，而是一个真正会改变项目判断的强基线。
+上一版 `87d7f16` 在 `L=9` 时：
 
-#### Case 3（未见方向流形误差）
+- `ARD`: **0.001034**
+- `V3`: **0.017357**
 
-在 `L = 9` 时：
+这已经是明显退化。
 
-- Ideal: `0.3210`
-- Interpolation: `0.0447`
-- **ARD: `0.0010`**
-- Proposed V1: `0.0453`
-- Proposed V2: `0.1054`
-- Oracle: `0`
+而这次 `local-1539bcdf`：
 
-ARD 在流形重构指标上几乎贴近 Oracle，远强于当前 Proposed 系列。
+- `ARD`: **0.001034**
+- `V3-Revised`: **0.001917**
 
-#### Case 7（高 SNR 单源）
+edge error：
 
-在 `SNR = 20 dB` 时：
+- 上一版：**0.017567**
+- 这版：**0.002993**
 
-- Ideal: `3.7502 deg`
-- Interpolation: `0.0016 deg`
-- **ARD: `0.0037 deg`**
-- Proposed V1: `0.0140 deg`
-- Proposed V2: `0.0114 deg`
-- Oracle: `0.0037 deg`
+worst-10%：
 
-ARD 与 Oracle 已几乎重合。
+- 上一版：**0.017536**
+- 这版：**0.002882**
 
-#### Case 10（随机 split）
+这说明什么？
 
-平均 manifold error：
+说明你现在的 V3-Revised 已经不再是“为了 task objective 把全局流形弄坏”的版本了。
+它和 ARD 之间虽然还有小差距，但已经从“严重退化”回到了“轻微退化且仍在 guard 内”。
 
-- Interp: `0.0459`
-- **ARD: `0.0056`**
-- Proposed V1: `0.0461`
-- Proposed V2: `0.1025`
+这个结果非常重要，因为它说明 V3 路线现在至少在几何层面变得可控了。
 
-平均 single-source RMSE：
+------
 
-- Interp: `0.1262`
-- **ARD: `0.1035`**
-- Proposed V1: `0.1138`
-- Proposed V2: `0.1461`
+## 3. Case 10 也被拉回来了
 
-ARD 在随机划分泛化上也显著更强。
+上一版 `87d7f16`：
 
-### 3.2 ARD 没有在所有指标上完全碾压，但已经足够改变项目叙事
+- `ARD` mean manifold error：**0.005644**
+- `V3`：**0.065962**
 
-在 Case 9 这种困难双源分辨任务中，ARD 并没有形成对所有方法的稳定压制。例如：
+这差距非常大。
 
-- Case 9 mean resolution：
-  - Ideal: `0.0987`
-  - Interpolation: `0.1262`
-  - ARD: `0.1245`
-  - Proposed V1: `0.1268`
-  - Proposed V2: `0.1148`
-  - Oracle: `0.1238`
+而这次 `local-1539bcdf`：
+
+- `ARD`: **0.005644**
+- `V3-Revised`: **0.006080**
+
+几乎贴住了。
+
+同时 mean DOA RMSE：
+
+- `ARD`: **0.103499**
+- `V3-Revised`: **0.103163**
+
+这里 V3-Revised 甚至略好一点。
+
+这个结果说明：
+
+> **你这次不是只把 Case 3 的几何拉回来了，而是把“随机 split 下的稳健性”也一起修回来了。**
+
+这很关键，因为它说明 V3-Revised 已经不再是只会在固定校准划分上工作的小技巧。
+
+------
+
+## 4. Case 7 还有轻微正收益
+
+在高 SNR 单源上，这次也不是白修。
+
+Case 7 在 `20 dB`：
+
+- `ARD`: **0.002828**
+- `V3-Revised`: **0.002309**
+
+mean abs bias：
+
+- `ARD`: **0.000040**
+- `V3-Revised`: **0.000027**
+
+这个提升不算大，但它很干净：
+
+- 没有牺牲几何安全
+- 没有牺牲随机泛化
+- 单源高 SNR 还有一点增益
+
+这说明 V3-Revised 已经开始具备“在不破坏 ARD 的前提下，买一点任务收益”的能力了。
+
+------
+
+# 三、这次还没有解决的核心问题
+
+## Case 9 仍然没有被真正拿下
+
+这是当前唯一真正没过关的地方。
+
+这次 `local-1539bcdf` 的 Case 9：
+
+### mean resolution
+
+- `ARD`: **0.124800**
+- `V1`: **0.130000**
+- `V3-Revised`: **0.126822**
+
+### mean stable rate
+
+- `ARD`: **0.035400**
+- `V1`: **0.037933**
+- `V3-Revised`: **0.033933**
 
 这说明：
 
-- ARD 在双源近阈值分辨上只是“接近最强组”，不是绝对统治；
-- 但它已经足够说明：当前 Proposed 在单源、流形重构、随机 split 这些基础能力上并未站住优势。
+### 好消息
 
-因此，**ARD 的加入把项目从“Proposed 和 Interpolation 谁更好”这个问题，推进到了“为什么一个强 complex correction-vector 方法能轻易超过当前 Proposed”这个更本质的问题。**
+- V3-Revised 的 mean resolution 已经 **略高于 ARD**
+- 比上一版 `87d7f16` 的 **0.122018** 明显进了一步
 
----
+### 但坏消息
 
-## 4. 基于这批结果，对三个策略选项的判断
+- 它还是 **没有超过 V1**
+- stable rate 也 **低于 ARD 和 V1**
 
-下面直接回答你最关心的问题。
+所以从最严格的筛选标准看：
 
----
+> **Case 9 还不能说过关。**
 
-### 4.1 选项一：继续增加 case 难度
+你现在最多只能说：
 
-#### 结论：**当前不是优先项。**
+- V3-Revised 已经开始在 Case 9 上拿到“局部正向趋势”
+- 但还没有形成“可以推广成正式算法结论”的优势
 
-原因如下：
+------
 
-1. **Case 4 已经很难。**
-   当前 hard common test set 下，连 Oracle 的 stable rate 也只有约 `0.10 ~ 0.11`，并不存在“case 太容易所以看不出差别”的问题。
+# 四、所以这次最新进展，应该怎么定性
 
-2. **Case 9 已经足够难。**
-   整体 mean resolution 只有 `0.10 ~ 0.13` 量级，说明 benchmark 本身已经处于困难区间。
+我会把这次 `local-1539bcdf` 定义成：
 
-3. **ARD 已经在现有 benchmark 上显出明显优势。**
-   这意味着问题不在于“场景不够毒”，而在于“当前 Proposed 本身不够强”。
+## **一次成功的“安全修复 + 初步增益恢复” screening**
 
-因此，如果此时继续通过加大 case 难度来寻找 Proposed 的优势，容易给人一种“回避强 baseline”的感觉。
+它的意义不是：
 
-**判断：暂时不应把“继续加难度”作为主线。**
+- V3 已经成熟了
+- 可以直接 full 1:10 了
 
----
+而是：
 
-### 4.2 选项二：直接转向 2D DOA
+- 你把 V3 最大的结构性风险修掉了
+- 现在 V3 已经可以在不毁掉几何和随机泛化的前提下，去尝试争取 Case 9 的收益
 
-#### 结论：**现在也不建议作为主线。**
+这在算法开发里是非常重要的一步。
 
-原因如下：
+换句话说：
 
-1. **1D 里还没有形成令人满意的算法故事。**
-   你当前最大的问题不是“场景维度太低”，而是“现有 Proposed 在成熟 1D benchmark 上已经被 ARD 压住了”。
+### 旧 V3（87d7f16）回答的是：
 
-2. **2D DOA 会引入大量新变量。**
-   包括：
-   - 方位角/俯仰角耦合；
-   - 2D manifold 表达与网格维度爆炸；
-   - 更复杂的 HFSS 数据组织；
-   - 更复杂的峰值搜索与分辨分析。
+- 这条路如果没有 guard，会不会坏？
+  答案：**会，而且坏得很明显。**
 
-3. **如果 1D 故事还没讲清楚，直接跳 2D 风险很大。**
-   因为读者很容易理解为：
-   - 并不是算法已经成熟，而是换了一个更复杂但更不透明的场景继续试。
+### 新 V3-Revised（local-1539bcdf）回答的是：
 
-因此，2D DOA 目前更适合作为**中后期扩展方向**，不适合作为你现在的主救火路线。
+- 如果加上 guard、anchor、calibration-null 和 fallback，这条路还能不能走？
+  答案：**能走，而且已经开始出现局部收益。**
 
-**判断：2D DOA 现在不该成为主线，只能作为后续扩展。**
+这就是这次最有价值的进展。
 
----
+------
 
-### 4.3 选项三：优先改进 Proposed 算法
+# 五、这次结果说明你的算法路线现在处于什么阶段
 
-#### 结论：**这是当前最合理、最紧迫的主线。**
+我觉得现在已经可以比较清楚地说：
 
-原因非常直接：
+## 当前 V3-Revised 已经从“概念试验”进入“可控调优阶段”
 
-1. **ARD 已经把问题钉死了。**
-   在现有 benchmark 上，一个更强的校正思路已经展示出明显优势。说明：
-   - 问题本身可解；
-   - 当前 Proposed 的不足主要是算法结构问题，而不是 benchmark 问题。
+你现在不再需要纠结：
 
-2. **V2-lite / Full V2 都说明“单纯增强局部建模”或“直接强上任务项”都还不够。**
-   - V2-lite：有局部改进，但整体提升有限；
-   - Full V2：任务项过强时会伤害全局泛化。
+- 这条路线是不是错的
 
-3. **现在最缺的不是更多 case，而是一个真正有辨识度的新 Proposed。**
+因为结果已经说明：
 
-因此，下一阶段应该明确转入：
+- **路线本身是对的**
+- 问题只在于 **Case 9 的 task gain 还不够强**
 
-> **以 ARD 为强 baseline，对 Proposed 进行结构性重构。**
+所以你现在的阶段不是“重新换方向”，而是：
 
-**判断：当前主线应当是“改进 Proposed 算法”。**
+> **继续沿 V3-Revised 走，但下一步只围绕 Case 9 的 pair-task / surrogate 一致性来小步调优。**
 
----
+------
 
-## 5. 当前最值得做的不是“继续沿旧 Proposed 微调”，而是重新定义 Proposed 的目标
+# 六、我对你下一步的建议
 
-### 5.1 当前 Proposed 的核心问题
+## 1. 不要回退到旧 V3，也不要回退到 Full V2
 
-从最新结果看，当前 Proposed 系列的问题不是一点点参数没调好，而是结构目标存在偏差：
+因为这次已经说明：
 
-- V1 太接近全局低维相位拟合；
-- V2-lite 只改善局部边缘建模，但仍未触及强 baseline 的核心；
-- Full V2 直接加强任务项后，又明显破坏了全局几何泛化。
+- 旧 V3 最大问题是安全性
+- Full V2 最大问题是过强 task refinement
 
-因此，下一版 Proposed 不应该只是：
+而 V3-Revised 已经把这两个大坑绕开了。
 
-- 再换一个阶数；
-- 再换一个分段位置；
-- 再多加几个 task weight；
-- 再多做几个 case。
+所以现在不该回头。
 
-这些操作的边际收益已经很小。
+------
 
----
+## 2. 继续保持当前 guard 体系，不要先动
 
-### 5.2 新 Proposed 的核心目标应是什么
+你这次最成功的就是这部分：
 
-基于当前结果，我建议下一版 Proposed 应明确追求：
+- calibration-null gate
+- trust radius
+- stronger anchor
+- guard loss
+- fallback
 
-> **同时继承 ARD 的强几何重构能力，以及任务驱动方法对困难双源局部行为的调节能力。**
+这些现在不要轻易再改大。
 
-也就是说，新的 Proposed 不应再是单纯的“phase-only global fit”或“task-heavy local fit”，而应是：
+因为它们是你当前几何安全和随机 split 稳定性的来源。
 
-1. **以更强的 complex correction-vector 粗模型作为几何主干；**
-2. **在此基础上做受控的任务驱动细化，而不是无约束重写整个流形。**
+------
 
-这比继续把当前 V1/V2 硬磨下去更有前途。
+## 3. 下一步只盯 Case 9 的任务项
 
----
+你现在的主要矛盾已经很明确了：
 
-## 6. 下一阶段推荐的主算法方向
+- Case 3/7/10 基本守住了
+- Case 9 还差最后一口气
 
-### 6.1 建议路线：ARD-anchored task-aware refinement
+所以后面不要同时再改太多东西。
+我建议只集中改这三类内容：
 
-我建议下一阶段的新 Proposed 可定义为：
+### （1）pair surrogate 和 benchmark 指标的一致性
 
-### **Proposed V3 = ARD coarse model + anchored task-aware residual refinement**
+现在 log 里自己也写了：
 
-基本思想：
+- 下一步要改善 pair surrogate 和 `benchmark_music` 中 resolution / stable-rate 指标的一致性
 
-1. 先用 ARD Method 2 得到一个强的 complex correction-vector 初值；
-2. 再在该初值附近，仅用小幅残差 refinement 去优化：
-   - 高 SNR 单源偏差地板；
-   - 困难双源 stable / unresolved 行为；
-3. 引入锚定项，防止任务项把流形整体拉坏。
+我完全同意。
+因为现在的症状很像：
 
-可写成：
-$$
-\hat{\mathbf a}_{\mathrm{V3}}(\theta)
-=
-\hat{\mathbf a}_{\mathrm{ARD}}(\theta)
-\odot
-\exp\big(j\Delta\boldsymbol\phi_{\mathrm{task}}(\theta)\big),
-$$
-其中 \(\Delta\boldsymbol\phi_{\mathrm{task}}(\theta)\) 是小幅任务驱动细化项，而非重建整个流形的主模型。
+- 训练时优化的是一套 proxy
+- 评估时看的是真正的 stable / resolution
+- 二者还没完全对齐
 
-对应目标函数可定义为：
-$$
-\mathcal J
-=
-\mathcal L_{\mathrm{cal}}
-+
-\lambda_1 \mathcal L_{\mathrm{single}}
-+
-\lambda_2 \mathcal L_{\mathrm{pair}}
-+
-\lambda_3 \mathcal L_{\mathrm{mid}}
-+
-\lambda_4 \mathcal L_{\mathrm{anchor}},
-$$
-其中锚定项为：
-$$
-\mathcal L_{\mathrm{anchor}}
-=
-\sum_{\theta\in\Theta_{\mathrm{val}}}
-\left\|
-\hat{\mathbf a}_{\mathrm{V3}}(\theta)
--
-\hat{\mathbf a}_{\mathrm{ARD}}(\theta)
-\right\|_2^2.
-$$
+### （2）task pair 分布再往 evaluation pair 分布靠一点
 
-该结构的优点是：
+这次你已经有进展了：
 
-- 不再放弃 ARD 已经证明有效的强几何能力；
-- 任务驱动项只做小范围受控修正；
-- 比当前 Full V2 更不容易伤害全局泛化。
+- task pair mean abs center 从旧 V3 的 **57.3°**
+- 降到了 **42.87°**
+- evaluation 的 mean abs center 是 **38.62°**
 
----
+这说明你已经在往对的方向修。
+但还可以再近一点。
 
-### 6.2 为什么这条路比“继续直接磨 V2”更合理
+### （3）Case 9 不要只看 mean resolution，也盯 stable rate
 
-因为最新结果已经说明：
+因为你这次已经证明：
 
-- **ARD 已经非常强；**
-- **V2 的增益主要集中在少数 hard pair，而代价是大范围泛化恶化；**
-- 因此下一步最自然的做法，不是“让 V2 更强”，而是“让任务驱动只在 ARD 主干附近做小修正”。
+- mean resolution 先起来了
+- stable rate 还没起来
 
-这条路线更符合结果，也更有希望形成真正有说服力的新算法故事。
+这说明 pair-task 可能先改善了“粗分辨”，但还没把“稳定双峰”真正拉起来。
+所以下一步 task 设计应该更偏向 stable behavior，而不只是 resolution。
 
----
+------
 
-## 7. 对 case 的后续调整建议
+# 七、最终判断
 
-### 7.1 不需要继续整体增加难度
+一句话总结这次最新进展：
 
-当前 Case 4 / 9 已经足够难，后续应保持稳定，不再频繁提升难度。
+**这次不是“又一次 screening 没过”，而是“V3 路线第一次被你修成了一个几何安全、随机稳健、并且开始在 Case 9 上出现正向趋势的版本”。**
 
-### 7.2 需要把 case 从“扩展”转为“筛选工具”
+更直白地说：
 
-建议后续新算法开发时，先只用以下 4 个 case 快速筛选：
+- **旧 V3：方向对，但不安全**
+- **这次 V3-Revised：方向对，而且安全了**
+- **现在唯一剩下的问题：Case 9 还没真正赢**
 
-1. **Case 3**：全局与边缘未见误差
-2. **Case 7**：高 SNR 单源偏差地板
-3. **Case 9**：困难双源分辨
-4. **Case 10**：随机 split 稳健性
+所以我对你这次基于 `proposed_algorithm_v3_initial_screening.md` 的改进评价是：
 
-如果新算法在这 4 个 case 上没有形成稳定改进，就没有必要先跑全套 10 个 case。
+> **明显有效，而且已经把 V3 推进到了值得继续小步打磨的阶段。**
 
-### 7.3 可适度加强 Case 9 的局部分析，而不是整体加难度
+如果你现在继续推进，我建议就一句话：
 
-与其继续提升 Case 9 难度，不如增加：
-
-- `V1 / ARD / 新 Proposed` 的 per-separation paired delta 图；
-- representative hard pair 的失败类型统计；
-- stable / marginal / biased / unresolved 的分解对比。
-
-这样对算法方向判断更有帮助。
-
----
-
-## 8. 是否应该现在转向 2D DOA
-
-### 结论：暂不建议
-
-2D DOA 可以作为后续扩展，但不建议现在转为主线，原因是：
-
-1. 当前 1D benchmark 已足够成熟并且能明显区分方法；
-2. ARD 已经在 1D 上强烈改变了项目判断，说明 1D 阶段还有很多信息没吃干净；
-3. 2D DOA 会显著增加实验复杂度，容易稀释当前最关键的问题——**为什么 Proposed 在成熟 1D benchmark 上不如 ARD。**
-
-因此，2D 应当是：
-
-- 当 1D 上已经形成清晰新算法故事后，
-- 用来放大优势与拓展应用范围的第二阶段工作，
-- 而不是当前的主救火路线。
-
----
-
-## 9. 最终建议
-
-基于 `20260420-120416-71650f7` 这一批结果，我的最终建议是：
-
-### 主线选择
-
-**优先改进 Proposed 算法。**
-
-### 不建议作为当前主线的方向
-
-- 继续整体增加 case 难度：**不建议**
-- 立即转向 2D DOA：**不建议**
-
-### 推荐的下一步算法路线
-
-**以 ARD 为强几何主干，发展一个受控的任务驱动细化型 Proposed V3。**
-
-这是当前结果最自然、也最有希望的延伸方向。
-
----
-
-## 10. 一句话结论
-
-当前项目已经不再缺“更难的 case”，也不急缺“更复杂的维度”；当前最缺的是一个能够在 ARD 强基线上仍然提供额外任务收益、同时不破坏全局泛化的新 Proposed 算法。因此，下一阶段应当把主要精力集中到 **改进 Proposed 算法** 上，而不是继续通过加大 case 难度或转向 2D 来回避当前 1D 基准中已经暴露出的核心问题。
+**不要再扩 benchmark，不要再看 2D，不要再大改架构；下一步只围绕 Case 9 的 pair-task surrogate 做精修。**

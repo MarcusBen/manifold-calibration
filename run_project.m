@@ -34,6 +34,9 @@ end
 if ~exist(outputRoot, 'dir')
     mkdir(outputRoot);
 end
+if cfg.run.useTraceableDirs
+    local_prepare_version_output(cfg);
+end
 
 ctx = build_project_context(cfg);
 caseRunners = { ...
@@ -47,8 +50,20 @@ caseRunners = { ...
     @case08_single_source_snapshots, ...
     @case09_two_source_resolution, ...
     @case10_random_split_robustness};
+caseFolderNames = { ...
+    'case01_problem_validation', ...
+    'case02_dominant_mismatch', ...
+    'case03_unseen_generalization', ...
+    'case04_calibration_count_sensitivity', ...
+    'case05_sampling_strategy_sensitivity', ...
+    'case06_model_sensitivity', ...
+    'case07_single_source_snr', ...
+    'case08_single_source_snapshots', ...
+    'case09_two_source_resolution', ...
+    'case10_random_split_robustness'};
 
 results = struct();
+completedCaseFolders = {};
 
 for runIdx = 1:numel(selectedCases)
     caseId = selectedCases(runIdx);
@@ -59,6 +74,10 @@ for runIdx = 1:numel(selectedCases)
     fprintf('\n=== Running Case %02d ===\n', caseId);
     fieldName = sprintf('case%02d', caseId);
     results.(fieldName) = caseRunners{caseId}(cfg, ctx);
+    completedCaseFolders{end+1} = caseFolderNames{caseId}; %#ok<AGROW>
+    if cfg.run.useTraceableDirs
+        local_write_manifest(cfg, completedCaseFolders, selectedCases);
+    end
 end
 end
 
@@ -1353,7 +1372,7 @@ if cfg.run.useTraceableDirs
     if ~isfield(cfg.run, 'runId') || isempty(cfg.run.runId)
         error('cfg.run.runId is required when cfg.run.useTraceableDirs is true.');
     end
-    outDir = fullfile(cfg.run.resultRoot, caseFolderName, cfg.run.runId);
+    outDir = fullfile(local_version_output_dir(cfg), caseFolderName);
 else
     outDir = fullfile(cfg.outputDir, caseFolderName);
 end
@@ -1361,10 +1380,6 @@ if ~exist(outDir, 'dir')
     mkdir(outDir);
 elseif cfg.run.useTraceableDirs && local_case_output_has_results(outDir)
     error('Traceable output directory already contains result files: %s', outDir);
-end
-
-if cfg.run.useTraceableDirs
-    local_write_run_notes(outDir, cfg, caseFolderName);
 end
 end
 
@@ -1374,20 +1389,42 @@ pngFiles = dir(fullfile(outDir, '*.png'));
 hasResults = ~isempty(matFiles) || ~isempty(pngFiles);
 end
 
-function local_write_run_notes(outDir, cfg, caseFolderName)
-notesPath = fullfile(outDir, 'RUN_NOTES.md');
+function versionDir = local_version_output_dir(cfg)
+versionDir = fullfile(cfg.run.resultRoot, cfg.run.runId);
+end
+
+function local_prepare_version_output(cfg)
+versionDir = local_version_output_dir(cfg);
+if exist(versionDir, 'dir') && local_version_output_has_results(versionDir)
+    error('Traceable version directory already contains result files: %s', versionDir);
+end
+if ~exist(versionDir, 'dir')
+    mkdir(versionDir);
+end
+local_write_run_notes(versionDir, cfg);
+local_write_manifest(cfg, {}, []);
+end
+
+function hasResults = local_version_output_has_results(versionDir)
+matFiles = dir(fullfile(versionDir, '**', '*.mat'));
+pngFiles = dir(fullfile(versionDir, '**', '*.png'));
+manifestFile = fullfile(versionDir, 'manifest.md');
+hasResults = ~isempty(matFiles) || ~isempty(pngFiles) || exist(manifestFile, 'file');
+end
+
+function local_write_run_notes(versionDir, cfg)
+notesPath = fullfile(versionDir, 'RUN_NOTES.md');
 if exist(notesPath, 'file')
     return;
 end
 
 fid = fopen(notesPath, 'w');
 if fid < 0
-    error('Unable to write RUN_NOTES.md in %s', outDir);
+    error('Unable to write RUN_NOTES.md in %s', versionDir);
 end
 cleanupObj = onCleanup(@() fclose(fid));
 
 fprintf(fid, '# Run Notes\n\n');
-fprintf(fid, '- Case: `%s`\n', caseFolderName);
 fprintf(fid, '- Timestamp: `%s`\n', datestr(now, 'yyyy-mm-dd HH:MM:SS'));
 fprintf(fid, '- Pending local hash: `%s`\n', cfg.run.pendingLocalHash);
 fprintf(fid, '- Base HEAD: `%s`\n', cfg.run.baseHead);
@@ -1415,15 +1452,51 @@ if isfield(cfg, 'model') && isfield(cfg.model, 'v2')
     fprintf(fid, '- Proposed V2 note: `heldout_hfss uses extra task-supervised HFSS truth and is not same-budget with V1/Interpolation.`\n\n');
 end
 if isfield(cfg, 'model') && isfield(cfg.model, 'v3')
-    fprintf(fid, '- Proposed V3 enabled: `%d`\n', logical(cfg.model.v3.enabled));
-    fprintf(fid, '- Proposed V3 stage: `%s`\n', cfg.model.v3.stage);
-    fprintf(fid, '- Proposed V3 base: `%s`\n', cfg.model.v3.base);
-    fprintf(fid, '- Proposed V3 task data mode: `%s`\n', cfg.model.v3.taskDataMode);
-    fprintf(fid, '- Proposed V3 SPSA iterations: `%d`\n', cfg.model.v3.numSpsaIterations);
-    fprintf(fid, '- Proposed V3 note: `ARD-anchored task-aware phase residual; screening result, not final full paper-profile evidence unless stated.`\n\n');
+fprintf(fid, '- Proposed V3 enabled: `%d`\n', logical(cfg.model.v3.enabled));
+fprintf(fid, '- Proposed V3 stage: `%s`\n', cfg.model.v3.stage);
+fprintf(fid, '- Proposed V3 base: `%s`\n', cfg.model.v3.base);
+fprintf(fid, '- Proposed V3 task data mode: `%s`\n', cfg.model.v3.taskDataMode);
+fprintf(fid, '- Proposed V3 SPSA iterations: `%d`\n', cfg.model.v3.numSpsaIterations);
+fprintf(fid, '- Proposed V3 anchor weight: `%.12g`\n', cfg.model.v3.lambdaAnchor);
+fprintf(fid, '- Proposed V3 guard weight: `%.12g`\n', cfg.model.v3.lambdaGuard);
+fprintf(fid, '- Proposed V3 trust radius rad: `%.12g`\n', cfg.model.v3.trustRadiusRad);
+fprintf(fid, '- Proposed V3 note: `Calibration-guarded ARD-anchored task-aware residual; screening result, not final full paper-profile evidence unless stated.`\n\n');
 end
 fprintf(fid, '## Git Status Short\n\n');
 fprintf(fid, '```text\n%s\n```\n', cfg.run.gitStatusShort);
+end
+
+function local_write_manifest(cfg, completedCaseFolders, selectedCases)
+manifestPath = fullfile(local_version_output_dir(cfg), 'manifest.md');
+fid = fopen(manifestPath, 'w');
+if fid < 0
+    error('Unable to write manifest.md in %s', local_version_output_dir(cfg));
+end
+cleanupObj = onCleanup(@() fclose(fid));
+
+fprintf(fid, '# Results manifest\n\n');
+fprintf(fid, '- Version hash: `%s`\n', cfg.run.pendingLocalHash);
+fprintf(fid, '- Base HEAD: `%s`\n', cfg.run.baseHead);
+if isempty(strtrim(cfg.run.gitStatusShort))
+    fprintf(fid, '- Worktree state: clean or not recorded\n');
+else
+    fprintf(fid, '- Worktree state: uncommitted code changes recorded in `RUN_NOTES.md`\n');
+end
+fprintf(fid, '- Command: `%s`\n\n', cfg.run.command);
+
+fprintf(fid, '## Cases\n\n');
+if isempty(completedCaseFolders)
+    fprintf(fid, '- No case outputs completed yet.\n');
+else
+    for idx = 1:numel(completedCaseFolders)
+        fprintf(fid, '- `%s`: outputs in `%s/`\n', completedCaseFolders{idx}, completedCaseFolders{idx});
+    end
+end
+
+if ~isempty(selectedCases) && numel(completedCaseFolders) < numel(selectedCases)
+    fprintf(fid, '\n## Not run or not completed\n\n');
+    fprintf(fid, '- Remaining selected cases had not completed when this manifest was written.\n');
+end
 end
 
 function cfg = local_complete_runtime_config(cfg, rootDir)
@@ -1499,7 +1572,7 @@ cfg.model.v2 = local_set_default_field(cfg.model.v2, 'midMargin', 0.2);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'enabled', true);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'label', 'Proposed V3');
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'base', 'ard');
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stage', 'ard_anchored_task_refinement');
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stage', 'calibration_guarded_ard_anchored_task_refinement');
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'segmentCentersDeg', [-50 0 50]);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'order', 1);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambda', 1e-3);
@@ -1509,20 +1582,33 @@ cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskScanStrideDeg', 1);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskSingleHeldoutCount', 12);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskPairSeparationDeg', [4 5 6 8 10]);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskPairCount', 16);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskPairSelectionMode', 'coverage');
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'guardHeldoutCount', 64);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskSnrDb', 25);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'numSpsaIterations', 12);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'learningRate', 0.020);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'perturbationScale', 0.015);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'numSpsaIterations', 8);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'learningRate', 0.005);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'perturbationScale', 0.005);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'maxGradNorm', 5);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaCal', 1);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaSingle', 0.08);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaPair', 0.12);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaMid', 0.04);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaAnchor', 5);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaSingle', 0.04);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaPair', 0.03);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaMid', 0.01);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaAnchor', 50);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaGuard', 10);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaCal0', 20);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaSmooth', 1e-3);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaReg', 1e-4);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'softmaxGamma', 8);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'midMargin', 0.2);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'trustRadiusRad', 0.04);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'calibrationNullSigmaDeg', 0.25);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'edgeMaskEnabled', true);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'edgeMaskStartDeg', 35);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'edgeMaskTransitionDeg', 6);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'edgeMaskMinimum', 0.25);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'maxCalibrationDrift', 1e-3);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'guardRelativeTolerance', 0.003);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'maxAnchorRmsDrift', 0.02);
 
 if isfield(cfg, 'case9')
     cfg.case9 = local_set_default_field(cfg.case9, 'maxPairsPerSeparation', 21);

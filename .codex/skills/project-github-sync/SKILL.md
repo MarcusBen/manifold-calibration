@@ -46,6 +46,17 @@ Distinguish two hashes when needed:
 
 Git commit hashes cannot be chosen manually to equal the pending local hash. They are computed from commit contents and history. The safe workflow is to replace the pending local hash with the Git code commit hash after the first commit, then save that replacement in a small metadata/finalization commit.
 
+## Historical Result Archive Policy
+
+Treat GitHub `results/` as a historical archive of published experiment outputs.
+
+- Local deletion of older `results/<version>/`, old case outputs, or result-local `logs/` is normally local disk cleanup, not permission to delete those paths from GitHub.
+- During an ordinary sync, do not stage or commit deletions under historical `results/` version folders unless the user explicitly asks to prune/delete those remote result versions.
+- The only result-folder deletion or rename allowed without an explicit prune request is the paired finalization of the current upload batch, such as `git mv results/<pending-local-hash> results/<git-code-commit-hash>`, with the replacement path staged in the same commit.
+- If `git status` shows `D results/...` for non-current versions, leave those deletions unstaged and mention that they were intentionally preserved on GitHub.
+- Avoid broad staging commands when result deletions are present. Prefer explicit positive path staging; if a broad staging command accidentally stages historical result deletions, unstage them before committing.
+- Apply the same caution to historical result `logs/` and archived docs/assets that are only missing locally because of cleanup. Delete archived assets only when the current docs change makes that deletion clearly intentional or the user explicitly asks for cleanup.
+
 ## Comment Finalization Policy
 
 Update `docs/comments.md` during hash finalization only when the comments entry is clearly tied to the same pending local hash as the current log/case batch.
@@ -88,7 +99,11 @@ After finalization, the `Version hash` line should contain the Git code commit h
    - Add a visible reminder when comments are for an older hash and the current version has not been evaluated.
    - Do not smooth over disagreements into a false consensus.
 5. Run `git status --short` again and identify exactly which files belong to the upload.
+   - Separate additions/modifications from deletions.
+   - Treat `D results/...` for non-current versions as local cleanup to preserve remotely unless the user explicitly requested remote pruning.
 6. Stage only the intended project files. Do not stage unrelated user changes unless the upload explicitly includes them.
+   - Prefer explicit path staging over `git add -A` when `results/` deletions are present.
+   - If historical result deletions are staged by accident, unstage them before committing.
 7. Commit the code/docs/results batch with a message that includes the pending local hash, for example `update case09 results (local-a1b2c3d4)`.
 8. Capture the Git code commit hash with `git rev-parse --short HEAD`.
 9. Replace the exact pending local hash with the Git code commit hash in current-version docs and result metadata:
@@ -99,6 +114,7 @@ After finalization, the `Version hash` line should contain the Git code commit h
    - current version-level `results/<pending-local-hash>/manifest.md`
    - current top-level result version folder, renamed from `results/<pending-local-hash>/` to `results/<git-code-commit-hash>/`
    - Markdown links that referenced the renamed version folder
+   - This rename must be a paired current-batch finalization, not deletion of older published result folders.
 10. Normalize any matching `docs/comments.md` entry opening to the same shape as the log entry opening, with `Version hash`, `Base HEAD` when known, review target/status, conflicts, and next action.
 11. Do not replace historical local hashes from older entries. Replace only the exact pending local hash for the current upload batch.
 12. Commit the hash finalization as a metadata-only commit, for example `finalize version hash abc1234`.
@@ -150,6 +166,8 @@ If a claim appears in `docs/comments.md` but is not confirmed by `docs/research-
 - Do not try to force Git to produce a chosen commit hash.
 - Do not replace broad patterns such as every seven-character hex string. Replace only the exact pending local hash generated for the current code-change batch.
 - Do not rename historical result folders. Rename only `results/<pending-local-hash>/` for the current upload batch.
+- Do not stage deletions of historical `results/<version>/` folders or their logs just because they were deleted locally.
+- Do not use `git add -A` blindly when `git status` includes `D results/...`; preserve GitHub result history by staging only intended additions/modifications and the current-batch rename.
 - Do not rewrite `docs/comments.md` unless it contains the exact pending local hash for the current batch.
 - Do not manufacture a comments review after upload; only finalize an already-existing matching comments entry.
 
@@ -159,6 +177,7 @@ Use these defaults only after README reconciliation is complete:
 
 ```bash
 git status --short
+# If status includes D results/... for historical versions, keep those deletions unstaged unless the user requested remote pruning.
 git add README.md docs/research-log.md docs/comments.md <intended-code-or-result-files>
 git commit -m "update project documentation and results (local-a1b2c3d4)"
 git rev-parse --short HEAD

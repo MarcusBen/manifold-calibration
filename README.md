@@ -9,41 +9,43 @@
 
 ## 最新摘要
 
-截至 2026-04-20，当前工作分支是 `codex/proposed_v3`，最新当前批次是 `results/87d7f16/`。这一批实现并筛选 **Proposed V3 = ARD coarse model + anchored task-aware phase residual refinement**，只运行 Case 3 / 7 / 9 / 10，用于判断是否值得进入完整 `paper` profile。
+截至 2026-04-20，当前工作分支是 `codex/proposed_v3`，最新当前批次是 `results/local-1539bcdf/`。这一批实现并筛选 **Proposed V3-Revised = Calibration-Guarded ARD-Anchored Task-Aware Residual Calibration**，只运行 Case 3 / 7 / 9 / 10，用于判断是否值得进入完整 `paper` profile。
 
-- V3 初始状态严格等于 ARD，再用小幅三段软门控 Chebyshev 相位 residual 做 task-aware refinement。
-- 训练目标包含 calibration、single-source task、pair task、midpoint suppression、ARD anchor、smooth/reg。
-- 筛选结论是不通过：V3 可运行且 objective 下降，但明显破坏 ARD 的全局流形重构优势，并且 Case 9 没有超过 ARD / Proposed V1。
-- 因此当前不应把 V3 写成已优于 ARD，也不应继续跑 full 1:10 作为正式论文结果。
-- `docs/comments.md` 的最新评阅仍绑定 `71650f7` ARD Method 2 full run；当前 V3 screening 的 Git code commit `87d7f16` 还没有匹配 comments review。
+- V3-Revised 仍以 ARD 为主干，但 residual 经过 calibration-null gate、edge mask、`tanh` trust radius、held-out manifold guard 和 guard-based fallback 约束。
+- 训练目标保留 single-source / pair / midpoint task 项，同时显著增强 ARD anchor、calibration-zero 和 guard 约束；task pair selection 改为 coverage 选择。
+- 筛选结论是安全性修复有效：Case 3 / 10 不再出现旧 V3 的几何崩坏，Case 7 有轻微收益，Case 9 mean resolution 开始高于 ARD。
+- 当前仍不进入 full `1:10`：Case 9 低于 Proposed V1，stable rate 也低于 ARD / V1，因此还不能写成最终有效算法。
+- `docs/comments.md` 的最新评阅绑定 `local-1539bcdf`，与当前 pending V3-Revised screening 匹配；同步时会映射为真实 Git code commit hash。
+- 算法说明文件已从根目录收纳到 `algorithms/`，这是有意的文档整理，不是误删。
 
 ## Version Trace
 
-- Former pending local hash: mapped from `local-5a1492f8` to `87d7f16`
-- Current version result folder: `results/87d7f16/`
-- Base HEAD for current V3 screening: `489efb6`
+- Pending local hash: `local-1539bcdf`
+- Current version result folder: `results/local-1539bcdf/`
+- Base HEAD for current V3-Revised screening: `7a31dd1`
 - Working branch: `codex/proposed_v3`
-- Latest reviewed comments hash: `71650f7`
-- Review status: current V3 screening has no matching comments review yet
-- Git code commit hash: `87d7f16`
-- Hash finalization commit hash: `c949b16`
+- Latest reviewed comments hash: `local-1539bcdf`
+- Review status: comments match the current pending V3-Revised screening; final sync will replace the pending hash with the Git code commit hash.
+- Git code commit hash: pending until sync commit
+- Hash finalization commit hash: pending
 - Published branch: `origin/codex/proposed_v3`
 - Published branch tip: see remote branch after push
-- Historical version folders retained after layout migration: `results/2962bc3/`, `results/71650f7/`, `results/local-8e021ea7/`, `results/local-aa29a0fd/`
+- Historical result archive policy: older remote `results/` folders are retained as published history; local cleanup deletions are not part of ordinary sync unless explicitly requested.
 
 ## 当前结果判断
 
-- Case 3, `L = 9`: mean unseen relative error `ARD 0.001034 / V3 0.017357`，edge `0.001179 / 0.017567`，worst-10% `0.001048 / 0.017536`。V3 明显退化，未通过全局/边缘流形筛选。
-- Case 7, `SNR = 20 dB`: RMSE `ARD 0.002828 / V3 0.002828 deg`，mean absolute bias `0.000040 / 0.000040 deg`。单源高 SNR 没有变坏，但也没有新收益。
-- Case 9: mean resolution `ARD 0.124474 / Proposed V1 0.126776 / V3 0.122018`；mean stable rate `0.034825 / 0.036316 / 0.033465`。V3 低于 ARD 和 V1，未达到筛选门槛。
-- Case 10: mean manifold error `ARD 0.005644 / V3 0.065962`，mean DOA RMSE `ARD 0.103499 / V3 0.106980 deg`。RMSE 尚可，但流形误差明显崩坏。
+- Guard metrics: calibration drift `1.81e-16`，guard relative excess `0.001159`，anchor RMS drift `0.001747`，均低于当前阈值。
+- Case 3, `L = 9`: mean unseen relative error `ARD 0.001034 / V3-Revised 0.001917`，edge `0.001179 / 0.002993`，worst-10% `0.001048 / 0.002882`。旧 V3 的大幅几何退化已被拉回到 guard 内。
+- Case 7, `SNR = 20 dB`: RMSE `ARD 0.002828 / V3-Revised 0.002309 deg`，mean absolute bias `0.000040 / 0.000027 deg`。单源高 SNR 有轻微收益。
+- Case 9: mean resolution `ARD 0.124800 / Proposed V1 0.130000 / V3-Revised 0.126822`；mean stable rate `0.035400 / 0.037933 / 0.033933`。V3-Revised 高于 ARD 的 mean resolution，但仍低于 V1，stable rate 也不占优。
+- Case 10: mean manifold error `ARD 0.005644 / V3-Revised 0.006080`，mean DOA RMSE `ARD 0.103499 / V3-Revised 0.103163 deg`。随机 split 稳健性基本守住，DOA RMSE 略好于 ARD。
 
 ## 仍需保留的边界
 
-- `87d7f16` 是由 `local-5a1492f8` 映射后的 Git code commit hash；该批是 screening run，不是完整 paper-profile full run。
-- 当前 V3 证明的是一条失败筛选路径：task residual 会把校准角从 ARD/HFSS anchor 拉开，不能把它描述为有效改进。
-- 下一步应优先修 V3 objective，使 task residual 不再以牺牲 ARD 全局流形为代价；可以尝试更强 ARD anchor、更小 residual order/step、显式 global/edge manifold guard，或退化时 fallback 到 ARD。
-- 继续加难 case 或立即转向 2D DOA 都不是当前主线。
+- `local-1539bcdf` 是 screening run，不是完整 paper-profile full run。
+- 当前 V3-Revised 证明的是“安全修复 + 初步增益恢复”：它已经把旧 V3 的几何风险修掉，但还没有真正拿下 Case 9。
+- 论文表述不能写成 V3-Revised 已优于 ARD / V1；目前只能写成几何安全、随机稳健、Case 9 出现局部正向趋势。
+- 下一步应只围绕 Case 9 的 pair-task surrogate、stable-rate 对齐和 task pair 分布继续小步调优；不应马上扩 benchmark、转 2D 或大改架构。
 
 ## 运行方式
 

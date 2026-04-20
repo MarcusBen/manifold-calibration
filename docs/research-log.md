@@ -18,6 +18,60 @@
 
 > Branch artifact policy: `codex/proposed_v3` 使用 version-first traceable results layout：`results/<version-hash>/<case-name>/`。2026-04-20 当前同步范围包括 `87d7f16` V3 screening、`71650f7` ARD Method 2 full run、`local-8e021ea7` Full V2 C-route full run、`2962bc3` V2-lite run，以及仅含失败启动日志的 `local-aa29a0fd`。
 
+### 2026-04-20：`local-1539bcdf` Proposed V3-Revised guarded screening run
+
+- Version hash: `local-1539bcdf`
+- Base HEAD: `7a31dd1`
+- Branch: `codex/proposed_v3`
+- Worktree state at run time: uncommitted code changes; `docs/comments.md` was treated as read-only reference and not edited by this change batch.
+- Run command: `run_project([3 7 9 10], default_config(pwd, 'paper'))`
+- Result path: `results/local-1539bcdf/`
+- Case outputs: `case03_unseen_generalization/`, `case07_single_source_snr/`, `case09_two_source_resolution/`, `case10_random_split_robustness/`
+- Run scope: screening only; this is not a full paper-profile result.
+
+#### 一句话结论
+
+本轮按 `docs/comments.md` 和 review findings 将旧 V3 改成 **Calibration-Guarded ARD-Anchored Task-Aware Residual Calibration**。新版 V3-Revised 使用 calibration-null gate、trust-region residual、held-out manifold guard、coverage pair task selection 和 guard-based fallback，目标是先保住 ARD 的几何能力，再观察 Case 9 是否有任务收益。筛选结果显示：安全性修复有效，Case 3/10 不再崩；Case 7 有轻微改善；Case 9 mean resolution 略高于 ARD 但低于 V1，stable rate 也低于 ARD/V1，因此本轮不进入 full `1:10`。
+
+#### 代码与行为变化
+
+- `cfg.model.v3.stage` 改为 `calibration_guarded_ard_anchored_task_refinement`，默认 `lambdaAnchor = 50`、`lambdaGuard = 10`、`lambdaCal0 = 20`、`trustRadiusRad = 0.04`，task weights 和 SPSA 步长下调。
+- `build_sparse_models` 中 V3 residual 现在经过 calibration-null gate、edge mask 和 `tanh` trust radius；objective 新增 `guard` 和 `cal0` 项。
+- V3 fallback 不再只看内部 objective：如果 calibration drift、held-out guard excess 或 anchor RMS drift 超阈值，则 `AProposedV3` 回退为 `AARD`，并在 `v3Diagnostics.fallbackReason` 中记录原因。
+- Pair task selection 从 top hard score 改为 coverage 选择，避免 task pairs 全部集中在 ±60° 边缘。
+- `run_project` traceable 输出已适配新版技能：新结果写入 `results/<version-hash>/<case-name>/`，并生成 version-level `RUN_NOTES.md` 和 `manifest.md`。
+- `proposed_algorithm_v3.md` 已重写为 V3-Revised 说明；旧版 V3 原样保存为 `proposed_algorithm_v3_initial_screening.md`。
+
+#### 验证与筛选结果
+
+- 模型级检查：`AProposedV3`、`phaseFitV3Full`、`phaseDeltaV3Full`、`v3Diagnostics` 存在，尺寸匹配 `ctx.AH`，无 `NaN/Inf`。
+- `checkcode`: `default_config.m` 0 条；`src/build_sparse_models.m` 2 条既有 suppressed-message warning；`run_project.m` 14 条既有风格 warning，无阻塞项。
+- V3-Revised representative objective: initial `0.886589`，final `0.816678`，`usedARDFallback = 0`。
+- Guard metrics: calibration drift `1.81e-16`，guard relative excess `0.001159`，anchor RMS drift `0.001747`，均低于当前阈值。
+- Case 3, `L = 9`: mean unseen error `ARD 0.001034 / V3-Revised 0.001917`，edge `0.001179 / 0.002993`，worst-10% `0.001048 / 0.002882`。相对 ARD 有小幅退化，但在 `ARD + 0.003` guard 内。
+- Case 7, `SNR = 20 dB`: RMSE `ARD 0.002828 / V3-Revised 0.002309 deg`，mean absolute bias `0.000040 / 0.000027 deg`，有轻微单源收益。
+- Case 9: mean resolution `ARD 0.124800 / Proposed V1 0.130000 / V3-Revised 0.126822`；mean stable rate `0.035400 / 0.037933 / 0.033933`。V3-Revised 高于 ARD 的 mean resolution `+0.002022`，但低于 V1，stable rate 也不占优。
+- Case 9 leakage check: `taskEvalOverlapCount = 0`，`taskExcludedPairCount = 18`，V2/V3 task pair union 共 `22` 个；V3 task pair center mean abs 从旧 V3 的约 `57.3°` 降到 `42.87°`，更接近 evaluation 的 `38.62°`。
+- Case 10: mean manifold error `ARD 0.005644 / V3-Revised 0.006080`，mean DOA RMSE `ARD 0.103499 / V3-Revised 0.103163 deg`。几何退化被控制住，DOA RMSE 略好于 ARD。
+
+#### 关键图片
+
+以下图片来自 `results/local-1539bcdf/` screening run，并已复制到 `docs/assets/`。
+
+![case03 v3r edge hard](assets/case03-v3r-edge-hard-local-1539bcdf.png)
+
+![case07 v3r snr](assets/case07-v3r-snr-local-1539bcdf.png)
+
+![case09 v3r two source](assets/case09-v3r-two-source-local-1539bcdf.png)
+
+![case10 v3r random split](assets/case10-v3r-random-split-local-1539bcdf.png)
+
+#### 决策与下一步
+
+- 不跑 full paper profile `1:10`：V3-Revised 已经安全，但 Case 9 尚未超过 `max(ARD, V1)`，因此只能写成“安全修复有效、Case 9 收益不足”。
+- 下一步应继续围绕 Case 9 的任务收益做小步调参，而不是加难 benchmark 或转 2D。
+- 优先尝试：进一步改善 pair surrogate 与 `benchmark_music` resolution/stable-rate 指标的一致性，或让 coverage task pair 更贴近评估 pair 分布；同时保留当前 guard/fallback。
+
 ### 2026-04-20：`87d7f16` Proposed V3 ARD-anchored screening run
 
 - Version hash: `87d7f16`

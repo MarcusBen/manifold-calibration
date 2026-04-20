@@ -185,7 +185,7 @@ end
 v3Cfg = local_set_default_field(v3Cfg, 'enabled', true);
 v3Cfg = local_set_default_field(v3Cfg, 'label', 'Proposed V3');
 v3Cfg = local_set_default_field(v3Cfg, 'base', 'ard');
-v3Cfg = local_set_default_field(v3Cfg, 'stage', 'ard_anchored_task_refinement');
+v3Cfg = local_set_default_field(v3Cfg, 'stage', 'calibration_guarded_ard_anchored_task_refinement');
 v3Cfg = local_set_default_field(v3Cfg, 'segmentCentersDeg', [-50 0 50]);
 v3Cfg = local_set_default_field(v3Cfg, 'order', 1);
 v3Cfg = local_set_default_field(v3Cfg, 'lambda', 1e-3);
@@ -198,19 +198,32 @@ v3Cfg = local_set_default_field(v3Cfg, 'taskSingleHeldoutCount', 12);
 v3Cfg = local_set_default_field(v3Cfg, 'taskPairSeparationDeg', [4 5 6 8 10]);
 v3Cfg = local_set_default_field(v3Cfg, 'taskPairCount', 16);
 v3Cfg = local_set_default_field(v3Cfg, 'taskSnrDb', 25);
-v3Cfg = local_set_default_field(v3Cfg, 'numSpsaIterations', 12);
-v3Cfg = local_set_default_field(v3Cfg, 'learningRate', 0.020);
-v3Cfg = local_set_default_field(v3Cfg, 'perturbationScale', 0.015);
+v3Cfg = local_set_default_field(v3Cfg, 'taskPairSelectionMode', 'coverage');
+v3Cfg = local_set_default_field(v3Cfg, 'guardHeldoutCount', 64);
+v3Cfg = local_set_default_field(v3Cfg, 'numSpsaIterations', 8);
+v3Cfg = local_set_default_field(v3Cfg, 'learningRate', 0.005);
+v3Cfg = local_set_default_field(v3Cfg, 'perturbationScale', 0.005);
 v3Cfg = local_set_default_field(v3Cfg, 'maxGradNorm', 5);
 v3Cfg = local_set_default_field(v3Cfg, 'lambdaCal', 1);
-v3Cfg = local_set_default_field(v3Cfg, 'lambdaSingle', 0.08);
-v3Cfg = local_set_default_field(v3Cfg, 'lambdaPair', 0.12);
-v3Cfg = local_set_default_field(v3Cfg, 'lambdaMid', 0.04);
-v3Cfg = local_set_default_field(v3Cfg, 'lambdaAnchor', 5);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaSingle', 0.04);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaPair', 0.03);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaMid', 0.01);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaAnchor', 50);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaGuard', 10);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaCal0', 20);
 v3Cfg = local_set_default_field(v3Cfg, 'lambdaSmooth', 1e-3);
 v3Cfg = local_set_default_field(v3Cfg, 'lambdaReg', 1e-4);
 v3Cfg = local_set_default_field(v3Cfg, 'softmaxGamma', 8);
 v3Cfg = local_set_default_field(v3Cfg, 'midMargin', 0.2);
+v3Cfg = local_set_default_field(v3Cfg, 'trustRadiusRad', 0.04);
+v3Cfg = local_set_default_field(v3Cfg, 'calibrationNullSigmaDeg', 0.25);
+v3Cfg = local_set_default_field(v3Cfg, 'edgeMaskEnabled', true);
+v3Cfg = local_set_default_field(v3Cfg, 'edgeMaskStartDeg', 35);
+v3Cfg = local_set_default_field(v3Cfg, 'edgeMaskTransitionDeg', 6);
+v3Cfg = local_set_default_field(v3Cfg, 'edgeMaskMinimum', 0.25);
+v3Cfg = local_set_default_field(v3Cfg, 'maxCalibrationDrift', 1e-3);
+v3Cfg = local_set_default_field(v3Cfg, 'guardRelativeTolerance', 0.003);
+v3Cfg = local_set_default_field(v3Cfg, 'maxAnchorRmsDrift', 0.02);
 
 if ~isfield(v3Cfg, 'segmentWidthU') || isempty(v3Cfg.segmentWidthU)
     centersU = sort(sind(v3Cfg.segmentCentersDeg(:).'));
@@ -349,20 +362,33 @@ initEval = local_evaluate_task_objective(x0, state);
 
 [bestX, bestEval, objectiveHistory] = local_spsa_refine(x0, state, v3Cfg, initEval);
 usedARDFallback = false;
-warningText = '';
+fallbackReason = '';
 if bestEval.total > initEval.total
     bestX = x0;
     bestEval = initEval;
     usedARDFallback = true;
-    warningText = 'Proposed V3 refinement did not reduce objective; ARD initializer was kept.';
+    fallbackReason = 'objective_not_reduced';
 end
 
 v3Model.coeff = reshape(bestX, size(v3Model.coeff));
 v3Model.initialCoeff = zeros(size(v3Model.coeff));
 v3Model.objectiveWeights = local_v3_objective_weights(v3Cfg);
 v3Model.numSpsaIterations = v3Cfg.numSpsaIterations;
-phaseDeltaFull = local_predict_piecewise_residual_model(v3Model, ctx.thetaDeg);
+phaseDeltaFull = local_predict_v3_safe_residual_model(v3Model, ctx.thetaDeg);
 aProposedV3 = local_normalize_columns(aARD .* exp(1i * phaseDeltaFull));
+candidateGuardMetrics = local_v3_guard_metrics(ctx, aProposedV3, aARD, calIdx, tasks.guardIdx, v3Cfg);
+if ~usedARDFallback
+    [guardPassed, fallbackReason] = local_v3_guard_passed(candidateGuardMetrics, v3Cfg);
+    if ~guardPassed
+        bestX = x0;
+        bestEval = initEval;
+        usedARDFallback = true;
+        v3Model.coeff = reshape(bestX, size(v3Model.coeff));
+        phaseDeltaFull = local_predict_v3_safe_residual_model(v3Model, ctx.thetaDeg);
+        aProposedV3 = local_normalize_columns(aARD .* exp(1i * phaseDeltaFull));
+    end
+end
+finalGuardMetrics = local_v3_guard_metrics(ctx, aProposedV3, aARD, calIdx, tasks.guardIdx, v3Cfg);
 phaseFitFull = unwrap(angle(aProposedV3 .* conj(ctx.AI)), [], 2);
 
 diagnostics = struct();
@@ -378,16 +404,22 @@ diagnostics.initialComponents = initEval.components;
 diagnostics.finalComponents = bestEval.components;
 diagnostics.objectiveHistory = objectiveHistory;
 diagnostics.usedARDFallback = usedARDFallback;
-diagnostics.warning = warningText;
+diagnostics.fallbackReason = fallbackReason;
+diagnostics.warning = local_v3_fallback_warning(usedARDFallback, fallbackReason);
 diagnostics.singleTaskAnglesDeg = ctx.thetaDeg(tasks.singleIdx);
 diagnostics.heldoutSingleAnglesDeg = ctx.thetaDeg(tasks.heldoutSingleIdx);
 diagnostics.taskPairsDeg = tasks.pairAnglesDeg;
 diagnostics.taskPairIdx = tasks.pairIdx;
+diagnostics.guardAnglesDeg = ctx.thetaDeg(tasks.guardIdx);
 diagnostics.taskScanAnglesDeg = ctx.thetaDeg(tasks.scanIdx);
 diagnostics.objectiveWeights = local_v3_objective_weights(v3Cfg);
-diagnostics.selectionReason = sprintf(['Proposed V3 refined a zero phase residual around ARD with %d ' ...
-    'deterministic SPSA iterations and ARD anchor weight %.3g.'], ...
-    v3Cfg.numSpsaIterations, v3Cfg.lambdaAnchor);
+diagnostics.candidateGuardMetrics = candidateGuardMetrics;
+diagnostics.guardMetrics = finalGuardMetrics;
+diagnostics.trustRadiusRad = v3Cfg.trustRadiusRad;
+diagnostics.taskPairSelectionMode = local_optional_v2_field(v3Cfg, 'taskPairSelectionMode', 'top_score');
+diagnostics.selectionReason = sprintf(['Proposed V3-Revised used calibration-null trust-region residuals ' ...
+    'around ARD with %d deterministic SPSA iterations, anchor %.3g, guard %.3g.'], ...
+    v3Cfg.numSpsaIterations, v3Cfg.lambdaAnchor, v3Cfg.lambdaGuard);
 end
 
 function model = local_build_v3_zero_model(ctx, calIdx, v3Cfg)
@@ -397,6 +429,7 @@ model.type = 'v3_ard_anchored_task_refinement';
 model.enabled = true;
 model.stage = v3Cfg.stage;
 model.calIdx = calIdx(:).';
+model.calU = sind(ctx.thetaDeg(calIdx));
 model.coeff = zeros(ctx.numElements, numBasis);
 model.basisType = v3Cfg.basisType;
 model.order = v3Cfg.order;
@@ -405,6 +438,12 @@ model.regularization = v3Cfg.regularization;
 model.segmentCentersDeg = v3Cfg.segmentCentersDeg;
 model.segmentCentersU = sind(v3Cfg.segmentCentersDeg);
 model.segmentWidthU = v3Cfg.segmentWidthU;
+model.trustRadiusRad = v3Cfg.trustRadiusRad;
+model.calibrationNullSigmaDeg = v3Cfg.calibrationNullSigmaDeg;
+model.edgeMaskEnabled = v3Cfg.edgeMaskEnabled;
+model.edgeMaskStartDeg = v3Cfg.edgeMaskStartDeg;
+model.edgeMaskTransitionDeg = v3Cfg.edgeMaskTransitionDeg;
+model.edgeMaskMinimum = v3Cfg.edgeMaskMinimum;
 end
 
 function tasks = local_build_full_v2_tasks(ctx, calIdx, v2Cfg)
@@ -424,13 +463,12 @@ singleIdx = sort(unique([calIdx(:); heldoutSingleIdx(:)]));
 pairCandidates = local_generate_task_pair_candidates(ctx, v2Cfg.taskPairSeparationDeg, calIdx);
 if v2Cfg.pairTaskEnabled && v2Cfg.taskPairCount > 0 && ~isempty(pairCandidates)
     pairScores = local_score_task_pairs(ctx, pairCandidates, taskScore, calIdx);
-    [~, pairOrder] = sort(pairScores, 'descend');
-    pairKeep = pairOrder(1:min(v2Cfg.taskPairCount, numel(pairOrder)));
-    pairIdx = pairCandidates(pairKeep, :);
+    pairIdx = local_select_task_pairs(ctx, pairCandidates, pairScores, taskScore, v2Cfg);
 else
     pairIdx = zeros(0, 2);
 end
 pairAnglesDeg = ctx.thetaDeg(pairIdx);
+guardIdx = local_select_guard_indices(ctx, calIdx, taskScore, v2Cfg);
 
 scanIdx = local_training_scan_indices(ctx, v2Cfg, singleIdx, pairIdx);
 
@@ -440,10 +478,133 @@ tasks.singleIdx = singleIdx(:).';
 tasks.heldoutSingleIdx = heldoutSingleIdx(:).';
 tasks.pairIdx = pairIdx;
 tasks.pairAnglesDeg = pairAnglesDeg;
+tasks.guardIdx = guardIdx(:).';
 tasks.scanIdx = scanIdx(:).';
 tasks.taskScore = taskScore;
 tasks.mismatchScore = mismatchScore;
 tasks.edgeScore = edgeScore;
+end
+
+function pairIdx = local_select_task_pairs(ctx, pairCandidates, pairScores, taskScore, v2Cfg)
+taskPairCount = min(v2Cfg.taskPairCount, size(pairCandidates, 1));
+selectionMode = local_optional_v2_field(v2Cfg, 'taskPairSelectionMode', 'top_score');
+if taskPairCount <= 0
+    pairIdx = zeros(0, 2);
+    return;
+end
+
+if ~strcmpi(selectionMode, 'coverage')
+    [~, pairOrder] = sort(pairScores, 'descend');
+    pairIdx = pairCandidates(pairOrder(1:taskPairCount), :);
+    return;
+end
+
+thetaPairs = ctx.thetaDeg(pairCandidates);
+pairCenters = mean(thetaPairs, 2);
+pairSeparations = round(thetaPairs(:, 2) - thetaPairs(:, 1), 10);
+edgeScore = max(abs(thetaPairs), [], 2) / max(max(abs(ctx.thetaDeg)), eps);
+centerScore = 1 - abs(pairCenters) / max(max(abs(ctx.thetaDeg)), eps);
+pairMismatchScore = mean([taskScore(pairCandidates(:, 1)), taskScore(pairCandidates(:, 2))], 2);
+
+selected = [];
+selected = local_append_ranked_pair_indices(selected, pairScores, ceil(0.25 * taskPairCount), taskPairCount);
+selected = local_append_ranked_pair_indices(selected, centerScore, ceil(0.25 * taskPairCount), taskPairCount);
+selected = local_append_ranked_pair_indices(selected, edgeScore, ceil(0.25 * taskPairCount), taskPairCount);
+selected = local_append_separation_coverage(selected, pairSeparations, pairMismatchScore, taskPairCount);
+
+while numel(selected) < taskPairCount
+    remaining = setdiff(1:size(pairCandidates, 1), selected, 'stable');
+    if isempty(remaining)
+        break;
+    end
+    if isempty(selected)
+        [~, localIdx] = max(pairScores(remaining));
+    else
+        selectedCenters = pairCenters(selected);
+        minDistance = zeros(numel(remaining), 1);
+        for idx = 1:numel(remaining)
+            minDistance(idx) = min(abs(pairCenters(remaining(idx)) - selectedCenters));
+        end
+        rankScore = minDistance + 1e-3 * pairScores(remaining);
+        [~, localIdx] = max(rankScore);
+    end
+    selected(end+1) = remaining(localIdx); %#ok<AGROW>
+end
+
+pairIdx = pairCandidates(selected(1:min(taskPairCount, numel(selected))), :);
+end
+
+function selected = local_append_ranked_pair_indices(selected, score, quota, taskPairCount)
+if quota <= 0 || numel(selected) >= taskPairCount
+    return;
+end
+initialCount = numel(selected);
+[~, order] = sort(score, 'descend');
+for idx = reshape(order, 1, [])
+    if ~ismember(idx, selected)
+        selected(end+1) = idx; %#ok<AGROW>
+    end
+    if numel(selected) >= taskPairCount || numel(selected) - initialCount >= quota
+        return;
+    end
+end
+end
+
+function selected = local_append_separation_coverage(selected, pairSeparations, score, taskPairCount)
+uniqueSeparations = unique(pairSeparations, 'stable');
+for sepIdx = 1:numel(uniqueSeparations)
+    if numel(selected) >= taskPairCount
+        return;
+    end
+    candidates = find(pairSeparations == uniqueSeparations(sepIdx));
+    candidates = setdiff(candidates, selected, 'stable');
+    if isempty(candidates)
+        continue;
+    end
+    [~, localIdx] = max(score(candidates));
+    selected(end+1) = candidates(localIdx); %#ok<AGROW>
+end
+end
+
+function guardIdx = local_select_guard_indices(ctx, calIdx, taskScore, v2Cfg)
+candidateIdx = setdiff(1:ctx.numAngles, calIdx);
+guardCount = local_optional_v2_field(v2Cfg, 'guardHeldoutCount', 0);
+guardCount = min(max(0, round(guardCount)), numel(candidateIdx));
+if guardCount == 0
+    guardIdx = zeros(1, 0);
+    return;
+end
+
+hardCount = min(ceil(0.5 * guardCount), guardCount);
+[~, hardOrder] = sort(taskScore(candidateIdx), 'descend');
+guardIdx = candidateIdx(hardOrder(1:hardCount));
+
+remainingCount = guardCount - numel(guardIdx);
+if remainingCount > 0
+    uniformPositions = unique(round(linspace(1, numel(candidateIdx), remainingCount * 2)));
+    for pos = reshape(uniformPositions, 1, [])
+        idx = candidateIdx(pos);
+        if ~ismember(idx, guardIdx)
+            guardIdx(end+1) = idx; %#ok<AGROW>
+        end
+        if numel(guardIdx) >= guardCount
+            break;
+        end
+    end
+end
+
+if numel(guardIdx) < guardCount
+    for idx = reshape(candidateIdx, 1, [])
+        if ~ismember(idx, guardIdx)
+            guardIdx(end+1) = idx; %#ok<AGROW>
+        end
+        if numel(guardIdx) >= guardCount
+            break;
+        end
+    end
+end
+
+guardIdx = sort(unique(guardIdx), 'ascend');
 end
 
 function pairCandidates = local_generate_task_pair_candidates(ctx, separationSweepDeg, calIdx)
@@ -547,6 +708,7 @@ state.dMat = local_build_piecewise_regularization_matrix(model);
 state.calIdx = calIdx(:).';
 state.calWeights = ones(1, numel(calIdx));
 state.tasks = tasks;
+state.guardIdx = tasks.guardIdx(:).';
 state.singleTasks = local_precompute_single_tasks(ctx, tasks.singleIdx, tasks.scanIdx, v3Cfg);
 state.pairTasks = local_precompute_pair_tasks(ctx, tasks.pairIdx, tasks.scanIdx, v3Cfg);
 end
@@ -658,16 +820,58 @@ delta = ones(numParams, 1);
 delta(pattern < 2) = -1;
 end
 
+function phaseDeltaFull = local_v3_safe_residual_from_coeff(coeff, state)
+rawResidual = coeff * state.psiFull;
+phaseDeltaFull = local_apply_v3_residual_guards( ...
+    rawResidual, state.ctx.thetaDeg, state.v3Cfg, sind(state.ctx.thetaDeg(state.calIdx)));
+end
+
+function phaseDeltaFull = local_predict_v3_safe_residual_model(model, thetaQueryDeg)
+rawResidual = local_predict_piecewise_residual_model(model, thetaQueryDeg);
+phaseDeltaFull = local_apply_v3_residual_guards(rawResidual, thetaQueryDeg, model, model.calU);
+end
+
+function phaseDelta = local_apply_v3_residual_guards(rawResidual, thetaDeg, cfg, calU)
+thetaDeg = reshape(thetaDeg, 1, []);
+uQuery = sind(thetaDeg);
+
+if isempty(calU)
+    calibrationGate = ones(1, numel(thetaDeg));
+else
+    sigmaU = max(abs(sind(local_optional_v2_field(cfg, 'calibrationNullSigmaDeg', 0.25))), eps);
+    distanceU = uQuery - reshape(calU, [], 1);
+    calibrationGate = prod(1 - exp(-0.5 * (distanceU / sigmaU) .^ 2), 1);
+end
+
+if local_optional_v2_field(cfg, 'edgeMaskEnabled', false)
+    startDeg = local_optional_v2_field(cfg, 'edgeMaskStartDeg', 35);
+    transitionDeg = max(local_optional_v2_field(cfg, 'edgeMaskTransitionDeg', 6), eps);
+    minMask = min(max(local_optional_v2_field(cfg, 'edgeMaskMinimum', 0.25), 0), 1);
+    edgeGate = 1 ./ (1 + exp(-(abs(thetaDeg) - startDeg) / transitionDeg));
+    edgeGate = minMask + (1 - minMask) * edgeGate;
+else
+    edgeGate = ones(1, numel(thetaDeg));
+end
+
+phaseDelta = rawResidual .* (calibrationGate .* edgeGate);
+trustRadius = local_optional_v2_field(cfg, 'trustRadiusRad', Inf);
+if isfinite(trustRadius) && trustRadius > 0
+    phaseDelta = trustRadius * tanh(phaseDelta / trustRadius);
+end
+end
+
 function result = local_full_v3_objective(x, state)
 coeff = reshape(x, state.coeffSize);
-phaseDeltaFull = coeff * state.psiFull;
+phaseDeltaFull = local_v3_safe_residual_from_coeff(coeff, state);
 manifold = local_normalize_columns(state.baseManifold .* exp(1i * phaseDeltaFull));
 
 components = struct();
 components.cal = local_complex_calibration_loss(state.ctx, manifold, state.calIdx, state.calWeights);
+components.cal0 = local_v3_calibration_anchor_loss(manifold, state.baseManifold, state.calIdx);
 components.smooth = mean(abs(coeff * state.dMat') .^ 2, 'all');
 components.reg = mean(abs(coeff(:)) .^ 2);
 components.anchor = mean(sum(abs(manifold - state.baseManifold) .^ 2, 1));
+components.guard = local_v3_guard_loss(state.ctx, manifold, state.guardIdx);
 [components.single, components.singleSub, components.singlePeak] = ...
     local_single_task_loss(manifold, state);
 [components.pair, components.pairSub, components.pairPeak, components.mid] = ...
@@ -680,6 +884,8 @@ total = weights.lambdaCal * components.cal + ...
     weights.lambdaPair * components.pair + ...
     weights.lambdaMid * components.mid + ...
     weights.lambdaAnchor * components.anchor + ...
+    weights.lambdaGuard * components.guard + ...
+    weights.lambdaCal0 * components.cal0 + ...
     weights.lambdaReg * components.reg;
 
 result = struct();
@@ -718,6 +924,24 @@ function loss = local_complex_calibration_loss(ctx, manifold, calIdx, calWeights
 diffCal = manifold(:, calIdx) - ctx.AH(:, calIdx);
 perCal = sum(abs(diffCal) .^ 2, 1);
 loss = sum(calWeights .* perCal) / max(sum(calWeights), eps);
+end
+
+function loss = local_v3_calibration_anchor_loss(manifold, baseManifold, calIdx)
+if isempty(calIdx)
+    loss = 0;
+    return;
+end
+diffCal = manifold(:, calIdx) - baseManifold(:, calIdx);
+loss = mean(sum(abs(diffCal) .^ 2, 1));
+end
+
+function loss = local_v3_guard_loss(ctx, manifold, guardIdx)
+if isempty(guardIdx)
+    loss = 0;
+    return;
+end
+diffGuard = manifold(:, guardIdx) - ctx.AH(:, guardIdx);
+loss = mean(sum(abs(diffGuard) .^ 2, 1));
 end
 
 function [loss, subLoss, peakLoss] = local_single_task_loss(manifold, state)
@@ -803,7 +1027,58 @@ weights.lambdaSingle = v3Cfg.lambdaSingle;
 weights.lambdaPair = v3Cfg.lambdaPair;
 weights.lambdaMid = v3Cfg.lambdaMid;
 weights.lambdaAnchor = v3Cfg.lambdaAnchor;
+weights.lambdaGuard = v3Cfg.lambdaGuard;
+weights.lambdaCal0 = v3Cfg.lambdaCal0;
 weights.lambdaReg = v3Cfg.lambdaReg;
+end
+
+function metrics = local_v3_guard_metrics(ctx, manifold, baseManifold, calIdx, guardIdx, v3Cfg)
+metrics = struct();
+if isempty(calIdx)
+    metrics.maxCalibrationDrift = 0;
+else
+    metrics.maxCalibrationDrift = max(vecnorm(manifold(:, calIdx) - baseManifold(:, calIdx), 2, 1));
+end
+anchorColumnDrift = vecnorm(manifold - baseManifold, 2, 1);
+metrics.anchorRmsDrift = sqrt(mean(anchorColumnDrift .^ 2));
+metrics.maxAnchorDrift = max(anchorColumnDrift);
+
+if isempty(guardIdx)
+    metrics.guardMeanRelativeError = 0;
+    metrics.ardGuardMeanRelativeError = 0;
+else
+    candidateMetrics = compute_manifold_metrics(ctx.AH(:, guardIdx), manifold(:, guardIdx));
+    ardMetrics = compute_manifold_metrics(ctx.AH(:, guardIdx), baseManifold(:, guardIdx));
+    metrics.guardMeanRelativeError = mean(candidateMetrics.relativeError);
+    metrics.ardGuardMeanRelativeError = mean(ardMetrics.relativeError);
+end
+metrics.guardRelativeExcess = metrics.guardMeanRelativeError - metrics.ardGuardMeanRelativeError;
+metrics.maxCalibrationDriftLimit = v3Cfg.maxCalibrationDrift;
+metrics.guardRelativeTolerance = v3Cfg.guardRelativeTolerance;
+metrics.maxAnchorRmsDriftLimit = v3Cfg.maxAnchorRmsDrift;
+end
+
+function [passed, reason] = local_v3_guard_passed(metrics, v3Cfg)
+passed = true;
+reason = '';
+if metrics.maxCalibrationDrift > v3Cfg.maxCalibrationDrift
+    passed = false;
+    reason = 'calibration_drift_guard';
+elseif metrics.guardRelativeExcess > v3Cfg.guardRelativeTolerance
+    passed = false;
+    reason = 'heldout_manifold_guard';
+elseif metrics.anchorRmsDrift > v3Cfg.maxAnchorRmsDrift
+    passed = false;
+    reason = 'anchor_drift_guard';
+end
+end
+
+function warningText = local_v3_fallback_warning(usedARDFallback, fallbackReason)
+if usedARDFallback
+    warningText = sprintf('Proposed V3-Revised kept the ARD initializer because %s failed.', fallbackReason);
+else
+    warningText = '';
+end
 end
 
 function value = local_optional_v2_field(inputStruct, fieldName, defaultValue)
