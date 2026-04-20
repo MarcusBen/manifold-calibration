@@ -1,4 +1,4 @@
-﻿# 研究变更记录
+# 研究变更记录
 
 这份文档用于长期记录项目里的研究判断、实验变更、代码方向调整和论文表述收束。
 
@@ -18,14 +18,14 @@
 
 > Branch artifact policy: `codex/proposed_v3` 使用 version-first traceable results layout：`results/<version-hash>/<case-name>/`。2026-04-20 当前同步范围包括 `87d7f16` V3 screening、`71650f7` ARD Method 2 full run、`local-8e021ea7` Full V2 C-route full run、`2962bc3` V2-lite run，以及仅含失败启动日志的 `local-aa29a0fd`。
 
-### 2026-04-20：`local-1539bcdf` Proposed V3-Revised guarded screening run
+### 2026-04-20：`a5a22d2` Proposed V3-Revised guarded screening run
 
-- Version hash: `local-1539bcdf`
+- Version hash: `a5a22d2`
 - Base HEAD: `7a31dd1`
 - Branch: `codex/proposed_v3`
 - Worktree state at run time: uncommitted code changes; `docs/comments.md` was treated as read-only reference and not edited by this change batch.
 - Run command: `run_project([3 7 9 10], default_config(pwd, 'paper'))`
-- Result path: `results/local-1539bcdf/`
+- Result path: `results/a5a22d2/`
 - Case outputs: `case03_unseen_generalization/`, `case07_single_source_snr/`, `case09_two_source_resolution/`, `case10_random_split_robustness/`
 - Run scope: screening only; this is not a full paper-profile result.
 
@@ -56,15 +56,15 @@
 
 #### 关键图片
 
-以下图片来自 `results/local-1539bcdf/` screening run，并已复制到 `docs/assets/`。
+以下图片来自 `results/a5a22d2/` screening run，并已复制到 `docs/assets/`。
 
-![case03 v3r edge hard](assets/case03-v3r-edge-hard-local-1539bcdf.png)
+![case03 v3r edge hard](assets/case03-v3r-edge-hard-a5a22d2.png)
 
-![case07 v3r snr](assets/case07-v3r-snr-local-1539bcdf.png)
+![case07 v3r snr](assets/case07-v3r-snr-a5a22d2.png)
 
-![case09 v3r two source](assets/case09-v3r-two-source-local-1539bcdf.png)
+![case09 v3r two source](assets/case09-v3r-two-source-a5a22d2.png)
 
-![case10 v3r random split](assets/case10-v3r-random-split-local-1539bcdf.png)
+![case10 v3r random split](assets/case10-v3r-random-split-a5a22d2.png)
 
 #### 决策与下一步
 

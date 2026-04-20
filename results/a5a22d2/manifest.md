@@ -1,6 +1,6 @@
 # Results manifest
 
-- Version hash: `local-1539bcdf`
+- Version hash: `a5a22d2`
 - Base HEAD: `7a31dd1`
 - Worktree state: uncommitted code changes recorded in `RUN_NOTES.md`
 - Command: `run_project([3 7 9 10], default_config(pwd, 'paper'))`

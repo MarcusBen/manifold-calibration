@@ -1,9 +1,9 @@
 # Run Notes
 
 - Timestamp: `2026-04-20 15:12:48`
-- Pending local hash: `local-1539bcdf`
+- Version hash: `a5a22d2`
 - Base HEAD: `7a31dd1`
-- Run id: `local-1539bcdf`
+- Run id: `a5a22d2`
 - Command: `run_project([3 7 9 10], default_config(pwd, 'paper'))`
 - Notes: `Screening run for Proposed V3-Revised calibration-guarded ARD-anchored task residual; not a full paper-profile result.`
 

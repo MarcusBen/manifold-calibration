@@ -1,9 +1,9 @@
-﻿# 项目阶段性判断报告（基于 `local-1539bcdf` V3-Revised screening）
+# 项目阶段性判断报告（基于 `a5a22d2` V3-Revised screening）
 
-- Version hash: `local-1539bcdf`
+- Version hash: `a5a22d2`
 - Base HEAD: `7a31dd1`
-- Review target: pending local run / `results/local-1539bcdf/` V3-Revised guarded screening
-- Review status: reviewed; current comments match the pending V3-Revised screening batch
+- Review target: Git code commit / `results/a5a22d2/` V3-Revised guarded screening
+- Review status: reviewed; current comments match the V3-Revised code/results commit
 - Main comments: V3-Revised is a successful safety repair with initial task-gain recovery, but Case 9 is not fully won yet.
 - Conflicts with log/code: no direct conflict with `docs/research-log.md`; both say this is screening only and should not enter full `1:10` yet.
 - Next action: keep the guard system stable and tune only the Case 9 pair-task surrogate, stable-rate alignment, and task-pair distribution.
@@ -23,7 +23,7 @@
 
 # 一、这次最新进展，最核心的变化是什么
 
-如果把你最新这一版 `local-1539bcdf` 和上一版 `87d7f16` 直接比较，最重要的变化不是“Case 9 突然变得很强”，而是：
+如果把你最新这一版 `a5a22d2` 和上一版 `87d7f16` 直接比较，最重要的变化不是“Case 9 突然变得很强”，而是：
 
 > **V3 的“安全性问题”基本被修掉了。**
 
@@ -47,7 +47,7 @@
 - V3 的 task residual 把 ARD 在校准角上的精确穿越性质拉坏了
 - representative Case 3 模型里，校准角误差能到 **`2.54e-2`**
 
-而这次 `local-1539bcdf` 的 log 里，guard metrics 变成了：
+而这次 `a5a22d2` 的 log 里，guard metrics 变成了：
 
 - calibration drift：**`1.81e-16`**
 - anchor RMS drift：**`0.001747`**
@@ -75,7 +75,7 @@
 
 这已经是明显退化。
 
-而这次 `local-1539bcdf`：
+而这次 `a5a22d2`：
 
 - `ARD`: **0.001034**
 - `V3-Revised`: **0.001917**
@@ -108,7 +108,7 @@ worst-10%：
 
 这差距非常大。
 
-而这次 `local-1539bcdf`：
+而这次 `a5a22d2`：
 
 - `ARD`: **0.005644**
 - `V3-Revised`: **0.006080**
@@ -160,7 +160,7 @@ mean abs bias：
 
 这是当前唯一真正没过关的地方。
 
-这次 `local-1539bcdf` 的 Case 9：
+这次 `a5a22d2` 的 Case 9：
 
 ### mean resolution
 
@@ -199,7 +199,7 @@ mean abs bias：
 
 # 四、所以这次最新进展，应该怎么定性
 
-我会把这次 `local-1539bcdf` 定义成：
+我会把这次 `a5a22d2` 定义成：
 
 ## **一次成功的“安全修复 + 初步增益恢复” screening**
 
@@ -222,7 +222,7 @@ mean abs bias：
 - 这条路如果没有 guard，会不会坏？
   答案：**会，而且坏得很明显。**
 
-### 新 V3-Revised（local-1539bcdf）回答的是：
+### 新 V3-Revised（a5a22d2）回答的是：
 
 - 如果加上 guard、anchor、calibration-null 和 fallback，这条路还能不能走？
   答案：**能走，而且已经开始出现局部收益。**
