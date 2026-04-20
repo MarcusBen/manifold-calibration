@@ -183,9 +183,9 @@ if isfield(modelCfg, 'v3') && ~isempty(modelCfg.v3)
 end
 
 v3Cfg = local_set_default_field(v3Cfg, 'enabled', true);
-v3Cfg = local_set_default_field(v3Cfg, 'label', 'Proposed V3');
+v3Cfg = local_set_default_field(v3Cfg, 'label', 'Proposed V3.2');
 v3Cfg = local_set_default_field(v3Cfg, 'base', 'ard');
-v3Cfg = local_set_default_field(v3Cfg, 'stage', 'calibration_guarded_ard_anchored_task_refinement');
+v3Cfg = local_set_default_field(v3Cfg, 'stage', 'distribution_matched_stable_pair_refinement');
 v3Cfg = local_set_default_field(v3Cfg, 'segmentCentersDeg', [-50 0 50]);
 v3Cfg = local_set_default_field(v3Cfg, 'order', 1);
 v3Cfg = local_set_default_field(v3Cfg, 'lambda', 1e-3);
@@ -196,18 +196,19 @@ v3Cfg = local_set_default_field(v3Cfg, 'taskDataMode', 'heldout_hfss');
 v3Cfg = local_set_default_field(v3Cfg, 'taskScanStrideDeg', 1);
 v3Cfg = local_set_default_field(v3Cfg, 'taskSingleHeldoutCount', 12);
 v3Cfg = local_set_default_field(v3Cfg, 'taskPairSeparationDeg', [4 5 6 8 10]);
-v3Cfg = local_set_default_field(v3Cfg, 'taskPairCount', 16);
+v3Cfg = local_set_default_field(v3Cfg, 'taskPairCount', 20);
 v3Cfg = local_set_default_field(v3Cfg, 'taskSnrDb', 25);
-v3Cfg = local_set_default_field(v3Cfg, 'taskPairSelectionMode', 'coverage');
+v3Cfg = local_set_default_field(v3Cfg, 'taskPairSelectionMode', 'distribution_matched');
+v3Cfg = local_set_default_field(v3Cfg, 'taskPairCenterBinDeg', 10);
 v3Cfg = local_set_default_field(v3Cfg, 'guardHeldoutCount', 64);
 v3Cfg = local_set_default_field(v3Cfg, 'numSpsaIterations', 8);
-v3Cfg = local_set_default_field(v3Cfg, 'learningRate', 0.005);
-v3Cfg = local_set_default_field(v3Cfg, 'perturbationScale', 0.005);
+v3Cfg = local_set_default_field(v3Cfg, 'learningRate', 0.004);
+v3Cfg = local_set_default_field(v3Cfg, 'perturbationScale', 0.004);
 v3Cfg = local_set_default_field(v3Cfg, 'maxGradNorm', 5);
 v3Cfg = local_set_default_field(v3Cfg, 'lambdaCal', 1);
 v3Cfg = local_set_default_field(v3Cfg, 'lambdaSingle', 0.04);
-v3Cfg = local_set_default_field(v3Cfg, 'lambdaPair', 0.03);
-v3Cfg = local_set_default_field(v3Cfg, 'lambdaMid', 0.01);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaPair', 0.05);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaMid', 0);
 v3Cfg = local_set_default_field(v3Cfg, 'lambdaAnchor', 50);
 v3Cfg = local_set_default_field(v3Cfg, 'lambdaGuard', 10);
 v3Cfg = local_set_default_field(v3Cfg, 'lambdaCal0', 20);
@@ -215,6 +216,18 @@ v3Cfg = local_set_default_field(v3Cfg, 'lambdaSmooth', 1e-3);
 v3Cfg = local_set_default_field(v3Cfg, 'lambdaReg', 1e-4);
 v3Cfg = local_set_default_field(v3Cfg, 'softmaxGamma', 8);
 v3Cfg = local_set_default_field(v3Cfg, 'midMargin', 0.2);
+v3Cfg = local_set_default_field(v3Cfg, 'pairObjectiveMode', 'stable_neighborhood');
+v3Cfg = local_set_default_field(v3Cfg, 'stableNeighborhoodDeg', 0.6);
+v3Cfg = local_set_default_field(v3Cfg, 'stableBackgroundWindowDeg', 4);
+v3Cfg = local_set_default_field(v3Cfg, 'stableEndpointFloor', -2.5);
+v3Cfg = local_set_default_field(v3Cfg, 'stableMidMargin', 0.15);
+v3Cfg = local_set_default_field(v3Cfg, 'stableBackgroundMargin', 0.10);
+v3Cfg = local_set_default_field(v3Cfg, 'stableBalanceMargin', 0.15);
+v3Cfg = local_set_default_field(v3Cfg, 'stableEtaSub', 1);
+v3Cfg = local_set_default_field(v3Cfg, 'stableEtaEnd', 1);
+v3Cfg = local_set_default_field(v3Cfg, 'stableEtaMid', 1);
+v3Cfg = local_set_default_field(v3Cfg, 'stableEtaBg', 0.5);
+v3Cfg = local_set_default_field(v3Cfg, 'stableEtaBalance', 0.5);
 v3Cfg = local_set_default_field(v3Cfg, 'trustRadiusRad', 0.04);
 v3Cfg = local_set_default_field(v3Cfg, 'calibrationNullSigmaDeg', 0.25);
 v3Cfg = local_set_default_field(v3Cfg, 'edgeMaskEnabled', true);
@@ -417,7 +430,10 @@ diagnostics.candidateGuardMetrics = candidateGuardMetrics;
 diagnostics.guardMetrics = finalGuardMetrics;
 diagnostics.trustRadiusRad = v3Cfg.trustRadiusRad;
 diagnostics.taskPairSelectionMode = local_optional_v2_field(v3Cfg, 'taskPairSelectionMode', 'top_score');
-diagnostics.selectionReason = sprintf(['Proposed V3-Revised used calibration-null trust-region residuals ' ...
+diagnostics.pairObjectiveMode = local_optional_v2_field(v3Cfg, 'pairObjectiveMode', 'legacy');
+diagnostics.pairSelection = tasks.pairSelection;
+diagnostics.stablePairDiagnostics = local_stable_pair_diagnostics(aProposedV3, state);
+diagnostics.selectionReason = sprintf(['Proposed V3.2 used distribution-matched stable-pair residuals ' ...
     'around ARD with %d deterministic SPSA iterations, anchor %.3g, guard %.3g.'], ...
     v3Cfg.numSpsaIterations, v3Cfg.lambdaAnchor, v3Cfg.lambdaGuard);
 end
@@ -425,7 +441,7 @@ end
 function model = local_build_v3_zero_model(ctx, calIdx, v3Cfg)
 numBasis = numel(v3Cfg.segmentCentersDeg) * (v3Cfg.order + 1);
 model = struct();
-model.type = 'v3_ard_anchored_task_refinement';
+model.type = 'v3_distribution_matched_stable_pair_refinement';
 model.enabled = true;
 model.stage = v3Cfg.stage;
 model.calIdx = calIdx(:).';
@@ -463,9 +479,10 @@ singleIdx = sort(unique([calIdx(:); heldoutSingleIdx(:)]));
 pairCandidates = local_generate_task_pair_candidates(ctx, v2Cfg.taskPairSeparationDeg, calIdx);
 if v2Cfg.pairTaskEnabled && v2Cfg.taskPairCount > 0 && ~isempty(pairCandidates)
     pairScores = local_score_task_pairs(ctx, pairCandidates, taskScore, calIdx);
-    pairIdx = local_select_task_pairs(ctx, pairCandidates, pairScores, taskScore, v2Cfg);
+    [pairIdx, pairSelection] = local_select_task_pairs(ctx, pairCandidates, pairScores, taskScore, v2Cfg);
 else
     pairIdx = zeros(0, 2);
+    pairSelection = local_empty_pair_selection();
 end
 pairAnglesDeg = ctx.thetaDeg(pairIdx);
 guardIdx = local_select_guard_indices(ctx, calIdx, taskScore, v2Cfg);
@@ -478,6 +495,8 @@ tasks.singleIdx = singleIdx(:).';
 tasks.heldoutSingleIdx = heldoutSingleIdx(:).';
 tasks.pairIdx = pairIdx;
 tasks.pairAnglesDeg = pairAnglesDeg;
+tasks.pairWeights = pairSelection.pairWeights(:);
+tasks.pairSelection = pairSelection;
 tasks.guardIdx = guardIdx(:).';
 tasks.scanIdx = scanIdx(:).';
 tasks.taskScore = taskScore;
@@ -485,17 +504,27 @@ tasks.mismatchScore = mismatchScore;
 tasks.edgeScore = edgeScore;
 end
 
-function pairIdx = local_select_task_pairs(ctx, pairCandidates, pairScores, taskScore, v2Cfg)
+function [pairIdx, selection] = local_select_task_pairs(ctx, pairCandidates, pairScores, taskScore, v2Cfg)
 taskPairCount = min(v2Cfg.taskPairCount, size(pairCandidates, 1));
 selectionMode = local_optional_v2_field(v2Cfg, 'taskPairSelectionMode', 'top_score');
 if taskPairCount <= 0
     pairIdx = zeros(0, 2);
+    selection = local_empty_pair_selection();
+    return;
+end
+
+if strcmpi(selectionMode, 'distribution_matched')
+    [selected, selection] = local_select_distribution_matched_pair_indices( ...
+        ctx, pairCandidates, pairScores, v2Cfg, taskPairCount);
+    pairIdx = pairCandidates(selected, :);
     return;
 end
 
 if ~strcmpi(selectionMode, 'coverage')
     [~, pairOrder] = sort(pairScores, 'descend');
-    pairIdx = pairCandidates(pairOrder(1:taskPairCount), :);
+    selected = pairOrder(1:taskPairCount);
+    pairIdx = pairCandidates(selected, :);
+    selection = local_basic_pair_selection(ctx, pairCandidates, selected, selectionMode, []);
     return;
 end
 
@@ -531,7 +560,180 @@ while numel(selected) < taskPairCount
     selected(end+1) = remaining(localIdx); %#ok<AGROW>
 end
 
-pairIdx = pairCandidates(selected(1:min(taskPairCount, numel(selected))), :);
+selected = selected(1:min(taskPairCount, numel(selected)));
+pairIdx = pairCandidates(selected, :);
+selection = local_basic_pair_selection(ctx, pairCandidates, selected, selectionMode, []);
+end
+
+function selection = local_empty_pair_selection()
+selection = struct();
+selection.mode = 'none';
+selection.pairWeights = zeros(0, 1);
+selection.stratumKeys = zeros(0, 2);
+selection.evalStratumHist = zeros(0, 1);
+selection.taskStratumHist = zeros(0, 1);
+selection.selectedCandidateIndex = zeros(0, 1);
+end
+
+function selection = local_basic_pair_selection(ctx, pairCandidates, selected, modeName, pairWeights)
+if nargin < 5 || isempty(pairWeights)
+    pairWeights = ones(numel(selected), 1);
+end
+[stratumKeys, allBinId] = local_pair_strata(ctx.thetaDeg(pairCandidates), 10);
+taskBinId = allBinId(selected);
+selection = struct();
+selection.mode = modeName;
+selection.pairWeights = pairWeights(:);
+selection.stratumKeys = stratumKeys;
+selection.evalStratumHist = accumarray(allBinId, 1, [size(stratumKeys, 1), 1], @sum, 0);
+selection.taskStratumHist = accumarray(taskBinId, 1, [size(stratumKeys, 1), 1], @sum, 0);
+selection.selectedCandidateIndex = selected(:);
+end
+
+function [selected, selection] = local_select_distribution_matched_pair_indices( ...
+    ctx, pairCandidates, pairScores, v2Cfg, taskPairCount)
+thetaPairs = ctx.thetaDeg(pairCandidates);
+centerBinDeg = local_optional_v2_field(v2Cfg, 'taskPairCenterBinDeg', 10);
+[stratumKeys, binId] = local_pair_strata(thetaPairs, centerBinDeg);
+numBins = size(stratumKeys, 1);
+candidateCounts = accumarray(binId, 1, [numBins, 1], @sum, 0);
+selected = zeros(0, 1);
+
+separationDeg = round(thetaPairs(:, 2) - thetaPairs(:, 1), 10);
+uniqueSep = unique(separationDeg, 'sorted');
+sepBinId = zeros(numel(separationDeg), 1);
+for sepIdx = 1:numel(uniqueSep)
+    sepBinId(abs(separationDeg - uniqueSep(sepIdx)) < 1e-9) = sepIdx;
+end
+sepCounts = accumarray(sepBinId, 1, [numel(uniqueSep), 1], @sum, 0);
+sepTargetCounts = local_allocate_distribution_counts(sepCounts, taskPairCount);
+
+for sepIdx = 1:numel(uniqueSep)
+    quota = sepTargetCounts(sepIdx);
+    if quota <= 0
+        continue;
+    end
+    sepCandidates = find(sepBinId == sepIdx);
+    selected = [selected; local_select_center_covered_candidates( ...
+        thetaPairs, pairScores, sepCandidates, quota, centerBinDeg)]; %#ok<AGROW>
+end
+
+while numel(selected) < taskPairCount
+    remaining = setdiff((1:size(pairCandidates, 1)).', selected, 'stable');
+    if isempty(remaining)
+        break;
+    end
+    selectedCounts = accumarray(binId(selected), 1, [numBins, 1], @sum, 0);
+    targetProb = candidateCounts / max(sum(candidateCounts), eps);
+    selectedProb = selectedCounts / max(numel(selected), 1);
+    sepSelectedCounts = accumarray(sepBinId(selected), 1, [numel(uniqueSep), 1], @sum, 0);
+    sepTargetProb = sepCounts / max(sum(sepCounts), eps);
+    sepSelectedProb = sepSelectedCounts / max(numel(selected), 1);
+    underRepresented = targetProb - selectedProb;
+    sepUnderRepresented = sepTargetProb - sepSelectedProb;
+    fillScore = pairScores(remaining) + 0.05 * underRepresented(binId(remaining)) + ...
+        0.10 * sepUnderRepresented(sepBinId(remaining));
+    [~, localIdx] = max(fillScore);
+    selected(end+1) = remaining(localIdx); %#ok<AGROW>
+end
+selected = selected(1:min(taskPairCount, numel(selected)));
+
+taskCounts = accumarray(binId(selected), 1, [numBins, 1], @sum, 0);
+targetProb = candidateCounts / max(sum(candidateCounts), eps);
+taskProb = taskCounts / max(sum(taskCounts), eps);
+pairWeights = targetProb(binId(selected)) ./ max(taskProb(binId(selected)), eps);
+pairWeights = pairWeights / max(mean(pairWeights), eps);
+
+selection = struct();
+selection.mode = 'distribution_matched';
+selection.pairWeights = pairWeights(:);
+selection.stratumKeys = stratumKeys;
+selection.evalStratumHist = candidateCounts;
+selection.taskStratumHist = taskCounts;
+selection.selectedCandidateIndex = selected(:);
+selection.centerBinDeg = centerBinDeg;
+end
+
+function selected = local_select_center_covered_candidates(thetaPairs, pairScores, candidateIdx, quota, centerBinDeg)
+selected = zeros(0, 1);
+if quota <= 0 || isempty(candidateIdx)
+    return;
+end
+pairCenters = mean(thetaPairs(candidateIdx, :), 2);
+centerBins = round(pairCenters / max(centerBinDeg, eps));
+uniqueCenters = unique(centerBins, 'sorted');
+if numel(uniqueCenters) <= quota
+    targetCenters = uniqueCenters;
+else
+    targetPositions = unique(round(linspace(1, numel(uniqueCenters), quota + 2)));
+    if numel(targetPositions) > 2
+        targetPositions = targetPositions(2:end-1);
+    end
+    targetCenters = uniqueCenters(targetPositions);
+end
+for centerIdx = reshape(targetCenters, 1, [])
+    if numel(selected) >= quota
+        break;
+    end
+    binCandidates = candidateIdx(centerBins == centerIdx);
+    binCandidates = setdiff(binCandidates(:), selected, 'stable');
+    if isempty(binCandidates)
+        continue;
+    end
+    [~, localIdx] = max(pairScores(binCandidates));
+    selected(end+1, 1) = binCandidates(localIdx); %#ok<AGROW>
+end
+while numel(selected) < min(quota, numel(candidateIdx))
+    remaining = setdiff(candidateIdx(:), selected, 'stable');
+    if isempty(remaining)
+        break;
+    end
+    if isempty(selected)
+        [~, localIdx] = max(pairScores(remaining));
+    else
+        selectedCenters = mean(thetaPairs(selected, :), 2);
+        remainingCenters = mean(thetaPairs(remaining, :), 2);
+        minDistance = zeros(numel(remaining), 1);
+        for idx = 1:numel(remaining)
+            minDistance(idx) = min(abs(remainingCenters(idx) - selectedCenters));
+        end
+        rankScore = minDistance + 1e-3 * pairScores(remaining);
+        [~, localIdx] = max(rankScore);
+    end
+    selected(end+1, 1) = remaining(localIdx); %#ok<AGROW>
+end
+end
+
+function targetCounts = local_allocate_distribution_counts(candidateCounts, totalCount)
+candidateCounts = candidateCounts(:);
+numBins = numel(candidateCounts);
+targetCounts = zeros(numBins, 1);
+if totalCount <= 0 || sum(candidateCounts) == 0
+    return;
+end
+rawCounts = totalCount * candidateCounts / sum(candidateCounts);
+targetCounts = min(floor(rawCounts), candidateCounts);
+while sum(targetCounts) < min(totalCount, sum(candidateCounts))
+    remainingCapacity = candidateCounts - targetCounts;
+    remainders = rawCounts - targetCounts;
+    remainders(remainingCapacity <= 0) = -Inf;
+    [~, idx] = max(remainders);
+    if ~isfinite(remainders(idx))
+        break;
+    end
+    targetCounts(idx) = targetCounts(idx) + 1;
+end
+end
+
+function [stratumKeys, binId] = local_pair_strata(thetaPairs, centerBinDeg)
+if isempty(thetaPairs)
+    stratumKeys = zeros(0, 2);
+    binId = zeros(0, 1);
+    return;
+end
+separationDeg = round(thetaPairs(:, 2) - thetaPairs(:, 1), 10);
+centerBin = round(mean(thetaPairs, 2) / max(centerBinDeg, eps));
+[stratumKeys, ~, binId] = unique([separationDeg(:), centerBin(:)], 'rows');
 end
 
 function selected = local_append_ranked_pair_indices(selected, score, quota, taskPairCount)
@@ -710,7 +912,7 @@ state.calWeights = ones(1, numel(calIdx));
 state.tasks = tasks;
 state.guardIdx = tasks.guardIdx(:).';
 state.singleTasks = local_precompute_single_tasks(ctx, tasks.singleIdx, tasks.scanIdx, v3Cfg);
-state.pairTasks = local_precompute_pair_tasks(ctx, tasks.pairIdx, tasks.scanIdx, v3Cfg);
+state.pairTasks = local_precompute_pair_tasks(ctx, tasks.pairIdx, tasks.scanIdx, v3Cfg, tasks.pairWeights);
 end
 
 function taskList = local_precompute_single_tasks(ctx, singleIdx, scanIdx, v2Cfg)
@@ -723,17 +925,65 @@ for idx = 1:numel(singleIdx)
 end
 end
 
-function taskList = local_precompute_pair_tasks(ctx, pairIdx, scanIdx, v2Cfg)
-taskList = repmat(struct('pairIdx', [], 'targetScanPos', [], 'midScanPos', [], 'projector', []), size(pairIdx, 1), 1);
+function taskList = local_precompute_pair_tasks(ctx, pairIdx, scanIdx, v2Cfg, pairWeights)
+if nargin < 5 || isempty(pairWeights)
+    pairWeights = ones(size(pairIdx, 1), 1);
+end
+taskList = repmat(struct('pairIdx', [], 'targetScanPos', [], 'midScanPos', [], ...
+    'leftNeighborhoodPos', [], 'rightNeighborhoodPos', [], 'midNeighborhoodPos', [], ...
+    'backgroundScanPos', [], 'projector', [], 'weight', 1), size(pairIdx, 1), 1);
+scanAngles = ctx.thetaDeg(scanIdx);
+stableNeighborhoodDeg = local_optional_v2_field(v2Cfg, 'stableNeighborhoodDeg', 0.6);
 for idx = 1:size(pairIdx, 1)
     targetIdx = pairIdx(idx, :);
     midIdx = local_nearest_indices_from_angles(ctx.thetaDeg, mean(ctx.thetaDeg(targetIdx)));
+    targetAngles = ctx.thetaDeg(targetIdx);
+    midAngle = mean(targetAngles);
     taskList(idx).pairIdx = targetIdx;
     taskList(idx).targetScanPos = [find(scanIdx == targetIdx(1), 1, 'first'), ...
         find(scanIdx == targetIdx(2), 1, 'first')];
     taskList(idx).midScanPos = find(scanIdx == midIdx, 1, 'first');
+    taskList(idx).leftNeighborhoodPos = local_scan_neighborhood_positions( ...
+        scanAngles, targetAngles(1), stableNeighborhoodDeg, taskList(idx).targetScanPos(1));
+    taskList(idx).rightNeighborhoodPos = local_scan_neighborhood_positions( ...
+        scanAngles, targetAngles(2), stableNeighborhoodDeg, taskList(idx).targetScanPos(2));
+    taskList(idx).midNeighborhoodPos = local_scan_neighborhood_positions( ...
+        scanAngles, midAngle, stableNeighborhoodDeg, taskList(idx).midScanPos);
+    taskList(idx).backgroundScanPos = local_stable_background_positions(scanAngles, targetAngles, ...
+        taskList(idx), v2Cfg);
     taskList(idx).projector = local_noise_projector(ctx.AH(:, targetIdx), 2, v2Cfg.taskSnrDb);
+    taskList(idx).weight = pairWeights(idx);
 end
+end
+
+function positions = local_scan_neighborhood_positions(scanAngles, centerAngle, radiusDeg, fallbackPos)
+positions = find(abs(scanAngles(:) - centerAngle) <= radiusDeg);
+if isempty(positions)
+    positions = fallbackPos;
+end
+positions = positions(:).';
+end
+
+function positions = local_stable_background_positions(scanAngles, targetAngles, task, v2Cfg)
+windowDeg = local_optional_v2_field(v2Cfg, 'stableBackgroundWindowDeg', 4);
+lowAngle = min(targetAngles) - windowDeg;
+highAngle = max(targetAngles) + windowDeg;
+inWindow = scanAngles(:) >= lowAngle & scanAngles(:) <= highAngle;
+excluded = false(numel(scanAngles), 1);
+excluded(task.leftNeighborhoodPos) = true;
+excluded(task.rightNeighborhoodPos) = true;
+excluded(task.midNeighborhoodPos) = true;
+positions = find(inWindow & ~excluded);
+if isempty(positions)
+    excluded = false(numel(scanAngles), 1);
+    excluded(task.targetScanPos) = true;
+    excluded(task.midScanPos) = true;
+    positions = find(~excluded);
+end
+if isempty(positions)
+    positions = task.midScanPos;
+end
+positions = positions(:).';
 end
 
 function projector = local_noise_projector(signalManifold, numSources, snrDb)
@@ -976,6 +1226,11 @@ if isempty(state.pairTasks)
     return;
 end
 
+if strcmpi(local_optional_v2_field(state.v2Cfg, 'pairObjectiveMode', 'legacy'), 'stable_neighborhood')
+    [loss, subLoss, peakLoss, midLoss] = local_stable_pair_task_loss(manifold, state);
+    return;
+end
+
 scanManifold = manifold(:, state.tasks.scanIdx);
 subValues = zeros(numel(state.pairTasks), 1);
 peakValues = zeros(numel(state.pairTasks), 1);
@@ -997,6 +1252,58 @@ midLoss = mean(midValues);
 loss = subLoss + peakLoss;
 end
 
+function [loss, subLoss, peakLoss, midLoss] = local_stable_pair_task_loss(manifold, state)
+scanManifold = manifold(:, state.tasks.scanIdx);
+subValues = zeros(numel(state.pairTasks), 1);
+endValues = zeros(numel(state.pairTasks), 1);
+midValues = zeros(numel(state.pairTasks), 1);
+bgValues = zeros(numel(state.pairTasks), 1);
+balanceValues = zeros(numel(state.pairTasks), 1);
+pairWeights = zeros(numel(state.pairTasks), 1);
+
+for taskIdx = 1:numel(state.pairTasks)
+    task = state.pairTasks(taskIdx);
+    leftVector = manifold(:, task.pairIdx(1));
+    rightVector = manifold(:, task.pairIdx(2));
+    subValues(taskIdx) = real(leftVector' * task.projector * leftVector) + ...
+        real(rightVector' * task.projector * rightVector);
+
+    z = local_task_logits(task.projector, scanManifold, state.v2Cfg.softmaxGamma);
+    s1 = local_logmeanexp(z(task.leftNeighborhoodPos));
+    s2 = local_logmeanexp(z(task.rightNeighborhoodPos));
+    sm = local_logmeanexp(z(task.midNeighborhoodPos));
+    sb = local_logmeanexp(z(task.backgroundScanPos));
+    minEndpoint = min(s1, s2);
+
+    endFloor = local_optional_v2_field(state.v2Cfg, 'stableEndpointFloor', -2.5);
+    midMargin = local_optional_v2_field(state.v2Cfg, 'stableMidMargin', state.v2Cfg.midMargin);
+    bgMargin = local_optional_v2_field(state.v2Cfg, 'stableBackgroundMargin', 0.10);
+    balanceMargin = local_optional_v2_field(state.v2Cfg, 'stableBalanceMargin', 0.15);
+
+    endValues(taskIdx) = local_softplus(endFloor - s1) + local_softplus(endFloor - s2);
+    midValues(taskIdx) = local_softplus(sm - minEndpoint + midMargin);
+    bgValues(taskIdx) = local_softplus(sb - minEndpoint + bgMargin);
+    balanceValues(taskIdx) = local_softplus(abs(s1 - s2) - balanceMargin);
+    pairWeights(taskIdx) = task.weight;
+end
+
+etaSub = local_optional_v2_field(state.v2Cfg, 'stableEtaSub', 1);
+etaEnd = local_optional_v2_field(state.v2Cfg, 'stableEtaEnd', 1);
+etaMid = local_optional_v2_field(state.v2Cfg, 'stableEtaMid', 1);
+etaBg = local_optional_v2_field(state.v2Cfg, 'stableEtaBg', 0.5);
+etaBalance = local_optional_v2_field(state.v2Cfg, 'stableEtaBalance', 0.5);
+pairWeights = pairWeights / max(sum(pairWeights), eps);
+
+subLoss = sum(pairWeights .* subValues);
+endLoss = sum(pairWeights .* endValues);
+midLoss = sum(pairWeights .* midValues);
+bgLoss = sum(pairWeights .* bgValues);
+balanceLoss = sum(pairWeights .* balanceValues);
+peakLoss = endLoss + bgLoss + balanceLoss;
+loss = etaSub * subLoss + etaEnd * endLoss + etaMid * midLoss + ...
+    etaBg * bgLoss + etaBalance * balanceLoss;
+end
+
 function z = local_task_logits(projector, scanManifold, gamma)
 denominator = real(sum(conj(scanManifold) .* (projector * scanManifold), 1));
 denominator(denominator < eps) = eps;
@@ -1007,6 +1314,14 @@ end
 function value = local_logsumexp(z)
 zMax = max(z);
 value = zMax + log(sum(exp(z - zMax)));
+end
+
+function value = local_logmeanexp(z)
+value = local_logsumexp(z) - log(max(numel(z), 1));
+end
+
+function value = local_softplus(x)
+value = log(1 + exp(-abs(x))) + max(x, 0);
 end
 
 function weights = local_v2_objective_weights(v2Cfg)
@@ -1075,10 +1390,43 @@ end
 
 function warningText = local_v3_fallback_warning(usedARDFallback, fallbackReason)
 if usedARDFallback
-    warningText = sprintf('Proposed V3-Revised kept the ARD initializer because %s failed.', fallbackReason);
+    warningText = sprintf('Proposed V3.2 kept the ARD initializer because %s failed.', fallbackReason);
 else
     warningText = '';
 end
+end
+
+function diagnostics = local_stable_pair_diagnostics(manifold, state)
+diagnostics = struct();
+diagnostics.pairAnglesDeg = zeros(0, 2);
+diagnostics.s1 = zeros(0, 1);
+diagnostics.s2 = zeros(0, 1);
+diagnostics.sm = zeros(0, 1);
+diagnostics.sb = zeros(0, 1);
+diagnostics.weight = zeros(0, 1);
+if isempty(state.pairTasks)
+    return;
+end
+
+scanManifold = manifold(:, state.tasks.scanIdx);
+diagnostics.pairAnglesDeg = state.ctx.thetaDeg(vertcat(state.pairTasks.pairIdx));
+diagnostics.s1 = zeros(numel(state.pairTasks), 1);
+diagnostics.s2 = zeros(numel(state.pairTasks), 1);
+diagnostics.sm = zeros(numel(state.pairTasks), 1);
+diagnostics.sb = zeros(numel(state.pairTasks), 1);
+diagnostics.weight = zeros(numel(state.pairTasks), 1);
+for taskIdx = 1:numel(state.pairTasks)
+    task = state.pairTasks(taskIdx);
+    z = local_task_logits(task.projector, scanManifold, state.v2Cfg.softmaxGamma);
+    diagnostics.s1(taskIdx) = local_logmeanexp(z(task.leftNeighborhoodPos));
+    diagnostics.s2(taskIdx) = local_logmeanexp(z(task.rightNeighborhoodPos));
+    diagnostics.sm(taskIdx) = local_logmeanexp(z(task.midNeighborhoodPos));
+    diagnostics.sb(taskIdx) = local_logmeanexp(z(task.backgroundScanPos));
+    diagnostics.weight(taskIdx) = task.weight;
+end
+diagnostics.minEndpointMinusMid = min(diagnostics.s1, diagnostics.s2) - diagnostics.sm;
+diagnostics.minEndpointMinusBackground = min(diagnostics.s1, diagnostics.s2) - diagnostics.sb;
+diagnostics.endpointImbalance = abs(diagnostics.s1 - diagnostics.s2);
 end
 
 function value = local_optional_v2_field(inputStruct, fieldName, defaultValue)

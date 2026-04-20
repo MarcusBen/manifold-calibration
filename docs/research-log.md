@@ -18,6 +18,61 @@
 
 > Branch artifact policy: `codex/proposed_v3` 使用 version-first traceable results layout：`results/<version-hash>/<case-name>/`。2026-04-20 当前同步范围包括 `87d7f16` V3 screening、`71650f7` ARD Method 2 full run、`local-8e021ea7` Full V2 C-route full run、`2962bc3` V2-lite run，以及仅含失败启动日志的 `local-aa29a0fd`。
 
+### 2026-04-20：`local-fc4e69f9` Proposed V3.2 distribution-matched stable-pair screening run
+
+- Version hash: `local-fc4e69f9`
+- Base HEAD: `6bb1a19`
+- Branch: `codex/proposed_v3`
+- Worktree state at run time: uncommitted code changes; historical `results/` deletions were local cleanup state and were not part of this code-change batch.
+- Change basis: `algorithms/proposed_algorithm_v3_2.md` plus the latest `docs/comments.md` review for `a5a22d2`.
+- Run command: `run_project([3 7 9 10], default_config(pwd, 'paper'))`
+- Result path: `results/local-fc4e69f9/`
+- Case outputs: `case03_unseen_generalization/`, `case07_single_source_snr/`, `case09_two_source_resolution/`, `case10_random_split_robustness/`
+- Run scope: screening only; this is not a full paper-profile result.
+
+#### 一句话结论
+
+本轮实现 **Proposed V3.2 = V3-Revised safety guards + distribution-matched stable-pair objective**。代码层面新增 separation-balanced task-pair selection、center-coverage 但避开最外侧 center bin 的选择器、stable-neighborhood pair loss、distribution weights，以及 Case 9 的 task/eval stratum 和 `V3.2 - ARD` per-separation 诊断。筛选结果显示：V3.2 没有触发 fallback，Case 9 mean resolution 第一次略高于 Proposed V1，但 stable rate 仍低于 ARD/V1，并且 Case 7 高 SNR 单源退化，因此本轮不能算通过。
+
+#### 代码与行为变化
+
+- `default_config.m` 将 `cfg.model.v3.label` 改为 `Proposed V3.2`，`stage` 改为 `distribution_matched_stable_pair_refinement`。
+- V3.2 保留 calibration-null gate、trust-radius residual、strong ARD anchor、held-out guard 和 fallback。
+- `build_sparse_models` 中 V3 task pair selection 改为先按 separation 分配名额，再在每个 separation 内做 center coverage，并避开最外侧 center bin，避免早期探针中 task pairs 被推到 ±60° 边界而触发 guard fallback。
+- V3 pair objective 从旧 `subspace + peak + midpoint` 改为 stable-neighborhood objective：endpoint strength、midpoint suppression、background suppression、endpoint balance 和 subspace consistency。
+- 局部 score 聚合实现为 `logmeanexp` 而不是文档初稿中的 `logsumexp`，避免 background neighborhood 因点数更多而被系统性抬高。
+- `run_project` 的 Case 9 结果新增 `groupedStableMean`、`pairDeltaResolution`、`pairDeltaStable`、`taskStratumHist`、`evalStratumHist` 和 `v3StablePairDiagnostics`。
+- `algorithms/proposed_algorithm_v3_2.md` 已在原文旁边加入 `Codex note`，说明循环依赖、`logmeanexp` 替代和避开最外侧 center bin 的实现理由。
+
+#### 验证与筛选结果
+
+- 模型 smoke：`models.AProposedV3` 尺寸匹配 `ctx.AH`，`v3Diagnostics.stablePairDiagnostics` 和 `pairSelection` 存在；最终 task pairs 覆盖 separation `4/5/6/8/10`，`usedARDFallback = 0`。
+- `checkcode`: `default_config.m` 0 条；`src/build_sparse_models.m` 2 条既有 suppressed-message warning；`run_project.m` 14 条既有风格 warning，无新增阻塞项。
+- Case 3, `L = 9`: mean unseen error `ARD 0.001034 / V3.2 0.003177`，edge `0.001179 / 0.004960`，worst-10% `0.001048 / 0.004852`。mean 仍在 `ARD + 0.003` guard 内，但 edge/worst 明显差于 V3-Revised。
+- Case 7, `SNR = 20 dB`: RMSE `ARD 0.002828 / V3.2 0.003651 deg`，mean absolute bias `0.000040 / 0.0000667 deg`。V3.2 相对 ARD 和上一版 V3-Revised 都退化。
+- Case 9: mean resolution `ARD 0.124474 / Proposed V1 0.126776 / V3.2 0.126908`；mean stable rate `ARD 0.034825 / Proposed V1 0.036316 / V3.2 0.033333`。V3.2 resolution 略高于 V1，但 stable rate 没有改善，是本轮未过关的核心原因。
+- Case 9 leakage check: `taskEvalOverlapCount = 0`，`taskExcludedPairCount = 16`，V3.2 task pairs 共 `20` 个。
+- Case 9 per-separation delta vs ARD: resolution 在 `8°` 有明显正增量 `+0.0105`，但 stable rate 同 separation 为 `-0.0079`，说明当前 stable surrogate 仍没有对齐 benchmark stable 判据。
+- Case 10: mean manifold error `ARD 0.005644 / V3.2 0.006616`，mean DOA RMSE `ARD 0.103499 / V3.2 0.103073 deg`。随机 split 几何略退化，DOA RMSE 略好于 ARD。
+
+#### 关键图片
+
+以下图片来自 `results/local-fc4e69f9/` screening run，并已复制到 `docs/assets/`。
+
+![case03 v32 edge hard](assets/case03-v32-edge-hard-local-fc4e69f9.png)
+
+![case07 v32 edge hard snr](assets/case07-v32-edge-hard-snr-local-fc4e69f9.png)
+
+![case09 v32 two source](assets/case09-v32-two-source-local-fc4e69f9.png)
+
+![case10 v32 random split](assets/case10-v32-random-split-local-fc4e69f9.png)
+
+#### 决策与下一步
+
+- 不跑 full paper profile `1:10`：V3.2 虽然把 Case 9 mean resolution 推到略高于 V1，但 stable rate 仍低于 ARD/V1，且 Case 7 单源高 SNR 退化。
+- 当前 stable-neighborhood surrogate 还不等价于 `benchmark_music` 的 stable classification；下一轮需要更直接引入 snapshot/noise-aware 稳定性代理，或针对 endpoint balance / biased 状态做更接近 benchmark 的 surrogate。
+- 不建议继续只靠增大 `lambdaPair` 或 SPSA iterations 硬拧；探针显示 endpoint imbalance 诊断没有随简单权重增大明显改善，容易继续牺牲 Case 3/7/10。
+
 ### 2026-04-20：`a5a22d2` Proposed V3-Revised guarded screening run
 
 - Version hash: `a5a22d2`

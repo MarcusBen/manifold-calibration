@@ -286,7 +286,7 @@ outDir = local_case_output_dir(cfg, 'case03_unseen_generalization');
 
 lValues = cfg.case3.lValues;
 methodNames = {'Ideal', 'Interpolation', 'ARD', 'Proposed V1', 'Proposed V2', ...
-    'Proposed V3', 'HFSS Oracle'};
+    'Proposed V3.2', 'HFSS Oracle'};
 meanUnseenError = zeros(numel(lValues), numel(methodNames));
 edgeUnseenError = zeros(numel(lValues), numel(methodNames));
 worst10UnseenError = zeros(numel(lValues), numel(methodNames));
@@ -396,7 +396,7 @@ for plotIdx = 1:numel(cfg.case3.representativeElements)
 end
 xlabel('Angle (deg)');
 legend({'HFSS truth', 'Interpolation', 'Proposed V1 fit', 'Proposed V2 fit', ...
-    'Proposed V3 fit', ...
+    'Proposed V3.2 fit', ...
     'Calibration samples'}, 'Location', 'eastoutside');
 save_figure(fig, fullfile(outDir, 'phase_reconstruction.png'));
 
@@ -438,7 +438,7 @@ for angleIdx = 1:numRepAngles
     title(sprintf('Phase at %.1f deg', queryAngle));
 end
 legend({'HFSS truth', 'Ideal', 'Interpolation', 'ARD', 'Proposed V1', 'Proposed V2', ...
-    'Proposed V3'}, ...
+    'Proposed V3.2'}, ...
     'Location', 'eastoutside');
 save_figure(fig, fullfile(outDir, 'steering_vector_comparison.png'));
 
@@ -1190,6 +1190,13 @@ end
 
 [uniqueSep, resolutionMean, resolutionStd] = local_case9_group_metric(separationDeg, resolutionProb);
 [~, pairRmseMean, pairRmseStd] = local_case9_group_metric(separationDeg, pairRmse);
+[~, stableMean, stableStd] = local_case9_group_metric(separationDeg, stableRate);
+[pairDeltaResolution, pairDeltaStable] = local_case9_v3_delta_from_ard( ...
+    methods, resolutionMean, stableMean);
+centerBinDeg = local_optional_struct_field(cfg.model.v3, 'taskPairCenterBinDeg', 10);
+taskStratumHist = local_case9_pair_stratum_hist(v3TaskPairsDeg, centerBinDeg);
+evalStratumHist = local_case9_pair_stratum_hist(sourcePairs, centerBinDeg);
+v3StablePairDiagnostics = local_v3_stable_pair_diagnostics_from_models(models);
 
 [exampleIdx, exampleSelectionReason] = local_case9_select_example_pair(bench, methods, separationDeg, ...
     cfg.case9.exampleTargetResolutionProb, pairSelection);
@@ -1286,6 +1293,13 @@ caseResult.groupedResolutionMean = resolutionMean;
 caseResult.groupedResolutionStd = resolutionStd;
 caseResult.groupedPairRmseMean = pairRmseMean;
 caseResult.groupedPairRmseStd = pairRmseStd;
+caseResult.groupedStableMean = stableMean;
+caseResult.groupedStableStd = stableStd;
+caseResult.pairDeltaResolution = pairDeltaResolution;
+caseResult.pairDeltaStable = pairDeltaStable;
+caseResult.taskStratumHist = taskStratumHist;
+caseResult.evalStratumHist = evalStratumHist;
+caseResult.v3StablePairDiagnostics = v3StablePairDiagnostics;
 caseResult.examplePairIndex = exampleIdx;
 caseResult.exampleSelectionReason = exampleSelectionReason;
 caseResult.benchmark = bench;
@@ -1299,7 +1313,7 @@ outDir = local_case_output_dir(cfg, 'case10_random_split_robustness');
 
 numSplits = cfg.case10.numSplits;
 methodKeys = {'ideal', 'interp', 'ard', 'proposed_v1', 'proposed_v2', 'proposed_v3'};
-methodLabels = {'Ideal', 'Interp', 'ARD', 'Proposed V1', 'Proposed V2', 'Proposed V3'};
+methodLabels = {'Ideal', 'Interp', 'ARD', 'Proposed V1', 'Proposed V2', 'Proposed V3.2'};
 manifoldError = zeros(numSplits, numel(methodKeys));
 singleRmse = zeros(numSplits, numel(methodKeys));
 splitAngles = cell(numSplits, 1);
@@ -1453,14 +1467,17 @@ if isfield(cfg, 'model') && isfield(cfg.model, 'v2')
 end
 if isfield(cfg, 'model') && isfield(cfg.model, 'v3')
 fprintf(fid, '- Proposed V3 enabled: `%d`\n', logical(cfg.model.v3.enabled));
+fprintf(fid, '- Proposed V3 label: `%s`\n', cfg.model.v3.label);
 fprintf(fid, '- Proposed V3 stage: `%s`\n', cfg.model.v3.stage);
 fprintf(fid, '- Proposed V3 base: `%s`\n', cfg.model.v3.base);
 fprintf(fid, '- Proposed V3 task data mode: `%s`\n', cfg.model.v3.taskDataMode);
+fprintf(fid, '- Proposed V3 pair objective: `%s`\n', cfg.model.v3.pairObjectiveMode);
+fprintf(fid, '- Proposed V3 pair selection: `%s`\n', cfg.model.v3.taskPairSelectionMode);
 fprintf(fid, '- Proposed V3 SPSA iterations: `%d`\n', cfg.model.v3.numSpsaIterations);
 fprintf(fid, '- Proposed V3 anchor weight: `%.12g`\n', cfg.model.v3.lambdaAnchor);
 fprintf(fid, '- Proposed V3 guard weight: `%.12g`\n', cfg.model.v3.lambdaGuard);
 fprintf(fid, '- Proposed V3 trust radius rad: `%.12g`\n', cfg.model.v3.trustRadiusRad);
-fprintf(fid, '- Proposed V3 note: `Calibration-guarded ARD-anchored task-aware residual; screening result, not final full paper-profile evidence unless stated.`\n\n');
+fprintf(fid, '- Proposed V3 note: `V3.2 distribution-matched stable-pair residual; screening result, not final full paper-profile evidence unless stated.`\n\n');
 end
 fprintf(fid, '## Git Status Short\n\n');
 fprintf(fid, '```text\n%s\n```\n', cfg.run.gitStatusShort);
@@ -1570,9 +1587,9 @@ cfg.model.v2 = local_set_default_field(cfg.model.v2, 'lambdaReg', 1e-4);
 cfg.model.v2 = local_set_default_field(cfg.model.v2, 'softmaxGamma', 8);
 cfg.model.v2 = local_set_default_field(cfg.model.v2, 'midMargin', 0.2);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'enabled', true);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'label', 'Proposed V3');
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'label', 'Proposed V3.2');
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'base', 'ard');
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stage', 'calibration_guarded_ard_anchored_task_refinement');
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stage', 'distribution_matched_stable_pair_refinement');
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'segmentCentersDeg', [-50 0 50]);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'order', 1);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambda', 1e-3);
@@ -1581,18 +1598,19 @@ cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskDataMode', 'heldout_hf
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskScanStrideDeg', 1);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskSingleHeldoutCount', 12);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskPairSeparationDeg', [4 5 6 8 10]);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskPairCount', 16);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskPairSelectionMode', 'coverage');
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskPairCount', 20);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskPairSelectionMode', 'distribution_matched');
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskPairCenterBinDeg', 10);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'guardHeldoutCount', 64);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskSnrDb', 25);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'numSpsaIterations', 8);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'learningRate', 0.005);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'perturbationScale', 0.005);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'learningRate', 0.004);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'perturbationScale', 0.004);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'maxGradNorm', 5);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaCal', 1);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaSingle', 0.04);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaPair', 0.03);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaMid', 0.01);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaPair', 0.05);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaMid', 0);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaAnchor', 50);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaGuard', 10);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaCal0', 20);
@@ -1600,6 +1618,18 @@ cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaSmooth', 1e-3);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaReg', 1e-4);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'softmaxGamma', 8);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'midMargin', 0.2);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'pairObjectiveMode', 'stable_neighborhood');
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableNeighborhoodDeg', 0.6);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableBackgroundWindowDeg', 4);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableEndpointFloor', -2.5);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableMidMargin', 0.15);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableBackgroundMargin', 0.10);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableBalanceMargin', 0.15);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableEtaSub', 1);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableEtaEnd', 1);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableEtaMid', 1);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableEtaBg', 0.5);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableEtaBalance', 0.5);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'trustRadiusRad', 0.04);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'calibrationNullSigmaDeg', 0.25);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'edgeMaskEnabled', true);
@@ -1872,7 +1902,12 @@ for methodIdx = 1:numel(methodKeys)
         case 'proposed_v2'
             methods(methodIdx) = local_method('proposed_v2', 'Proposed V2', models.AProposedV2);
         case 'proposed_v3'
-            methods(methodIdx) = local_method('proposed_v3', 'Proposed V3', models.AProposedV3);
+            methodLabel = 'Proposed V3.2';
+            if isfield(models, 'v3Diagnostics') && isfield(models.v3Diagnostics, 'label') && ...
+                    ~isempty(models.v3Diagnostics.label)
+                methodLabel = models.v3Diagnostics.label;
+            end
+            methods(methodIdx) = local_method('proposed_v3', methodLabel, models.AProposedV3);
         case 'oracle'
             methods(methodIdx) = local_method('oracle', 'HFSS Oracle', ctx.AH);
         otherwise
@@ -2216,6 +2251,43 @@ for sepIdx = 1:numel(uniqueSep)
 end
 end
 
+function [deltaResolution, deltaStable] = local_case9_v3_delta_from_ard(methods, resolutionMean, stableMean)
+deltaResolution = [];
+deltaStable = [];
+ardIdx = find(strcmp({methods.name}, 'ard'), 1, 'first');
+v3Idx = find(strcmp({methods.name}, 'proposed_v3'), 1, 'first');
+if isempty(ardIdx) || isempty(v3Idx)
+    return;
+end
+deltaResolution = resolutionMean(:, v3Idx) - resolutionMean(:, ardIdx);
+deltaStable = stableMean(:, v3Idx) - stableMean(:, ardIdx);
+end
+
+function histInfo = local_case9_pair_stratum_hist(pairAnglesDeg, centerBinDeg)
+histInfo = struct();
+histInfo.centerBinDeg = centerBinDeg;
+histInfo.keys = zeros(0, 2);
+histInfo.counts = zeros(0, 1);
+if isempty(pairAnglesDeg)
+    return;
+end
+pairAnglesDeg = sort(round(pairAnglesDeg, 10), 2);
+separationDeg = round(pairAnglesDeg(:, 2) - pairAnglesDeg(:, 1), 10);
+centerBin = round(mean(pairAnglesDeg, 2) / max(centerBinDeg, eps));
+[keys, ~, binId] = unique([separationDeg(:), centerBin(:)], 'rows');
+histInfo.keys = keys;
+histInfo.counts = accumarray(binId, 1, [size(keys, 1), 1], @sum, 0);
+histInfo.centerDegApprox = keys(:, 2) * centerBinDeg;
+end
+
+function diagnostics = local_v3_stable_pair_diagnostics_from_models(models)
+diagnostics = struct();
+if isfield(models, 'v3Diagnostics') && ...
+        isfield(models.v3Diagnostics, 'stablePairDiagnostics')
+    diagnostics = models.v3Diagnostics.stablePairDiagnostics;
+end
+end
+
 function [exampleIdx, reason] = local_case9_select_example_pair( ...
     bench, methods, separationDeg, targetResolutionProb, pairSelection)
 primaryIdx = find(strcmp({methods.name}, 'proposed_v3'), 1, 'first');
@@ -2307,6 +2379,10 @@ reason = sprintf(['Selected [%g, %g] deg as the hardest available high-mismatch 
 end
 
 function value = local_optional_case9_field(inputStruct, fieldName, defaultValue)
+value = local_optional_struct_field(inputStruct, fieldName, defaultValue);
+end
+
+function value = local_optional_struct_field(inputStruct, fieldName, defaultValue)
 if isfield(inputStruct, fieldName) && ~isempty(inputStruct.(fieldName))
     value = inputStruct.(fieldName);
 else
