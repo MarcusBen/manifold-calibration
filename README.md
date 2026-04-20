@@ -1,4 +1,4 @@
-﻿# manifold calibration
+# manifold calibration
 
 这个仓库保存 MATLAB 实验代码、HFSS 数据、可追溯实验结果和论文证据链记录。当前主线是用少量校准角重构未见方向流形，并比较 `Ideal / Interpolation / ARD / Proposed / HFSS Oracle` 在 MUSIC DOA 任务中的表现。
 
@@ -9,41 +9,40 @@
 
 ## 最新摘要
 
-截至 2026-04-20，当前分支 `codex/proposed-v2` 的最新有效评阅批次是 `20260420-120416-71650f7`。这一批把 `array_response_decomposition_algorithm.md` 中可由当前数据支持的 **ARD Method 2** 加为正式同场 baseline，并在 `paper` profile 下重跑 10 个 case。
+截至 2026-04-20，当前工作分支是 `codex/proposed_v3`，最新当前批次是 `results/local-5a1492f8/`。这一批实现并筛选 **Proposed V3 = ARD coarse model + anchored task-aware phase residual refinement**，只运行 Case 3 / 7 / 9 / 10，用于判断是否值得进入完整 `paper` profile。
 
-- 默认 HFSS 数据源为 `data/hfss/step0.2deg.csv`，理想阵列基线仍按 `elementSpacingLambda = 0.25` 生成。
-- ARD Method 2 使用 complex correction-vector interpolation：先在校准角计算 `g(theta)=a_HFSS(theta)./a_ideal(theta)`，再在 `u = sin(theta)` 域插值并重构流形。
-- 本轮没有实现 unknown coupling matrix `C` 的 Method 3；不能把当前结果写成完整 array response decomposition 路线已经完成。
-- `Proposed V2` 的 Full V2 C-route 已在前一批 `20260420-091822-local-8e021ea7` 完成同场 full run，但结果没有稳定优于 `Interpolation` 或 `Proposed V1`。
-- 最新 comments 明确基于 `20260420-120416-71650f7`：ARD 已成为强 baseline，下一步优先方向应是重构 Proposed 算法，而不是继续加 case 难度或立即转向 2D DOA。
+- V3 初始状态严格等于 ARD，再用小幅三段软门控 Chebyshev 相位 residual 做 task-aware refinement。
+- 训练目标包含 calibration、single-source task、pair task、midpoint suppression、ARD anchor、smooth/reg。
+- 筛选结论是不通过：V3 可运行且 objective 下降，但明显破坏 ARD 的全局流形重构优势，并且 Case 9 没有超过 ARD / Proposed V1。
+- 因此当前不应把 V3 写成已优于 ARD，也不应继续跑 full 1:10 作为正式论文结果。
+- `docs/comments.md` 的最新评阅仍绑定 `71650f7` ARD Method 2 full run；当前 `local-5a1492f8` V3 screening 还没有匹配 comments review。
 
 ## Version Trace
 
-- Former pending local hash: mapped to `71650f7`
-- Current traceable run: `results/<case-name>/20260420-120416-71650f7/`
-- Previous pending run on this branch: `results/<case-name>/20260420-091822-local-8e021ea7/`
-- Base HEAD for both 2026-04-20 runs: `588318c`
-- Working branch: `codex/proposed-v2`
+- Current pending local hash: `local-5a1492f8`
+- Current version result folder: `results/local-5a1492f8/`
+- Base HEAD for current V3 screening: `489efb6`
+- Working branch: `codex/proposed_v3`
 - Latest reviewed comments hash: `71650f7`
-- Review status: comments match the current ARD code/results commit; final branch also includes hash-finalization metadata
-- Git code commit hash: `71650f7`
-- Hash finalization commit hash: this metadata commit; see final published branch tip
-- Published branch: `origin/codex/proposed-v2`
+- Review status: current V3 screening has no matching comments review yet
+- Git code commit hash: pending synchronization
+- Hash finalization commit hash: pending synchronization
+- Intended published branch: `origin/codex/proposed_v3`
+- Historical version folders retained after layout migration: `results/2962bc3/`, `results/71650f7/`, `results/local-8e021ea7/`, `results/local-aa29a0fd/`
 
 ## 当前结果判断
 
-- Case 3 在 `L = 9` 时，mean unseen relative error 为 `Ideal 0.3210 / Interpolation 0.0447 / ARD 0.0010 / Proposed V1 0.0453 / Proposed V2 0.1054 / HFSS Oracle 0`，ARD 在流形重构指标上显著接近 Oracle。
-- Case 7 在 `SNR = 20 dB` 时，RMSE 为 `Ideal 3.7502 / Interpolation 0.0016 / ARD 0.0037 / Proposed V1 0.0140 / Proposed V2 0.0114 / HFSS Oracle 0.0037 deg`。
-- Case 9 mean resolution 为 `Ideal 0.0987 / Interpolation 0.1262 / ARD 0.1245 / Proposed V1 0.1268 / Proposed V2 0.1148 / HFSS Oracle 0.1238`；ARD 接近 Oracle/Interpolation，但不稳定超过 Proposed V1。
-- Case 10 平均 manifold error 为 `Ideal 0.3214 / Interp 0.0459 / ARD 0.0056 / Proposed V1 0.0461 / Proposed V2 0.1025`；平均 single-source RMSE 为 `3.7287 / 0.1262 / ARD 0.1035 / 0.1138 / 0.1461 deg`。
+- Case 3, `L = 9`: mean unseen relative error `ARD 0.001034 / V3 0.017357`，edge `0.001179 / 0.017567`，worst-10% `0.001048 / 0.017536`。V3 明显退化，未通过全局/边缘流形筛选。
+- Case 7, `SNR = 20 dB`: RMSE `ARD 0.002828 / V3 0.002828 deg`，mean absolute bias `0.000040 / 0.000040 deg`。单源高 SNR 没有变坏，但也没有新收益。
+- Case 9: mean resolution `ARD 0.124474 / Proposed V1 0.126776 / V3 0.122018`；mean stable rate `0.034825 / 0.036316 / 0.033465`。V3 低于 ARD 和 V1，未达到筛选门槛。
+- Case 10: mean manifold error `ARD 0.005644 / V3 0.065962`，mean DOA RMSE `ARD 0.103499 / V3 0.106980 deg`。RMSE 尚可，但流形误差明显崩坏。
 
 ## 仍需保留的边界
 
-- `71650f7` 是 `local-c72eabab` 映射后的 Git code commit hash；该批运行原始生成时仍来自 dirty worktree，不是 clean repo 重新运行结果。
-- ARD Method 2 同时校正幅度和相位，不是当前 phase-only Interpolation 的同类预算对照；论文里应写成更强的 complex correction-vector baseline。
-- 当前 Proposed V2 / Full V2 C-route 不能写成稳定胜过 V1、Interpolation 或 ARD；它更像一个已验证但暂未成功的 task-supervised 路线。
-- 2026-04-20 的最新阶段判断是：1D benchmark 已经足够成熟，主要瓶颈在 Proposed 算法结构本身，而不是 case 难度不足。
-- 2D DOA 更适合作为中后期扩展；在 1D 算法故事尚未收束前，不宜作为当前主线。
+- `local-5a1492f8` 是 screening run，不是完整 paper-profile full run。
+- 当前 V3 证明的是一条失败筛选路径：task residual 会把校准角从 ARD/HFSS anchor 拉开，不能把它描述为有效改进。
+- 下一步应优先修 V3 objective，使 task residual 不再以牺牲 ARD 全局流形为代价；可以尝试更强 ARD anchor、更小 residual order/step、显式 global/edge manifold guard，或退化时 fallback 到 ARD。
+- 继续加难 case 或立即转向 2D DOA 都不是当前主线。
 
 ## 运行方式
 
@@ -63,16 +62,16 @@ cfg = default_config(pwd, 'paper');
 run_project(1:10, cfg);
 ```
 
-使用可追溯结果目录时，需要为本批代码生成一个 pending local hash，并设置同一个 `runId`：
+使用可追溯版本目录时，需要为本批代码生成一个 pending local hash，并设置同一个版本目录：
 
 ```matlab
 setup_paths
 cfg = default_config(pwd);
 cfg.run.useTraceableDirs = true;
 cfg.run.pendingLocalHash = 'local-xxxxxxxx';
-cfg.run.runId = 'YYYYMMDD-HHMMSS-local-xxxxxxxx';
-cfg.run.command = 'run_project(1:10, cfg)';
-run_project(1:10, cfg);
+cfg.run.runId = 'local-xxxxxxxx';
+cfg.run.command = 'run_project([3 7 9 10], cfg)';
+run_project([3 7 9 10], cfg);
 ```
 
 只快速检查数据上下文：

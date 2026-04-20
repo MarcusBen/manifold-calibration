@@ -1,6 +1,6 @@
 ---
 name: project-code-change-log
-description: "Project-specific code modification logging workflow for this manifold calibration repository. Use when the user says 修改代码, 改代码, 修改完代码记日志, 记录变更, 跑 case, 运行实验, 把图片放进 log, or asks to change MATLAB code and keep traceable docs/results; after code changes, generate one pending local short hash for the current version, use it consistently in docs/research-log.md and case result folders, store referenced images in docs/assets, and leave final replacement with the real Git commit hash to project-github-sync."
+description: "Project-specific code modification logging workflow for this manifold calibration repository. Use when the user says 修改代码, 改代码, 修改完代码记日志, 记录变更, 跑 case, 运行实验, 把图片放进 log, or asks to change MATLAB code and keep traceable docs/results; after code changes, generate one pending local short hash for the current version, use it as the top-level results version folder, store case outputs underneath it, update docs/research-log.md, store referenced images in docs/assets, and leave final replacement with the real Git commit hash to project-github-sync."
 ---
 
 # Project Code Change Log
@@ -14,8 +14,10 @@ Use this skill whenever code or experiment behavior changes in this repository. 
 - Main log: `docs/research-log.md`
 - Optional read-only reference: `docs/comments.md`
 - Documentation images: `docs/assets/`
-- Run outputs before upload: `results/<case-name>/<YYYYMMDD-HHMMSS>-<pending-local-hash>/`
-- Run outputs after upload finalization: `results/<case-name>/<YYYYMMDD-HHMMSS>-<git-code-commit-hash>/`
+- Run outputs before upload: `results/<pending-local-hash>/<case-name>/`
+- Run outputs after upload finalization: `results/<git-code-commit-hash>/<case-name>/`
+- Version-level run notes: `results/<version-hash>/RUN_NOTES.md`
+- Version-level case index: `results/<version-hash>/manifest.md`
 
 Generate one pending local hash after code edits are complete and before writing logs or running cases. Use the same pending local hash everywhere for that code-change batch. `project-github-sync` later replaces that exact pending local hash with the real Git code/results commit hash.
 
@@ -26,10 +28,10 @@ In short: project-github-sync later replaces the pending local hash; this skill 
 Use one pending local hash consistently across logs and case results for a given code-change batch.
 
 - After code edits are complete, generate a pending local hash with `.codex/skills/project-code-change-log/scripts/new_local_hash.py`.
-- Use the generated value, such as `local-a1b2c3d4`, in the log title, log metadata, result directory names, and `RUN_NOTES.md`.
+- Use the generated value, such as `local-a1b2c3d4`, in the log title, log metadata, top-level result version folder, `manifest.md`, and `RUN_NOTES.md`.
 - Do not use `git rev-parse --short HEAD` as the primary version id during an uncommitted code-change batch; it points to the previous commit, not the just-edited code.
 - Record the current `HEAD` short hash separately as the base commit when useful.
-- If code changes are uncommitted, explicitly record `git status --short` in both the log entry and `RUN_NOTES.md`.
+- If code changes are uncommitted, explicitly record `git status --short` in the log entry and version-level `RUN_NOTES.md`.
 - Let `project-github-sync` replace the exact pending local hash with the real Git code/results commit hash after commit.
 - Treat `docs/comments.md` as read-only reference material. It may inform the motivation for a change, but this skill must not create, edit, summarize, or reorganize `docs/comments.md`.
 
@@ -51,29 +53,53 @@ If `py` is unavailable, use any equivalent command that creates a unique lowerca
 
 ## Result Directory Rule
 
-Before running any case or experiment, create or configure a fresh output path:
+Before running any case or experiment, create one version folder for the whole code-change batch:
 
 ```text
-results/<case-name>/<YYYYMMDD-HHMMSS>-<pending-local-hash>/
+results/<pending-local-hash>/
 ```
 
-Examples:
+Put each case underneath that version folder:
 
 ```text
-results/case09_two_source_resolution/20260418-091530-local-a1b2c3d4/
-results/case01_problem_validation/20260418-101245-local-a1b2c3d4/
+results/local-a1b2c3d4/
+  RUN_NOTES.md
+  manifest.md
+  case09_two_source_resolution/
+    case09_results.mat
+    two_source_resolution.png
+  case01_problem_validation/
+    case01_results.mat
 ```
 
-Never reuse an existing run directory, even for the same case and same parameters. Do not overwrite historical `.mat`, `.png`, `.csv`, or summary files.
+Never reuse an existing version folder. If the same code-change batch reruns the same case, keep it under the same version folder but create a distinct subfolder or filename inside that case folder, such as `run-20260420-153000/`, `smoke-20260420-153000.png`, or `summary-20260420-153000.csv`. Do not overwrite historical `.mat`, `.png`, `.csv`, or summary files.
 
-When the run uses uncommitted changes, add a short provenance file in the run directory, for example `RUN_NOTES.md`, containing:
+The version folder must contain `RUN_NOTES.md` with:
 
 - timestamp
 - pending local hash
 - base `HEAD` short hash
 - `git status --short`
-- command or case that was run
+- commands or cases that were run
 - important config overrides
+
+The version folder must also contain `manifest.md` listing only the cases that were actually run or produced outputs in that version. Do not fabricate a full case list. If it is important to say that some planned cases were skipped, add a separate optional "Not run" section.
+
+```markdown
+# Results manifest
+
+- Version hash: `local-a1b2c3d4`
+- Base HEAD: `abc1234`
+- Worktree state: uncommitted code changes
+
+## Cases
+
+- `case09_two_source_resolution`: smoke run; outputs in `case09_two_source_resolution/`
+
+## Not run, if relevant
+
+- `case01_problem_validation`: skipped to keep this batch focused on case09
+```
 
 ## Research Log Update
 
@@ -87,7 +113,8 @@ Each entry should include:
 - what files or behavior changed
 - which case(s) are affected
 - what validation or run was performed
-- where the result directory is
+- where the version result directory is
+- which case subdirectories were created
 - what remains uncertain or risky
 - whether the result is smoke/proof-of-trend or final benchmark
 
@@ -104,7 +131,8 @@ Recommended entry skeleton:
 - Change:
 - Affected cases:
 - Validation:
-- Result path:
+- Result path: `results/local-a1b2c3d4/`
+- Case outputs:
 - Remaining risk:
 ```
 
@@ -120,7 +148,7 @@ If the log mentions or embeds an image:
 ![case09 smoke result](assets/case09-two-source-resolution-smoke.png)
 ```
 
-Do not place documentation images in the repository root. Do not reference images directly from `results/` in long-lived docs, because run folders may be reorganized or ignored later.
+Do not place documentation images in the repository root. Do not embed result-folder images directly in long-lived docs unless the image is also copied to `docs/assets/`, because result folders are organized by version and may be renamed during hash finalization.
 
 ## Safety Rules
 
@@ -132,6 +160,7 @@ Do not place documentation images in the repository root. Do not reference image
 - Do not create, edit, summarize, or reorganize `docs/comments.md`; code-change runs update `docs/research-log.md` and run metadata only.
 - Do not use comments written for a different commit hash as current-version evaluation.
 - Do not generate a new pending local hash for each case in the same code-change batch; reuse the same one.
+- Do not create `results/<case-name>/<version-hash>/` for new runs. Use `results/<version-hash>/<case-name>/`.
 - Mention any test or run that could not be completed.
 
 ## Completion Checklist
@@ -139,7 +168,8 @@ Do not place documentation images in the repository root. Do not reference image
 Before finishing a code-change task using this skill, confirm:
 
 - Code/config changes are complete.
-- Each executed case wrote to a unique run directory under `results/`.
+- Each executed case wrote under the current version folder, `results/<pending-local-hash>/<case-name>/`.
+- `results/<pending-local-hash>/RUN_NOTES.md` and `results/<pending-local-hash>/manifest.md` exist.
 - Any documentation image was copied to `docs/assets/` and referenced from there.
 - `docs/research-log.md` records the pending local hash, base HEAD, change, validation, result path, and remaining risk.
 - `git status --short` has been checked and unrelated user changes are preserved.

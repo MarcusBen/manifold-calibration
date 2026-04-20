@@ -16,7 +16,60 @@
 
 ## 最新整理
 
-> Branch artifact policy: `codex/proposed-v2` 保留当前分支的 traceable result batches。2026-04-20 当前同步范围包括 `20260420-091822-local-8e021ea7` Full V2 C-route run 和 `20260420-120416-71650f7` ARD Method 2 run；更早的主线历史结果仍可从 `main` 或历史提交中追溯。
+> Branch artifact policy: `codex/proposed_v3` 使用 version-first traceable results layout：`results/<version-hash>/<case-name>/`。2026-04-20 当前同步范围包括 `local-5a1492f8` V3 screening、`71650f7` ARD Method 2 full run、`local-8e021ea7` Full V2 C-route full run、`2962bc3` V2-lite run，以及仅含失败启动日志的 `local-aa29a0fd`。
+
+### 2026-04-20：`local-5a1492f8` Proposed V3 ARD-anchored screening run
+
+- Version hash: `local-5a1492f8`
+- Base HEAD: `489efb6`
+- Branch: `codex/proposed_v3`
+- Worktree state at run time: uncommitted code changes in `default_config.m`, `run_project.m`, and `src/build_sparse_models.m`.
+- Run command: `run_project([3 7 9 10], default_config(pwd, 'paper'))`
+- Result path pattern: `results/local-5a1492f8/<case-name>/`
+- Run scope: screening only for Case 3/7/9/10; this is not a full paper-profile result.
+
+#### 一句话结论
+
+本轮按 `docs/comments.md` 的下一步建议实现 **Proposed V3 = ARD coarse model + anchored task-aware phase residual refinement**。V3 初始状态严格等于 ARD，随后只优化小幅三段软门控 Chebyshev 相位 residual；训练目标包含 calibration、single-source task、pair task、midpoint suppression、ARD anchor、smooth/reg。筛选结果没有通过：V3 可运行且 task objective 下降，但它明显破坏流形重构，并且 Case 9 没有超过 ARD / Proposed V1，因此本轮不继续跑 full 1:10。
+
+#### 代码与行为变化
+
+- `default_config` 新增 `cfg.model.v3`，默认标签为 `Proposed V3`，`base = 'ard'`，`stage = 'ard_anchored_task_refinement'`，default `numSpsaIterations = 12`，paper profile 为 `18`。
+- `build_sparse_models` 新增 `AProposedV3`、`phaseFitV3Full`、`phaseDeltaV3Full`、`phaseModelV3` 和 `v3Diagnostics`；V3 使用 `AARD .* exp(1j * DeltaPhi_task)`，不是重新拟合完整流形。
+- `run_project` 在 Case 3/7/9/10 方法列表中加入 `Proposed V3`。
+- Case 9 正式评估 pair 现在排除 V2/V3 task pairs 的 union，并保存 `v2TaskPairsDeg`、`v3TaskPairsDeg`、`taskPairsDeg` 和 `taskEvalOverlapCount`。
+- `docs/comments.md` 仅作为只读参考，本轮未修改。
+
+#### 验证与筛选结果
+
+- 代码级检查：`models.AProposedV3` / `phaseFitV3Full` / `v3Diagnostics` 存在，`size(AProposedV3) == size(ctx.AH)`，无 `NaN/Inf`。
+- V3 representative objective: initial `4.065220`，final `0.678386`，`usedARDFallback = 0`。
+- `checkcode` 只返回既有风格类 warning：`src/build_sparse_models.m` 2 条，`run_project.m` 14 条；没有阻塞运行。
+- Case 3 representative calibration guard check: max calibration-vector error `ARD 4.36e-16 / V3 2.54e-2`。这说明当前 task residual 会把校准角从 ARD/HFSS anchor 拉开，是筛选失败的关键原因之一。
+- Case 3, `L = 9`: mean unseen relative error `ARD 0.001034 / V3 0.017357`，edge `0.001179 / 0.017567`，worst-10% `0.001048 / 0.017536`。V3 明显退化，未通过全局/边缘流形筛选。
+- Case 7, `SNR = 20 dB`: RMSE `ARD 0.002828 / V3 0.002828 deg`，mean absolute bias `0.000040 / 0.000040 deg`。单源高 SNR 没有变坏，但也没有提供新收益。
+- Case 9: mean resolution `ARD 0.124474 / Proposed V1 0.126776 / V3 0.122018`；mean stable rate `0.034825 / 0.036316 / 0.033465`。V3 低于 ARD 和 V1，未达到 `+0.003 ~ +0.005` 的筛选门槛。
+- Case 9 leakage check: `taskEvalOverlapCount = 0`，`taskExcludedPairCount = 16`，V2/V3 task pair union 共 `16` 个。
+- Case 10: mean manifold error `ARD 0.005644 / V3 0.065962`，mean DOA RMSE `ARD 0.103499 / V3 0.106980 deg`。RMSE 仍在 `ARD + 0.01 deg` 内，但流形误差明显崩坏。
+
+#### 关键图片
+
+以下图片来自 `20260420-134208-local-5a1492f8` screening run，并已复制到 `docs/assets/`。
+
+![case03 v3 edge hard](assets/case03-v3-edge-hard-local-5a1492f8.png)
+
+![case07 v3 snr](assets/case07-v3-snr-local-5a1492f8.png)
+
+![case09 v3 two source](assets/case09-v3-two-source-local-5a1492f8.png)
+
+![case10 v3 random split](assets/case10-v3-random-split-local-5a1492f8.png)
+
+#### 决策与下一步
+
+- 不跑 full paper profile `1:10`，因为 V3 没有通过 Case 3/9/10 的筛选标准。
+- 下一轮不应加难 case 或转向 2D DOA；应先修 V3 objective，使 task residual 不再以牺牲 ARD 的全局流形为代价。
+- 优先尝试更强 ARD anchor、更小 residual order/step、显式 global/edge manifold guard，或当筛选指标退化时 fallback 到 ARD。
+- 本条记录只说明 V3 screening 失败，不把“实现了 V3”写成“V3 已证明优于 ARD”。
 
 ### 2026-04-20：`71650f7` ARD Method 2 同场 full paper run
 
@@ -25,7 +78,7 @@
 - Base HEAD: `588318c`
 - Branch: `codex/proposed-v2`
 - Run command: `run_project(1:10, default_config(pwd, 'paper'))`
-- Result path pattern: `results/<case-name>/20260420-120416-71650f7/`
+- Result path pattern: `results/71650f7/<case-name>/`
 - Worktree state: this run was generated from uncommitted code/docs/results and later mapped from `local-c72eabab` to Git code commit `71650f7`; it is not a clean Git archive rerun.
 
 #### 一句话结论
@@ -88,7 +141,7 @@
 - Branch: `codex/proposed-v2`
 - Worktree state: uncommitted code changes plus untracked reference file `C_route_full_v2_improvement_plan.md`; earlier intermediate run directories under `20260419-135127-local-aa29a0fd` were preserved.
 - Run command: `run_project(1:10, default_config(pwd, 'paper'))`
-- Result path pattern: `results/<case-name>/20260420-091822-local-8e021ea7/`
+- Result path pattern: `results/local-8e021ea7/<case-name>/`
 - Run scope: all 10 cases, paper profile, no smoke run.
 
 #### 一句话结论
@@ -155,8 +208,8 @@
 - Branch: `codex/proposed-v2`
 - Worktree state: uncommitted code/docs changes; existing `docs/comments.md` and untracked `docs/v1实验结果分析.md` were preserved.
 - Run command: `run_project(1:10, default_config(pwd, 'paper'))`
-- Result path pattern: `results/<case-name>/20260419-123007-2962bc3/`
-- Failed launch logs before final run: `results/full-run-20260419-122739-2962bc3.*` and `results/full-run-20260419-122900-2962bc3.*`; both failed before any case result directory was created because of MATLAB `-batch` quoting / temp script naming.
+- Result path pattern: `results/2962bc3/<case-name>/`
+- Failed launch logs before final run: `results/2962bc3/logs/full-run-20260419-122739-2962bc3.*` and `results/2962bc3/logs/full-run-20260419-122900-2962bc3.*`; both failed before any case result directory was created because of MATLAB `-batch` quoting / temp script naming.
 - Run scope: all 10 cases, paper profile, no smoke run.
 
 #### 一句话结论
@@ -218,7 +271,7 @@
 - Base HEAD: `bd11394`
 - Worktree state: uncommitted code changes; existing historical result deletions and prior local archive artifacts were preserved.
 - Run command: `run_project(1:10, default_config(pwd, 'paper'))`
-- Result path pattern: `results/<case-name>/20260418-195622-f4e46e4/`
+- Result path pattern: `results/f4e46e4/<case-name>/`
 - Run scope: all 10 cases, paper profile.
 
 #### 一句话结论
@@ -282,7 +335,7 @@
 - Worktree state: uncommitted code changes; previous result deletions and local archive artifacts are preserved.
 - Change reason: `docs/comments.md` 指出 `case1.exampleAngleDeg = 25` 仍像主配置，且 Case 4 旧双源 pair 太容易，`Interpolation / Proposed / Oracle` 基本饱和到 1。
 - Affected cases: Case 1 config readability, Case 4 calibration-count sensitivity.
-- Result path: `results/case04_calibration_count_sensitivity/20260418-193948-local-7fa085bd/`
+- Result path: `results/local-7fa085bd/case04_calibration_count_sensitivity/`
 
 #### 代码与行为变化
 
@@ -322,7 +375,7 @@ run_project(4, cfgSmoke)
 - Base HEAD: `bd11394`
 - Worktree state: uncommitted local closeout run; tracked historical `results*` deletions are intentionally preserved per user confirmation.
 - Run command: `run_project(1:10, default_config(pwd, 'paper'))`
-- Result path pattern: `results/<case-name>/20260418-190723-local-77d2252a/`
+- Result path pattern: `results/local-77d2252a/<case-name>/`
 - Comment/review status: `docs/comments.md` is a current local project-completeness analysis, not a hash-matched review verdict.
 
 #### 一句话结论
@@ -381,7 +434,7 @@ run_project(4, cfgSmoke)
 - Base HEAD: `7191dc4`
 - Worktree state: dirty worktree full run; `README.md`、`docs/comments.md` 以及本批代码修改均记录在 `RUN_NOTES.md` 中。
 - Run command: `run_project(1:10, default_config(pwd, 'paper'))`
-- Result path pattern: `results/<case-name>/20260418-133202-35756f6/`
+- Result path pattern: `results/35756f6/<case-name>/`
 - Comment/review status: GitHub issues `#1-#11` were used as guidance, but this is not a clean-repo final-paper archive.
 
 #### 一句话结论
@@ -438,8 +491,8 @@ run_project(4, cfgSmoke)
 - Base HEAD: `81eaaf4`
 - Worktree state before upload: uncommitted code/docs changes; existing `.codex/skills/*` and `docs/comments.md` edits were preserved.
 - Result paths:
-  - `results/case01_problem_validation/20260418-101955-996b0e4/`
-  - `results/case09_two_source_resolution/20260418-101955-996b0e4/`
+  - `results/996b0e4/case01_problem_validation/`
+  - `results/996b0e4/case09_two_source_resolution/`
 - Comment/review status: no hash-matched reviewed Git commit yet.
 
 #### 一句话结论
@@ -449,7 +502,7 @@ run_project(4, cfgSmoke)
 #### 代码与行为变化
 
 - `default_config` 保持旧调用兼容，同时新增 `default_config(rootDir, 'paper')`，用于正式图的更厚 Monte Carlo 配置；日常默认 `case09.monteCarlo = 80` 不变。
-- 新增 `cfg.run` 可追溯输出配置。启用 `cfg.run.useTraceableDirs = true` 后，结果写入 `results/<case-name>/<runId>/`，并自动生成 `RUN_NOTES.md`。
+- 新增 `cfg.run` 可追溯输出配置。启用 `cfg.run.useTraceableDirs = true` 后，结果写入 `results/<runId>/<case-name>/`，并自动生成版本级 `RUN_NOTES.md` 与 `manifest.md`。
 - Case 1 默认 stress 设置改为 `SNR = 40 dB`、`snapshots = 2000`、`monteCarlo = 80`、`toleranceDeg = 0.4`。逐角 high-SNR sweep 先运行，再自动选择 Ideal 相对 HFSS Oracle 压力最大的角度作为代表性谱图角度。
 - `benchmark_music` 对单源任务新增 `perTargetMeanError`、`perTargetAbsBias`、`trialErrorStd`，用于区分统计波动和 signed bias。
 - Case 9 方法列表改为 `Ideal / Interpolation / Proposed / HFSS Oracle`。source pair 仍按 `[1 2 3 4 5 6 8 10]` 分离度组织，但每档最多 21 个 pair 时优先覆盖边缘区、高失配区、远离校准角和中心角多样性。
@@ -481,7 +534,7 @@ run_project([1 9], cfgSmoke)
 
 - Case 1 smoke 的 Monte Carlo 很低，不能把 `-52 deg` 的数值结果当成最终 mismatch floor 强度；它只说明自动选角、谱图和逐角偏差图已经对齐。
 - Case 9 现在可以比较 `Proposed` 与 `Interpolation`，但正式论文主张必须看 paper profile 或更厚 Monte Carlo；如果 `Proposed` 不能稳定优于 `Interpolation`，主张要收窄为“相对 Ideal 的校正有效”。
-- `results_step0p2_qw/` 仍保留为兼容默认输出目录；正式可回溯结果应使用 `results/<case-name>/<timestamp>-<localhash>/`。
+- `results_step0p2_qw/` 仍保留为兼容默认输出目录；正式可回溯结果应使用 `results/<version-hash>/<case-name>/`。
 
 #### 对论文表述的影响
 

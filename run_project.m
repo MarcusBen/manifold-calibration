@@ -266,7 +266,8 @@ rng(cfg.randomSeed + 3, 'twister');
 outDir = local_case_output_dir(cfg, 'case03_unseen_generalization');
 
 lValues = cfg.case3.lValues;
-methodNames = {'Ideal', 'Interpolation', 'ARD', 'Proposed V1', 'Proposed V2', 'HFSS Oracle'};
+methodNames = {'Ideal', 'Interpolation', 'ARD', 'Proposed V1', 'Proposed V2', ...
+    'Proposed V3', 'HFSS Oracle'};
 meanUnseenError = zeros(numel(lValues), numel(methodNames));
 edgeUnseenError = zeros(numel(lValues), numel(methodNames));
 worst10UnseenError = zeros(numel(lValues), numel(methodNames));
@@ -282,12 +283,14 @@ for lIdx = 1:numel(lValues)
     metricsARD = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AARD(:, models.testIdx));
     metricsProposedV1 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV1(:, models.testIdx));
     metricsProposedV2 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV2(:, models.testIdx));
+    metricsProposedV3 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV3(:, models.testIdx));
     perMethodError = [ ...
         metricsIdeal.relativeError(:), ...
         metricsInterp.relativeError(:), ...
         metricsARD.relativeError(:), ...
         metricsProposedV1.relativeError(:), ...
         metricsProposedV2.relativeError(:), ...
+        metricsProposedV3.relativeError(:), ...
         zeros(numel(models.testIdx), 1)];
 
     meanUnseenError(lIdx, :) = [ ...
@@ -296,6 +299,7 @@ for lIdx = 1:numel(lValues)
         mean(metricsARD.relativeError), ...
         mean(metricsProposedV1.relativeError), ...
         mean(metricsProposedV2.relativeError), ...
+        mean(metricsProposedV3.relativeError), ...
         0];
     edgeMask = abs(models.testAnglesDeg(:)) >= max(abs(ctx.thetaDeg)) - cfg.eval.edgeBandDeg;
     if ~any(edgeMask)
@@ -364,6 +368,7 @@ for plotIdx = 1:numel(cfg.case3.representativeElements)
     plot(ctx.thetaDeg, rad2deg(repModels.phaseInterpFull(elementIdx, :)), '--', 'LineWidth', 1.4);
     plot(ctx.thetaDeg, rad2deg(repModels.phaseFitV1Full(elementIdx, :)), '-.', 'LineWidth', 1.4);
     plot(ctx.thetaDeg, rad2deg(repModels.phaseFitV2Full(elementIdx, :)), ':', 'LineWidth', 1.8);
+    plot(ctx.thetaDeg, rad2deg(repModels.phaseFitV3Full(elementIdx, :)), '-', 'LineWidth', 1.2);
     scatter(repModels.calAnglesDeg, rad2deg(repModels.phaseTruthFull(elementIdx, repModels.calIdx)), ...
         36, 'filled');
     grid on;
@@ -372,6 +377,7 @@ for plotIdx = 1:numel(cfg.case3.representativeElements)
 end
 xlabel('Angle (deg)');
 legend({'HFSS truth', 'Interpolation', 'Proposed V1 fit', 'Proposed V2 fit', ...
+    'Proposed V3 fit', ...
     'Calibration samples'}, 'Location', 'eastoutside');
 save_figure(fig, fullfile(outDir, 'phase_reconstruction.png'));
 
@@ -392,6 +398,7 @@ for angleIdx = 1:numRepAngles
     plot(elemAxis, abs(repModels.AARD(:, gridIdx)), 'x-', 'LineWidth', 1.2);
     plot(elemAxis, abs(repModels.AProposedV1(:, gridIdx)), '^-', 'LineWidth', 1.2);
     plot(elemAxis, abs(repModels.AProposedV2(:, gridIdx)), 'v-', 'LineWidth', 1.4);
+    plot(elemAxis, abs(repModels.AProposedV3(:, gridIdx)), 'p-', 'LineWidth', 1.2);
     grid on;
     xlabel('Element index');
     ylabel('Magnitude');
@@ -405,12 +412,14 @@ for angleIdx = 1:numRepAngles
     plot(elemAxis, rad2deg(unwrap(angle(repModels.AARD(:, gridIdx)))), 'x-', 'LineWidth', 1.2);
     plot(elemAxis, rad2deg(unwrap(angle(repModels.AProposedV1(:, gridIdx)))), '^-', 'LineWidth', 1.2);
     plot(elemAxis, rad2deg(unwrap(angle(repModels.AProposedV2(:, gridIdx)))), 'v-', 'LineWidth', 1.4);
+    plot(elemAxis, rad2deg(unwrap(angle(repModels.AProposedV3(:, gridIdx)))), 'p-', 'LineWidth', 1.2);
     grid on;
     xlabel('Element index');
     ylabel('Phase (deg)');
     title(sprintf('Phase at %.1f deg', queryAngle));
 end
-legend({'HFSS truth', 'Ideal', 'Interpolation', 'ARD', 'Proposed V1', 'Proposed V2'}, ...
+legend({'HFSS truth', 'Ideal', 'Interpolation', 'ARD', 'Proposed V1', 'Proposed V2', ...
+    'Proposed V3'}, ...
     'Location', 'eastoutside');
 save_figure(fig, fullfile(outDir, 'steering_vector_comparison.png'));
 
@@ -822,7 +831,8 @@ outDir = local_case_output_dir(cfg, 'case07_single_source_snr');
 
 calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'uniform');
 models = build_sparse_models(ctx, calIdx, cfg.model);
-methods = local_named_methods(ctx, models, {'ideal', 'interp', 'ard', 'proposed_v1', 'proposed_v2', 'oracle'});
+methods = local_named_methods(ctx, models, {'ideal', 'interp', 'ard', 'proposed_v1', ...
+    'proposed_v2', 'proposed_v3', 'oracle'});
 snrSweep = cfg.case7.snrSweepDb;
 evalAngles = local_single_source_eval_angles(ctx, models, cfg);
 evalSubsets = local_doa_eval_subsets(ctx, evalAngles, cfg);
@@ -1120,10 +1130,11 @@ outDir = local_case_output_dir(cfg, 'case09_two_source_resolution');
 
 calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'uniform');
 models = build_sparse_models(ctx, calIdx, cfg.model);
-methods = local_named_methods(ctx, models, {'ideal', 'interp', 'ard', 'proposed_v1', 'proposed_v2', 'oracle'});
+methods = local_named_methods(ctx, models, {'ideal', 'interp', 'ard', 'proposed_v1', ...
+    'proposed_v2', 'proposed_v3', 'oracle'});
 
 [sourcePairs, pairSelection] = local_case9_source_pairs(cfg.case9, ctx, models.calAnglesDeg);
-taskPairsDeg = local_v2_task_pairs_from_models(models);
+[taskPairsDeg, v2TaskPairsDeg, v3TaskPairsDeg] = local_task_pairs_from_models(models);
 [sourcePairs, pairSelection, taskExcludedPairCount] = local_exclude_task_pairs_from_case9( ...
     sourcePairs, pairSelection, taskPairsDeg);
 taskEvalOverlapCount = local_count_task_eval_overlap(sourcePairs, taskPairsDeg);
@@ -1239,6 +1250,8 @@ caseResult.sourcePairLabels = pairLabels;
 caseResult.pairSelectionMode = pairSelection.mode;
 caseResult.pairSelectionScores = pairSelection;
 caseResult.taskPairsDeg = taskPairsDeg;
+caseResult.v2TaskPairsDeg = v2TaskPairsDeg;
+caseResult.v3TaskPairsDeg = v3TaskPairsDeg;
 caseResult.taskExcludedPairCount = taskExcludedPairCount;
 caseResult.taskEvalOverlapCount = taskEvalOverlapCount;
 caseResult.separationDeg = separationDeg;
@@ -1266,8 +1279,8 @@ rng(cfg.randomSeed + 10, 'twister');
 outDir = local_case_output_dir(cfg, 'case10_random_split_robustness');
 
 numSplits = cfg.case10.numSplits;
-methodKeys = {'ideal', 'interp', 'ard', 'proposed_v1', 'proposed_v2'};
-methodLabels = {'Ideal', 'Interp', 'ARD', 'Proposed V1', 'Proposed V2'};
+methodKeys = {'ideal', 'interp', 'ard', 'proposed_v1', 'proposed_v2', 'proposed_v3'};
+methodLabels = {'Ideal', 'Interp', 'ARD', 'Proposed V1', 'Proposed V2', 'Proposed V3'};
 manifoldError = zeros(numSplits, numel(methodKeys));
 singleRmse = zeros(numSplits, numel(methodKeys));
 splitAngles = cell(numSplits, 1);
@@ -1283,12 +1296,14 @@ for splitIdx = 1:numSplits
     metricsARD = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AARD(:, models.testIdx));
     metricsProposedV1 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV1(:, models.testIdx));
     metricsProposedV2 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV2(:, models.testIdx));
+    metricsProposedV3 = compute_manifold_metrics(ctx.AH(:, models.testIdx), models.AProposedV3(:, models.testIdx));
     manifoldError(splitIdx, :) = [ ...
         mean(metricsIdeal.relativeError), ...
         mean(metricsInterp.relativeError), ...
         mean(metricsARD.relativeError), ...
         mean(metricsProposedV1.relativeError), ...
-        mean(metricsProposedV2.relativeError)];
+        mean(metricsProposedV2.relativeError), ...
+        mean(metricsProposedV3.relativeError)];
 
     methods = local_named_methods(ctx, models, methodKeys);
     evalAngles = local_single_source_eval_angles(ctx, models, cfg);
@@ -1399,6 +1414,14 @@ if isfield(cfg, 'model') && isfield(cfg.model, 'v2')
     fprintf(fid, '- Proposed V2 SPSA iterations: `%d`\n', cfg.model.v2.numSpsaIterations);
     fprintf(fid, '- Proposed V2 note: `heldout_hfss uses extra task-supervised HFSS truth and is not same-budget with V1/Interpolation.`\n\n');
 end
+if isfield(cfg, 'model') && isfield(cfg.model, 'v3')
+    fprintf(fid, '- Proposed V3 enabled: `%d`\n', logical(cfg.model.v3.enabled));
+    fprintf(fid, '- Proposed V3 stage: `%s`\n', cfg.model.v3.stage);
+    fprintf(fid, '- Proposed V3 base: `%s`\n', cfg.model.v3.base);
+    fprintf(fid, '- Proposed V3 task data mode: `%s`\n', cfg.model.v3.taskDataMode);
+    fprintf(fid, '- Proposed V3 SPSA iterations: `%d`\n', cfg.model.v3.numSpsaIterations);
+    fprintf(fid, '- Proposed V3 note: `ARD-anchored task-aware phase residual; screening result, not final full paper-profile evidence unless stated.`\n\n');
+end
 fprintf(fid, '## Git Status Short\n\n');
 fprintf(fid, '```text\n%s\n```\n', cfg.run.gitStatusShort);
 end
@@ -1436,6 +1459,9 @@ end
 if ~isfield(cfg.model, 'v2') || isempty(cfg.model.v2)
     cfg.model.v2 = struct();
 end
+if ~isfield(cfg.model, 'v3') || isempty(cfg.model.v3)
+    cfg.model.v3 = struct();
+end
 if ~isfield(cfg.model, 'ard') || isempty(cfg.model.ard)
     cfg.model.ard = struct();
 end
@@ -1470,6 +1496,33 @@ cfg.model.v2 = local_set_default_field(cfg.model.v2, 'lambdaMid', 0.08);
 cfg.model.v2 = local_set_default_field(cfg.model.v2, 'lambdaReg', 1e-4);
 cfg.model.v2 = local_set_default_field(cfg.model.v2, 'softmaxGamma', 8);
 cfg.model.v2 = local_set_default_field(cfg.model.v2, 'midMargin', 0.2);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'enabled', true);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'label', 'Proposed V3');
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'base', 'ard');
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stage', 'ard_anchored_task_refinement');
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'segmentCentersDeg', [-50 0 50]);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'order', 1);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambda', 1e-3);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'pairTaskEnabled', true);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskDataMode', 'heldout_hfss');
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskScanStrideDeg', 1);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskSingleHeldoutCount', 12);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskPairSeparationDeg', [4 5 6 8 10]);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskPairCount', 16);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskSnrDb', 25);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'numSpsaIterations', 12);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'learningRate', 0.020);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'perturbationScale', 0.015);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'maxGradNorm', 5);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaCal', 1);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaSingle', 0.08);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaPair', 0.12);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaMid', 0.04);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaAnchor', 5);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaSmooth', 1e-3);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaReg', 1e-4);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'softmaxGamma', 8);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'midMargin', 0.2);
 
 if isfield(cfg, 'case9')
     cfg.case9 = local_set_default_field(cfg.case9, 'maxPairsPerSeparation', 21);
@@ -1732,6 +1785,8 @@ for methodIdx = 1:numel(methodKeys)
             methods(methodIdx) = local_method('proposed_v1', 'Proposed V1', models.AProposedV1);
         case 'proposed_v2'
             methods(methodIdx) = local_method('proposed_v2', 'Proposed V2', models.AProposedV2);
+        case 'proposed_v3'
+            methods(methodIdx) = local_method('proposed_v3', 'Proposed V3', models.AProposedV3);
         case 'oracle'
             methods(methodIdx) = local_method('oracle', 'HFSS Oracle', ctx.AH);
         otherwise
@@ -1839,11 +1894,22 @@ pairSelection.selectedOriginalIndex = selectedIdx(:);
 pairSelection = local_case9_subset_pair_selection(pairSelection, selectedIdx);
 end
 
-function taskPairsDeg = local_v2_task_pairs_from_models(models)
+function [taskPairsDeg, v2TaskPairsDeg, v3TaskPairsDeg] = local_task_pairs_from_models(models)
+v2TaskPairsDeg = local_diagnostic_task_pairs(models, 'v2Diagnostics');
+v3TaskPairsDeg = local_diagnostic_task_pairs(models, 'v3Diagnostics');
+taskPairsDeg = [v2TaskPairsDeg; v3TaskPairsDeg];
+if ~isempty(taskPairsDeg)
+    taskPairsDeg = unique(sort(round(taskPairsDeg, 10), 2), 'rows', 'stable');
+end
+end
+
+function taskPairsDeg = local_diagnostic_task_pairs(models, diagnosticField)
 taskPairsDeg = zeros(0, 2);
-if isfield(models, 'v2Diagnostics') && isfield(models.v2Diagnostics, 'taskPairsDeg') && ...
-        ~isempty(models.v2Diagnostics.taskPairsDeg)
-    taskPairsDeg = sort(models.v2Diagnostics.taskPairsDeg, 2);
+if isfield(models, diagnosticField)
+    diagnostic = models.(diagnosticField);
+    if isfield(diagnostic, 'taskPairsDeg') && ~isempty(diagnostic.taskPairsDeg)
+        taskPairsDeg = unique(sort(round(diagnostic.taskPairsDeg, 10), 2), 'rows', 'stable');
+    end
 end
 end
 
@@ -2066,7 +2132,10 @@ end
 
 function [exampleIdx, reason] = local_case9_select_example_pair( ...
     bench, methods, separationDeg, targetResolutionProb, pairSelection)
-primaryIdx = find(strcmp({methods.name}, 'proposed_v2'), 1, 'first');
+primaryIdx = find(strcmp({methods.name}, 'proposed_v3'), 1, 'first');
+if isempty(primaryIdx)
+    primaryIdx = find(strcmp({methods.name}, 'proposed_v2'), 1, 'first');
+end
 if isempty(primaryIdx)
     primaryIdx = find(strcmp({methods.name}, 'proposed'), 1, 'first');
 end
@@ -2078,6 +2147,7 @@ if isempty(primaryIdx)
 end
 interpIdx = find(strcmp({methods.name}, 'interp'), 1, 'first');
 v1Idx = find(strcmp({methods.name}, 'proposed_v1'), 1, 'first');
+v2Idx = find(strcmp({methods.name}, 'proposed_v2'), 1, 'first');
 
 primary = bench.methods(primaryIdx);
 primaryLabel = methods(primaryIdx).label;
@@ -2107,6 +2177,11 @@ if ~isempty(v1Idx) && v1Idx ~= primaryIdx
     baselineStable(:, end+1) = bench.methods(v1Idx).perTargetStableRate(:); %#ok<AGROW>
     baselineResolution(:, end+1) = bench.methods(v1Idx).perTargetResolutionRate(:); %#ok<AGROW>
     baselineLabels{end+1} = methods(v1Idx).label; %#ok<AGROW>
+end
+if ~isempty(v2Idx) && v2Idx ~= primaryIdx
+    baselineStable(:, end+1) = bench.methods(v2Idx).perTargetStableRate(:); %#ok<AGROW>
+    baselineResolution(:, end+1) = bench.methods(v2Idx).perTargetResolutionRate(:); %#ok<AGROW>
+    baselineLabels{end+1} = methods(v2Idx).label; %#ok<AGROW>
 end
 
 if ~isempty(baselineStable)

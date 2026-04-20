@@ -78,6 +78,34 @@ cfg.model.v2.lambdaMid = 0.08;
 cfg.model.v2.lambdaReg = 1e-4;
 cfg.model.v2.softmaxGamma = 8;
 cfg.model.v2.midMargin = 0.2;
+cfg.model.v3 = struct();
+cfg.model.v3.enabled = true;
+cfg.model.v3.label = 'Proposed V3';
+cfg.model.v3.base = 'ard';
+cfg.model.v3.stage = 'ard_anchored_task_refinement';
+cfg.model.v3.segmentCentersDeg = [-50 0 50];
+cfg.model.v3.order = 1;
+cfg.model.v3.lambda = 1e-3;
+cfg.model.v3.pairTaskEnabled = true;
+cfg.model.v3.lambdaCal = 1;
+cfg.model.v3.lambdaSingle = 0.08;
+cfg.model.v3.lambdaPair = 0.12;
+cfg.model.v3.lambdaMid = 0.04;
+cfg.model.v3.lambdaAnchor = 5;
+cfg.model.v3.lambdaSmooth = 1e-3;
+cfg.model.v3.lambdaReg = 1e-4;
+cfg.model.v3.taskDataMode = 'heldout_hfss';
+cfg.model.v3.taskScanStrideDeg = 1;
+cfg.model.v3.taskSingleHeldoutCount = 12;
+cfg.model.v3.taskPairSeparationDeg = [4 5 6 8 10];
+cfg.model.v3.taskPairCount = 16;
+cfg.model.v3.taskSnrDb = 25;
+cfg.model.v3.numSpsaIterations = 12;
+cfg.model.v3.learningRate = 0.020;
+cfg.model.v3.perturbationScale = 0.015;
+cfg.model.v3.maxGradNorm = 5;
+cfg.model.v3.softmaxGamma = 8;
+cfg.model.v3.midMargin = 0.2;
 
 cfg.case1 = struct();
 cfg.case1.exampleAngleDeg = 25; % Manual fallback only; default Case 1 selects a stress angle from the high-SNR sweep.
@@ -180,6 +208,7 @@ switch lower(strtrim(profileName))
         cfg.case8.monteCarlo = 200;
         cfg.case9.monteCarlo = 300;
         cfg.model.v2.numSpsaIterations = 24;
+        cfg.model.v3.numSpsaIterations = 18;
     otherwise
         error('Unknown default_config profile: %s', profileName);
 end

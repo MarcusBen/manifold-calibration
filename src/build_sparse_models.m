@@ -54,6 +54,19 @@ else
         'selectionReason', 'V2 disabled; copied Proposed V1 manifold.');
 end
 
+v3Cfg = local_complete_v3_config(modelCfg, ctx);
+if v3Cfg.enabled
+    [phaseModelV3, phaseDeltaV3Full, phaseFitV3Full, aProposedV3, v3Diagnostics] = ...
+        local_refine_v3_ard_model(ctx, calIdx, aARD, v3Cfg);
+else
+    phaseModelV3 = struct('enabled', false, 'stage', 'disabled');
+    phaseDeltaV3Full = zeros(size(ctx.AH));
+    aProposedV3 = aARD;
+    phaseFitV3Full = unwrap(angle(aProposedV3 .* conj(ctx.AI)), [], 2);
+    v3Diagnostics = struct('enabled', false, ...
+        'selectionReason', 'V3 disabled; copied ARD manifold.');
+end
+
 models = struct();
 models.calIdx = calIdx;
 models.testIdx = testIdx;
@@ -71,13 +84,18 @@ models.AARD = aARD;
 models.phaseFitV1Full = phaseFitFull;
 models.phaseFitV2Full = phaseFitV2Full;
 models.phaseFitV2InitFull = phaseFitV2InitFull;
+models.phaseFitV3Full = phaseFitV3Full;
+models.phaseDeltaV3Full = phaseDeltaV3Full;
 models.phaseModelV1 = phaseModel;
 models.phaseModelV2 = phaseModelV2;
 models.phaseModelV2Init = phaseModelV2Init;
+models.phaseModelV3 = phaseModelV3;
 models.AProposedV1 = aProposed;
 models.AProposedV2 = aProposedV2;
 models.AProposedV2Init = aProposedV2Init;
+models.AProposedV3 = aProposedV3;
 models.v2Diagnostics = v2Diagnostics;
+models.v3Diagnostics = v3Diagnostics;
 end
 
 function model = local_fit_scalar_residual_model(thetaCalDeg, residualCal, modelCfg)
@@ -158,6 +176,53 @@ if ~isfield(v2Cfg, 'segmentWidthU') || isempty(v2Cfg.segmentWidthU)
 end
 end
 
+function v3Cfg = local_complete_v3_config(modelCfg, ctx)
+v3Cfg = struct();
+if isfield(modelCfg, 'v3') && ~isempty(modelCfg.v3)
+    v3Cfg = modelCfg.v3;
+end
+
+v3Cfg = local_set_default_field(v3Cfg, 'enabled', true);
+v3Cfg = local_set_default_field(v3Cfg, 'label', 'Proposed V3');
+v3Cfg = local_set_default_field(v3Cfg, 'base', 'ard');
+v3Cfg = local_set_default_field(v3Cfg, 'stage', 'ard_anchored_task_refinement');
+v3Cfg = local_set_default_field(v3Cfg, 'segmentCentersDeg', [-50 0 50]);
+v3Cfg = local_set_default_field(v3Cfg, 'order', 1);
+v3Cfg = local_set_default_field(v3Cfg, 'lambda', 1e-3);
+v3Cfg = local_set_default_field(v3Cfg, 'regularization', 'order-weighted');
+v3Cfg = local_set_default_field(v3Cfg, 'basisType', modelCfg.basisType);
+v3Cfg = local_set_default_field(v3Cfg, 'pairTaskEnabled', true);
+v3Cfg = local_set_default_field(v3Cfg, 'taskDataMode', 'heldout_hfss');
+v3Cfg = local_set_default_field(v3Cfg, 'taskScanStrideDeg', 1);
+v3Cfg = local_set_default_field(v3Cfg, 'taskSingleHeldoutCount', 12);
+v3Cfg = local_set_default_field(v3Cfg, 'taskPairSeparationDeg', [4 5 6 8 10]);
+v3Cfg = local_set_default_field(v3Cfg, 'taskPairCount', 16);
+v3Cfg = local_set_default_field(v3Cfg, 'taskSnrDb', 25);
+v3Cfg = local_set_default_field(v3Cfg, 'numSpsaIterations', 12);
+v3Cfg = local_set_default_field(v3Cfg, 'learningRate', 0.020);
+v3Cfg = local_set_default_field(v3Cfg, 'perturbationScale', 0.015);
+v3Cfg = local_set_default_field(v3Cfg, 'maxGradNorm', 5);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaCal', 1);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaSingle', 0.08);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaPair', 0.12);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaMid', 0.04);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaAnchor', 5);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaSmooth', 1e-3);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaReg', 1e-4);
+v3Cfg = local_set_default_field(v3Cfg, 'softmaxGamma', 8);
+v3Cfg = local_set_default_field(v3Cfg, 'midMargin', 0.2);
+
+if ~isfield(v3Cfg, 'segmentWidthU') || isempty(v3Cfg.segmentWidthU)
+    centersU = sort(sind(v3Cfg.segmentCentersDeg(:).'));
+    if numel(centersU) > 1
+        v3Cfg.segmentWidthU = max(median(diff(centersU)) * 0.70, 0.15);
+    else
+        uGrid = sind(ctx.thetaDeg);
+        v3Cfg.segmentWidthU = max((max(uGrid) - min(uGrid)) / 3, 0.15);
+    end
+end
+end
+
 function [bestModel, bestPhaseFull, diagnostics] = local_fit_v2_lite_model( ...
     ctx, calIdx, calAngles, phaseCal, v2Cfg)
 candidateMismatchWeights = reshape(v2Cfg.candidateMismatchWeights, 1, []);
@@ -226,7 +291,7 @@ function [fullModel, fullPhaseFull, diagnostics] = local_refine_v2_full_model( .
 tasks = local_build_full_v2_tasks(ctx, calIdx, v2Cfg);
 state = local_build_full_v2_objective_state(ctx, initModel, calIdx, tasks, v2Cfg);
 x0 = initModel.coeff(:);
-initEval = local_full_v2_objective(x0, state);
+initEval = local_evaluate_task_objective(x0, state);
 
 [bestX, bestEval, objectiveHistory] = local_spsa_refine(x0, state, v2Cfg, initEval);
 usedInitializer = false;
@@ -272,6 +337,74 @@ diagnostics.objectiveWeights = local_v2_objective_weights(v2Cfg);
 diagnostics.selectionReason = sprintf(['Full V2 refined Stage-I piecewise coefficients with %d ' ...
     'deterministic SPSA iterations over held-out HFSS single/pair task losses.'], ...
     v2Cfg.numSpsaIterations);
+end
+
+function [v3Model, phaseDeltaFull, phaseFitFull, aProposedV3, diagnostics] = ...
+    local_refine_v3_ard_model(ctx, calIdx, aARD, v3Cfg)
+v3Model = local_build_v3_zero_model(ctx, calIdx, v3Cfg);
+tasks = local_build_full_v2_tasks(ctx, calIdx, v3Cfg);
+state = local_build_v3_objective_state(ctx, v3Model, calIdx, tasks, v3Cfg, aARD);
+x0 = v3Model.coeff(:);
+initEval = local_evaluate_task_objective(x0, state);
+
+[bestX, bestEval, objectiveHistory] = local_spsa_refine(x0, state, v3Cfg, initEval);
+usedARDFallback = false;
+warningText = '';
+if bestEval.total > initEval.total
+    bestX = x0;
+    bestEval = initEval;
+    usedARDFallback = true;
+    warningText = 'Proposed V3 refinement did not reduce objective; ARD initializer was kept.';
+end
+
+v3Model.coeff = reshape(bestX, size(v3Model.coeff));
+v3Model.initialCoeff = zeros(size(v3Model.coeff));
+v3Model.objectiveWeights = local_v3_objective_weights(v3Cfg);
+v3Model.numSpsaIterations = v3Cfg.numSpsaIterations;
+phaseDeltaFull = local_predict_piecewise_residual_model(v3Model, ctx.thetaDeg);
+aProposedV3 = local_normalize_columns(aARD .* exp(1i * phaseDeltaFull));
+phaseFitFull = unwrap(angle(aProposedV3 .* conj(ctx.AI)), [], 2);
+
+diagnostics = struct();
+diagnostics.enabled = true;
+diagnostics.stage = v3Cfg.stage;
+diagnostics.label = v3Cfg.label;
+diagnostics.base = v3Cfg.base;
+diagnostics.taskDataMode = v3Cfg.taskDataMode;
+diagnostics.pairTaskEnabled = v3Cfg.pairTaskEnabled;
+diagnostics.initialObjective = initEval.total;
+diagnostics.finalObjective = bestEval.total;
+diagnostics.initialComponents = initEval.components;
+diagnostics.finalComponents = bestEval.components;
+diagnostics.objectiveHistory = objectiveHistory;
+diagnostics.usedARDFallback = usedARDFallback;
+diagnostics.warning = warningText;
+diagnostics.singleTaskAnglesDeg = ctx.thetaDeg(tasks.singleIdx);
+diagnostics.heldoutSingleAnglesDeg = ctx.thetaDeg(tasks.heldoutSingleIdx);
+diagnostics.taskPairsDeg = tasks.pairAnglesDeg;
+diagnostics.taskPairIdx = tasks.pairIdx;
+diagnostics.taskScanAnglesDeg = ctx.thetaDeg(tasks.scanIdx);
+diagnostics.objectiveWeights = local_v3_objective_weights(v3Cfg);
+diagnostics.selectionReason = sprintf(['Proposed V3 refined a zero phase residual around ARD with %d ' ...
+    'deterministic SPSA iterations and ARD anchor weight %.3g.'], ...
+    v3Cfg.numSpsaIterations, v3Cfg.lambdaAnchor);
+end
+
+function model = local_build_v3_zero_model(ctx, calIdx, v3Cfg)
+numBasis = numel(v3Cfg.segmentCentersDeg) * (v3Cfg.order + 1);
+model = struct();
+model.type = 'v3_ard_anchored_task_refinement';
+model.enabled = true;
+model.stage = v3Cfg.stage;
+model.calIdx = calIdx(:).';
+model.coeff = zeros(ctx.numElements, numBasis);
+model.basisType = v3Cfg.basisType;
+model.order = v3Cfg.order;
+model.lambda = v3Cfg.lambda;
+model.regularization = v3Cfg.regularization;
+model.segmentCentersDeg = v3Cfg.segmentCentersDeg;
+model.segmentCentersU = sind(v3Cfg.segmentCentersDeg);
+model.segmentWidthU = v3Cfg.segmentWidthU;
 end
 
 function tasks = local_build_full_v2_tasks(ctx, calIdx, v2Cfg)
@@ -384,6 +517,7 @@ end
 
 function state = local_build_full_v2_objective_state(ctx, model, calIdx, tasks, v2Cfg)
 state = struct();
+state.objectiveType = 'v2_full';
 state.ctx = ctx;
 state.v2Cfg = v2Cfg;
 state.coeffSize = size(model.coeff);
@@ -398,6 +532,23 @@ end
 state.tasks = tasks;
 state.singleTasks = local_precompute_single_tasks(ctx, tasks.singleIdx, tasks.scanIdx, v2Cfg);
 state.pairTasks = local_precompute_pair_tasks(ctx, tasks.pairIdx, tasks.scanIdx, v2Cfg);
+end
+
+function state = local_build_v3_objective_state(ctx, model, calIdx, tasks, v3Cfg, baseManifold)
+state = struct();
+state.objectiveType = 'v3_ard_anchor';
+state.ctx = ctx;
+state.v2Cfg = v3Cfg;
+state.v3Cfg = v3Cfg;
+state.baseManifold = baseManifold;
+state.coeffSize = size(model.coeff);
+state.psiFull = local_build_piecewise_basis_matrix(sind(ctx.thetaDeg), model);
+state.dMat = local_build_piecewise_regularization_matrix(model);
+state.calIdx = calIdx(:).';
+state.calWeights = ones(1, numel(calIdx));
+state.tasks = tasks;
+state.singleTasks = local_precompute_single_tasks(ctx, tasks.singleIdx, tasks.scanIdx, v3Cfg);
+state.pairTasks = local_precompute_pair_tasks(ctx, tasks.pairIdx, tasks.scanIdx, v3Cfg);
 end
 
 function taskList = local_precompute_single_tasks(ctx, singleIdx, scanIdx, v2Cfg)
@@ -455,8 +606,8 @@ maxGradNorm = local_optional_v2_field(v2Cfg, 'maxGradNorm', 10);
 for iter = 1:numIterations
     c = v2Cfg.perturbationScale / (iter ^ 0.101);
     delta = local_spsa_delta(numel(x0), iter);
-    plusEval = local_full_v2_objective(currentX + c * delta, state);
-    minusEval = local_full_v2_objective(currentX - c * delta, state);
+    plusEval = local_evaluate_task_objective(currentX + c * delta, state);
+    minusEval = local_evaluate_task_objective(currentX - c * delta, state);
     grad = ((plusEval.total - minusEval.total) / (2 * c)) * delta;
     gradNorm = norm(grad);
     if gradNorm > maxGradNorm
@@ -470,11 +621,11 @@ for iter = 1:numIterations
     step = (v2Cfg.learningRate / (iter ^ 0.602)) * mHat ./ (sqrt(vHat) + 1e-8);
 
     candidateX = currentX - step;
-    candidateEval = local_full_v2_objective(candidateX, state);
+    candidateEval = local_evaluate_task_objective(candidateX, state);
     accepted = candidateEval.total <= currentEval.total;
     if ~accepted
         candidateX = currentX - 0.5 * step;
-        candidateEval = local_full_v2_objective(candidateX, state);
+        candidateEval = local_evaluate_task_objective(candidateX, state);
         accepted = candidateEval.total <= currentEval.total;
     end
 
@@ -493,10 +644,47 @@ for iter = 1:numIterations
 end
 end
 
+function result = local_evaluate_task_objective(x, state)
+if isfield(state, 'objectiveType') && strcmpi(state.objectiveType, 'v3_ard_anchor')
+    result = local_full_v3_objective(x, state);
+else
+    result = local_full_v2_objective(x, state);
+end
+end
+
 function delta = local_spsa_delta(numParams, iteration)
 pattern = mod((1:numParams).' * (2 * iteration + 1) + iteration, 4);
 delta = ones(numParams, 1);
 delta(pattern < 2) = -1;
+end
+
+function result = local_full_v3_objective(x, state)
+coeff = reshape(x, state.coeffSize);
+phaseDeltaFull = coeff * state.psiFull;
+manifold = local_normalize_columns(state.baseManifold .* exp(1i * phaseDeltaFull));
+
+components = struct();
+components.cal = local_complex_calibration_loss(state.ctx, manifold, state.calIdx, state.calWeights);
+components.smooth = mean(abs(coeff * state.dMat') .^ 2, 'all');
+components.reg = mean(abs(coeff(:)) .^ 2);
+components.anchor = mean(sum(abs(manifold - state.baseManifold) .^ 2, 1));
+[components.single, components.singleSub, components.singlePeak] = ...
+    local_single_task_loss(manifold, state);
+[components.pair, components.pairSub, components.pairPeak, components.mid] = ...
+    local_pair_task_loss(manifold, state);
+
+weights = local_v3_objective_weights(state.v3Cfg);
+total = weights.lambdaCal * components.cal + ...
+    weights.lambdaSmooth * components.smooth + ...
+    weights.lambdaSingle * components.single + ...
+    weights.lambdaPair * components.pair + ...
+    weights.lambdaMid * components.mid + ...
+    weights.lambdaAnchor * components.anchor + ...
+    weights.lambdaReg * components.reg;
+
+result = struct();
+result.total = real(total);
+result.components = components;
 end
 
 function result = local_full_v2_objective(x, state)
@@ -605,6 +793,17 @@ weights.lambdaSingle = v2Cfg.lambdaSingle;
 weights.lambdaPair = v2Cfg.lambdaPair;
 weights.lambdaMid = v2Cfg.lambdaMid;
 weights.lambdaReg = v2Cfg.lambdaReg;
+end
+
+function weights = local_v3_objective_weights(v3Cfg)
+weights = struct();
+weights.lambdaCal = v3Cfg.lambdaCal;
+weights.lambdaSmooth = v3Cfg.lambdaSmooth;
+weights.lambdaSingle = v3Cfg.lambdaSingle;
+weights.lambdaPair = v3Cfg.lambdaPair;
+weights.lambdaMid = v3Cfg.lambdaMid;
+weights.lambdaAnchor = v3Cfg.lambdaAnchor;
+weights.lambdaReg = v3Cfg.lambdaReg;
 end
 
 function value = local_optional_v2_field(inputStruct, fieldName, defaultValue)
