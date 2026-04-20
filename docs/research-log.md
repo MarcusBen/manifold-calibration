@@ -18,15 +18,16 @@
 
 > Branch artifact policy: `codex/proposed_v3` 使用 version-first traceable results layout：`results/<version-hash>/<case-name>/`。2026-04-20 当前同步范围包括 `87d7f16` V3 screening、`71650f7` ARD Method 2 full run、`local-8e021ea7` Full V2 C-route full run、`2962bc3` V2-lite run，以及仅含失败启动日志的 `local-aa29a0fd`。
 
-### 2026-04-20：`local-fc4e69f9` Proposed V3.2 distribution-matched stable-pair screening run
+### 2026-04-20：`179f579` Proposed V3.2 distribution-matched stable-pair screening run
 
-- Version hash: `local-fc4e69f9`
+- Version hash: `179f579`
+- Former pending local hash: `local-fc4e69f9`
 - Base HEAD: `6bb1a19`
 - Branch: `codex/proposed_v3`
 - Worktree state at run time: uncommitted code changes; historical `results/` deletions were local cleanup state and were not part of this code-change batch.
 - Change basis: `algorithms/proposed_algorithm_v3_2.md` plus the latest `docs/comments.md` review for `a5a22d2`.
 - Run command: `run_project([3 7 9 10], default_config(pwd, 'paper'))`
-- Result path: `results/local-fc4e69f9/`
+- Result path: `results/179f579/`
 - Case outputs: `case03_unseen_generalization/`, `case07_single_source_snr/`, `case09_two_source_resolution/`, `case10_random_split_robustness/`
 - Run scope: screening only; this is not a full paper-profile result.
 
@@ -57,15 +58,15 @@
 
 #### 关键图片
 
-以下图片来自 `results/local-fc4e69f9/` screening run，并已复制到 `docs/assets/`。
+以下图片来自 `results/179f579/` screening run，并已复制到 `docs/assets/`。
 
-![case03 v32 edge hard](assets/case03-v32-edge-hard-local-fc4e69f9.png)
+![case03 v32 edge hard](assets/case03-v32-edge-hard-179f579.png)
 
-![case07 v32 edge hard snr](assets/case07-v32-edge-hard-snr-local-fc4e69f9.png)
+![case07 v32 edge hard snr](assets/case07-v32-edge-hard-snr-179f579.png)
 
-![case09 v32 two source](assets/case09-v32-two-source-local-fc4e69f9.png)
+![case09 v32 two source](assets/case09-v32-two-source-179f579.png)
 
-![case10 v32 random split](assets/case10-v32-random-split-local-fc4e69f9.png)
+![case10 v32 random split](assets/case10-v32-random-split-179f579.png)
 
 #### 决策与下一步
 

@@ -9,7 +9,7 @@
 
 ## 最新摘要
 
-截至 2026-04-20，当前工作分支是 `codex/proposed_v3`，最新当前批次是 `results/local-fc4e69f9/`。这一批实现并筛选 **Proposed V3.2 = V3-Revised safety guards + distribution-matched stable-pair objective**，只运行 Case 3 / 7 / 9 / 10，用于判断是否值得进入完整 `paper` profile。
+截至 2026-04-20，当前工作分支是 `codex/proposed_v3`，最新当前批次是 `results/179f579/`。这一批实现并筛选 **Proposed V3.2 = V3-Revised safety guards + distribution-matched stable-pair objective**，只运行 Case 3 / 7 / 9 / 10，用于判断是否值得进入完整 `paper` profile。
 
 - V3.2 保留 V3-Revised 的 calibration-null gate、trust-radius residual、strong ARD anchor、held-out guard 和 fallback。
 - 新增 distribution-matched task-pair selection、separation-balanced/center-covered pair sampling、stable-neighborhood pair loss，以及 Case 9 task/eval stratum 和 per-separation delta 诊断。
@@ -20,14 +20,14 @@
 
 ## Version Trace
 
-- Pending local hash before sync: `local-fc4e69f9`
-- Git code commit hash: pending until upload commit is created
-- Current version result folder: `results/local-fc4e69f9/`
+- Former pending local hash: `local-fc4e69f9`
+- Git code commit hash: `179f579`
+- Current version result folder: `results/179f579/`
 - Base HEAD for current V3.2 screening: `6bb1a19`
 - Working branch: `codex/proposed_v3`
 - Latest reviewed comments hash: `a5a22d2`
-- Review status: comments do not match the current V3.2 pending hash; treat comments as background only for this version.
-- Hash finalization metadata: this sync should replace `local-fc4e69f9` with the Git code commit hash in current logs/results metadata after the first upload commit.
+- Review status: comments do not match the current V3.2 code commit; treat comments as background only for this version.
+- Hash finalization metadata: this branch also contains the follow-up metadata commit that replaces the pending trace token with `179f579`.
 - Published branch: `origin/codex/proposed_v3`
 - Published branch tip: see remote branch after push
 - Historical result archive policy: older remote `results/` folders are retained as published history; local cleanup deletions are not part of ordinary sync unless explicitly requested.
@@ -42,13 +42,13 @@
 
 ## Reminder: comments and current code are not hash-aligned
 
-- `docs/comments.md` 最新评阅针对 `a5a22d2` V3-Revised；当前 V3.2 批次是 `local-fc4e69f9`，因此不能把旧 comments 直接当作当前版本评价。
-- 当前 README 只把 comments 用作背景和 change basis；当前版本的直接证据来自 `docs/research-log.md` 和 `results/local-fc4e69f9/`。
+- `docs/comments.md` 最新评阅针对 `a5a22d2` V3-Revised；当前 V3.2 批次是 `179f579`，因此不能把旧 comments 直接当作当前版本评价。
+- 当前 README 只把 comments 用作背景和 change basis；当前版本的直接证据来自 `docs/research-log.md` 和 `results/179f579/`。
 - 如果后续要评阅 V3.2，应以本次上传产生的 Git code commit hash 为 review target。
 
 ## 仍需保留的边界
 
-- `local-fc4e69f9` 是 screening run，不是完整 paper-profile full run。
+- `179f579` 是 screening run，不是完整 paper-profile full run。
 - 当前 V3.2 证明的是“stable-pair surrogate 可以推动 Case 9 mean resolution”，但还没有证明 stable-rate 优势，也没有守住 Case 7。
 - 论文表述不能写成 V3.2 已优于 ARD / V1；目前只能写成 Case 9 resolution 有局部进展，但 stable 判据和单源高 SNR 仍有代价。
 - 下一步应改善 stable surrogate 与 `benchmark_music` 的一致性，而不是只增加 `lambdaPair` 或 SPSA iterations。

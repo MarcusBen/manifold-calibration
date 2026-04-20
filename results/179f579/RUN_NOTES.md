@@ -1,9 +1,10 @@
 # Run Notes
 
 - Timestamp: `2026-04-20 16:51:00`
-- Pending local hash: `local-fc4e69f9`
+- Git code commit hash: `179f579`
+- Former pending local hash: `local-fc4e69f9`
 - Base HEAD: `6bb1a19`
-- Run id: `local-fc4e69f9`
+- Run id: `179f579`
 - Command: `run_project([3 7 9 10], cfg)`
 - Notes: `Screening run for Proposed V3.2 distribution-matched stable-pair residual with separation-balanced non-edge task selection; not a full paper-profile result.`
 

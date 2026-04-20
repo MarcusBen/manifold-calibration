@@ -1,6 +1,7 @@
 # Results manifest
 
-- Version hash: `local-fc4e69f9`
+- Version hash: `179f579`
+- Former pending local hash: `local-fc4e69f9`
 - Base HEAD: `6bb1a19`
 - Worktree state: uncommitted code changes recorded in `RUN_NOTES.md`
 - Command: `run_project([3 7 9 10], cfg)`
