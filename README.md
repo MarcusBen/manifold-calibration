@@ -9,12 +9,12 @@
 
 ## 最新摘要
 
-截至 2026-05-07，当前工作分支是 `codex/proposed_v3`，最新当前批次是 `local-8e3fd21c`。这一批是文档同步：新增 `algorithms/proposed_algorithm_v3_3.md`，把当前 Proposed V3.3 的 ARD-anchored safe residual backbone、5 dB Case-9-aligned pair surrogate、peak score、global competitor background、guard/fallback 逻辑和已知限制整理成算法说明。
+截至 2026-05-07，当前工作分支是 `codex/proposed_v3`，最新当前批次是 `fadea59`。这一批是文档同步：新增 `algorithms/proposed_algorithm_v3_3.md`，把当前 Proposed V3.3 的 ARD-anchored safe residual backbone、5 dB Case-9-aligned pair surrogate、peak score、global competitor background、guard/fallback 逻辑和已知限制整理成算法说明。
 
 - 当前代码默认仍是 Proposed V3.3，保留 ARD anchor、held-out guard 和 global-stable pair surrogate；GP-ANM 已作为离线诊断评估，不属于当前主线。
 - 2026-05-06 先做了 `local-2f83ff50` GP-ANM offline diagnostic smoke。由于本地没有 CVX/SDP solver，真正 GP-ANM SDP 被跳过；固定 diagonal proxy 基本不能解释 HFSS-vs-ideal manifold gap，也没有解决两源 pair。
 - 最新实验证据仍是 `602158e` Case 9 common-snapshot rerun。它只运行 Case 9，`monteCarlo = 80`，不是完整 paper-profile full run。
-- 最新 `local-8e3fd21c` 只新增算法文档，不改变代码行为、不新增 case 输出，也不改变 `602158e` 的实验判断。
+- 最新 `fadea59` 只新增算法文档，不改变代码行为、不新增 case 输出，也不改变 `602158e` 的实验判断。
 - Common-snapshot rerun 结论仍是 restrained：V3.3 在 `>=6 deg` resolution / pair RMSE 上有竞争力，但 stable-rate 仍明显低于 Proposed V1；代表谱图不能再被解读成 V3.3 单次视觉优势。
 - `docs/comments.md` 的最新评阅仍绑定 Git code commit `a5a22d2`，只适用于旧的 V3-Revised screening；当前 V3.3 common-snapshot 和 V3.3 algorithm documentation 批次尚无匹配 comments review。
 - 算法说明文件已从根目录收纳到 `algorithms/`，这是有意的文档整理，不是误删。
