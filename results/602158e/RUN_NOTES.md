@@ -1,9 +1,10 @@
 # Run Notes
 
 - Timestamp: `2026-05-06 12:36:58`
-- Pending local hash: `local-b2472f86`
+- Git code commit hash: `602158e`
+- Former pending local hash: `local-b2472f86`
 - Base HEAD: `not-a-git-repo`
-- Run id: `local-b2472f86`
+- Run id: `602158e`
 - Command: `matlab -batch run_project(9,cfg) with common truth snapshots, default Case 9 MC=80`
 - Notes: `Meaningful Case 9 rerun after fixing MUSIC benchmark to use common HFSS truth snapshots across methods; default Case 9 pair sweep and MC=80; GP-ANM fallback disabled.`
 

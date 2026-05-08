@@ -18,14 +18,15 @@
 
 > Branch artifact policy: `codex/proposed_v3` 使用 version-first traceable results layout：`results/<version-hash>/<case-name>/`。2026-04-20 当前同步范围包括 `87d7f16` V3 screening、`71650f7` ARD Method 2 full run、`local-8e021ea7` Full V2 C-route full run、`2962bc3` V2-lite run，以及仅含失败启动日志的 `local-aa29a0fd`。
 
-### 2026-05-06：`local-b2472f86` Case 9 common-snapshot rerun for meaningful spectrum comparison
+### 2026-05-06：`602158e` Case 9 common-snapshot rerun for meaningful spectrum comparison
 
-- Version hash: `local-b2472f86`
+- Version hash: `602158e`
+- Former pending local hash: `local-b2472f86`
 - Base HEAD: `not-a-git-repo`
 - Worktree state: uncommitted code changes; this local directory did not expose a `.git` repository, so `git status --short` returned `fatal: not a git repository`.
 - Change basis: the prior Case 9 representative spectrum could be misleading because `benchmark_music` generated independent random snapshots inside each method loop. That allowed one method to look better partly because it received a more favorable noise realization.
 - Run command: `run_project(9, cfg)` with traceable output enabled, default Case 9 pair sweep, default SNR/snapshots, `monteCarlo = 80`, V3.3, and GP-ANM fallback disabled.
-- Result path: `results/local-b2472f86/`
+- Result path: `results/602158e/`
 - Case outputs: `case09_two_source_resolution/`
 - Run scope: Case 9 only; this is a screening rerun with corrected snapshot policy, not a full paper-profile result.
 
@@ -50,7 +51,7 @@
 
 #### Key image
 
-![case09 common snapshots v33](assets/case09-common-snapshots-v33-local-b2472f86.png)
+![case09 common snapshots v33](assets/case09-common-snapshots-v33-602158e.png)
 
 #### Judgment and risk
 

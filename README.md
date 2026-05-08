@@ -9,26 +9,26 @@
 
 ## 最新摘要
 
-截至 2026-05-06，当前工作分支是 `codex/proposed_v3`，最新当前批次是 `results/local-b2472f86/`。这一批在 Proposed V3.3 代码线上修正 Case 9 MUSIC benchmark 的快照策略：每个 `(target, Monte Carlo)` trial 预生成同一组 HFSS-truth snapshots，并在所有方法之间复用，使代表谱图不再受方法各自随机噪声抽样影响。
+截至 2026-05-06，当前工作分支是 `codex/proposed_v3`，最新当前批次是 `results/602158e/`。这一批在 Proposed V3.3 代码线上修正 Case 9 MUSIC benchmark 的快照策略：每个 `(target, Monte Carlo)` trial 预生成同一组 HFSS-truth snapshots，并在所有方法之间复用，使代表谱图不再受方法各自随机噪声抽样影响。
 
 - 当前代码默认仍是 Proposed V3.3，保留 ARD anchor、held-out guard、global-stable pair surrogate 和 GP-ANM fallback 的关闭默认值。
 - 2026-05-06 先做了 `local-2f83ff50` GP-ANM fallback smoke。由于本地没有 CVX/SDP solver，真正 GP-ANM SDP 被跳过；固定 diagonal proxy 基本不能解释 HFSS-vs-ideal manifold gap，也没有解决两源 pair。
-- 最新 `local-b2472f86` Case 9 common-snapshot rerun 是当前主要证据。它只运行 Case 9，`monteCarlo = 80`，不是完整 paper-profile full run。
+- 最新 `602158e` Case 9 common-snapshot rerun 是当前主要证据。它只运行 Case 9，`monteCarlo = 80`，不是完整 paper-profile full run。
 - Common-snapshot rerun 结论仍是 restrained：V3.3 在 `>=6 deg` resolution / pair RMSE 上有竞争力，但 stable-rate 仍明显低于 Proposed V1；代表谱图不能再被解读成 V3.3 单次视觉优势。
 - `docs/comments.md` 的最新评阅仍绑定 Git code commit `a5a22d2`，只适用于旧的 V3-Revised screening；当前 V3.3 common-snapshot 批次尚无匹配 comments review。
 - 算法说明文件已从根目录收纳到 `algorithms/`，这是有意的文档整理，不是误删。
 
 ## Version Trace
 
-- Pending local hash before sync: `local-b2472f86`
-- Git code commit hash: pending until upload commit is created
-- Current version result folder: `results/local-b2472f86/`
+- Former pending local hash: `local-b2472f86`
+- Git code commit hash: `602158e`
+- Current version result folder: `results/602158e/`
 - Earlier same-day local smoke record: `results/local-2f83ff50/`
 - Base HEAD for current local batch: `not-a-git-repo`
 - Working branch: `codex/proposed_v3`
 - Latest reviewed comments hash: `a5a22d2`
-- Review status: comments do not match the current pending local hash; treat comments as background only for this version.
-- Hash finalization metadata: this sync should replace `local-b2472f86` with the Git code commit hash in current logs/results metadata after the first upload commit. The earlier `local-2f83ff50` smoke record is left as a local-hash trace entry.
+- Review status: comments do not match the current Git code commit; treat comments as background only for this version.
+- Hash finalization metadata: this branch includes the follow-up metadata commit that replaces `local-b2472f86` with `602158e` for the current Case 9 rerun. The earlier `local-2f83ff50` smoke record is left as a local-hash trace entry.
 - Published branch: `origin/codex/proposed_v3`
 - Published branch tip: see remote branch after push
 - Historical result archive policy: older remote `results/` folders are retained as published history; local cleanup deletions are not part of ordinary sync unless explicitly requested.
@@ -45,14 +45,14 @@
 
 ## Reminder: comments and current code are not hash-aligned
 
-- `docs/comments.md` 最新评阅针对 `a5a22d2` V3-Revised；当前 pending local 批次是 `local-b2472f86`，因此不能把旧 comments 直接当作当前版本评价。
-- 当前 README 只把 comments 用作背景；当前版本的直接证据来自 `docs/research-log.md` 和 `results/local-b2472f86/`。
-- `docs/comments.md` 没有包含 `local-b2472f86`，本次 hash finalization 不会改写 comments。
+- `docs/comments.md` 最新评阅针对 `a5a22d2` V3-Revised；当前 Git code commit 批次是 `602158e`，因此不能把旧 comments 直接当作当前版本评价。
+- 当前 README 只把 comments 用作背景；当前版本的直接证据来自 `docs/research-log.md` 和 `results/602158e/`。
+- `docs/comments.md` 没有包含 `local-b2472f86`，本次 hash finalization 未改写 comments。
 - 如果后续要评阅当前 V3.3 common-snapshot 版本，应以本次上传产生的 Git code commit hash 为 review target。
 
 ## 仍需保留的边界
 
-- `local-b2472f86` 是 Case 9 screening rerun，不是完整 paper-profile full run。
+- `602158e` 是 Case 9 screening rerun，不是完整 paper-profile full run。
 - Current evidence supports the snapshot-policy fix and a more meaningful visual comparison; it does not prove a final V3.3 win over Proposed V1.
 - GP-ANM remains an isolated expensive-baseline direction until CVX/SDPT3/SeDuMi/MOSEK or an equivalent SDP stack is installed.
 - 下一步应优先改善 stable surrogate 与 `benchmark_music` stable classification 的一致性，而不是只根据单张代表谱图做结论。
