@@ -280,15 +280,15 @@
 - `proposed_algorithm_v3_2.md`: describes the distribution-matched stable-neighborhood pair objective as a full standalone method.
 - `proposed_algorithm_v3_3.md`: describes the current Case-9-aligned global stable-pair method with 5 dB task projector, peak score, and global competitor background.
 
-### 2026-05-07：`local-8e3fd21c` Proposed V3.3 algorithm documentation
+### 2026-05-07：`fadea59` Proposed V3.3 algorithm documentation
 
-- Version hash: `local-8e3fd21c`
+- Version hash: `fadea59`
 - Base HEAD: `not-a-git-repo`
 - Worktree state: uncommitted documentation changes; this local directory did not expose a `.git` repository, so `git status --short` returned `fatal: not a git repository`.
 - Change: added `algorithms/proposed_algorithm_v3_3.md` to document the current Proposed V3.3 implementation.
 - Affected cases: no experiment behavior changed; the document describes the current Case 9-aligned V3.3 algorithm.
 - Validation: inspected the document and confirmed it records the implemented V3.3 stage, backbone, task SNR, weights, peak score, global competitor background, objective terms, evaluation interpretation, and known limitations.
-- Result path: `results/local-8e3fd21c/`
+- Result path: `results/fadea59/`
 - Case outputs: none.
 - Remaining risk: documentation-only batch; no Case 9 rerun was performed and no new empirical claim is introduced.
 
