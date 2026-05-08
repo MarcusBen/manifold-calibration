@@ -18,6 +18,287 @@
 
 > Branch artifact policy: `codex/proposed_v3` 使用 version-first traceable results layout：`results/<version-hash>/<case-name>/`。2026-04-20 当前同步范围包括 `87d7f16` V3 screening、`71650f7` ARD Method 2 full run、`local-8e021ea7` Full V2 C-route full run、`2962bc3` V2-lite run，以及仅含失败启动日志的 `local-aa29a0fd`。
 
+### 2026-05-08：`local-345786ed` Batched pairwise-grid backend and middle-pair Case9 run
+
+- Version hash: `local-345786ed`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: uncommitted code changes; this local directory did not expose a `.git` repository.
+- Change: accelerated `pairwise_grid_ml` without changing its covariance-fit objective. Candidate-pair scoring is now batched over all angle pairs, and Case9 precomputes reusable candidate pair indices once per run.
+- Change: set default Case9 diagnostic pairs to middle, non-extreme, non-near-coincident angles: `[-12.2 -4.2; 6.8 16.8; 23.8 31.8]`, with `monteCarlo = 20`.
+- Affected cases: Case9 pairwise-grid backend runtime and default diagnostic pair selection.
+- Validation: `matlab -batch "addpath(genpath(pwd)); run_sanity_tests"`; `checkcode default_config.m run_project.m src/doa_backend_pairwise_grid_ml.m src/benchmark_music.m tests/run_sanity_tests.m`; traceable `run_project(9,cfg)`.
+- Result path: `results/local-345786ed/`
+- Case outputs: `case09_two_source_resolution/`
+
+#### Case9 diagnostic observations
+
+- Source pairs: `[-12.2 -4.2; 23.8 31.8; 6.8 16.8]`
+- Monte Carlo: `20`
+- Backend: `pairwise_grid_ml`
+- Candidate pair count: `1991`
+- Method order: `Ideal / Interpolation / ARD / Proposed V1 / Proposed V2 / Proposed V3.3 / HFSS Oracle`
+- Overall mean resolution: `0.883300 / 1.000000 / 1.000000 / 1.000000 / 1.000000 / 1.000000 / 1.000000`
+- Overall mean stable rate: `0.016700 / 0.533300 / 0.433300 / 0.533300 / 0.466700 / 0.450000 / 0.416700`
+- Overall mean pair RMSE: `2.162100 / 0.478200 / 0.592700 / 0.468500 / 0.547000 / 0.544800 / 0.580200`
+- Overall mean separation-collapse rate: `0.000000 / 0.000000 / 0.000000 / 0.000000 / 0.000000 / 0.000000 / 0.000000`
+
+#### Interpretation
+
+- The speedup is not a shortcut: the sanity test checks that batched pair scores match the original `covariance_score` objective on the reported top candidates.
+- Runtime is now practical for a small middle-pair Case9 diagnostic. This is still not a full separation sweep benchmark.
+- Current bottleneck is reduced but not eliminated; the remaining full active-set solve still loops over candidate pairs for the 3-variable active mask.
+
+#### Key image
+
+![case09 optimized middle pairs](assets/case09-optimized-middle-pairs-local-345786ed.png)
+
+### 2026-05-08：`local-611f9a7b` Reduced Case9 pairwise-grid smoke
+
+- Version hash: `local-611f9a7b`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: uncommitted code changes; this local directory did not expose a `.git` repository.
+- Change: reduced the default Case9 scale to `monteCarlo = 2` and `maxPairsPerSeparation = 2` so the pairwise-grid backend can be smoke-tested quickly.
+- Affected cases: Case9 default run scale only. The backend remains `pairwise_grid_ml`.
+- Validation: `checkcode default_config.m run_project.m src/benchmark_music.m`; traceable `run_project(9,cfg)` with the reduced default Case9 settings.
+- Result path: `results/local-611f9a7b/`
+- Case outputs: `case09_two_source_resolution/`
+
+#### Case9 smoke observations
+
+- Evaluated source pairs after task-pair exclusion: `11`
+- Backend: `pairwise_grid_ml`
+- Method order: `Ideal / Interpolation / ARD / Proposed V1 / Proposed V2 / Proposed V3.3 / HFSS Oracle`
+- Overall mean resolution: `0.545500 / 0.909100 / 0.863600 / 0.954500 / 0.863600 / 0.909100 / 0.863600`
+- Overall mean stable rate: `0.181800 / 0.045500 / 0.272700 / 0.045500 / 0.000000 / 0.272700 / 0.272700`
+- Overall mean pair RMSE: `4.210000 / 2.349500 / 1.099200 / 2.288800 / 3.033300 / 0.779500 / 1.035300`
+- Overall mean separation-collapse rate: `0.272700 / 0.000000 / 0.000000 / 0.000000 / 0.000000 / 0.000000 / 0.000000`
+
+#### Interpretation
+
+- The reduced Case9 path runs successfully and writes the expected traceable outputs.
+- Because `monteCarlo = 2`, the plotted curves and rates are intentionally noisy and should be treated only as a smoke test.
+- The run is useful for confirming the new backend wiring and runtime reduction, not for comparing final method quality.
+
+#### Key image
+
+![case09 reduced pairwise-grid smoke](assets/case09-reduced-pairwise-smoke-local-611f9a7b.png)
+
+### 2026-05-08：`local-90eabbfe` Case9 default backend switched to pairwise grid ML
+
+- Version hash: `local-90eabbfe`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: uncommitted code changes; this local directory did not expose a `.git` repository.
+- Change: set `cfg.case9.backendName = 'pairwise_grid_ml'` in `default_config.m`, so the default Case9 run now uses the strongest currently implemented backend instead of plain MUSIC peak picking.
+- Affected cases: Case9 default run behavior. Other cases are unchanged.
+- Validation: static `checkcode default_config.m run_project.m src/benchmark_music.m`; only existing style warnings were reported in `run_project.m`.
+- Result path: none for this entry.
+- Case outputs: not run by request; user will test Case9 manually.
+- Remaining risk: the default backend uses a coarse configurable candidate grid (`backendCandidateAngleStrideDeg = 1` by default). This is appropriate for quick testing but may need refinement before final benchmark claims.
+
+### 2026-05-08：`local-33952ce8` Case9 backend dispatch rewrite and pairwise-grid smoke
+
+- Version hash: `local-33952ce8`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: uncommitted code changes; this local directory did not expose a `.git` repository.
+- Change: rewired `benchmark_music` so double-source Case9 can use a configurable backend while keeping default behavior as MUSIC. Supported non-default backends are `music_pair_rescore` and `pairwise_grid_ml`.
+- Change: added Case9 backend config fields and recorded `backendName/backendCfg` into `case09_results.mat`. The representative spectrum panel remains the MUSIC pseudo-spectrum for interpretability, while the estimator backend is explicitly shown in the figure subtitle.
+- Algorithm impact: default Case9 is unchanged unless `cfg.case9.backendName` is explicitly overridden.
+- Validation: `checkcode default_config.m run_project.m src/benchmark_music.m tests/run_sanity_tests.m`; `matlab -batch "addpath(genpath(pwd)); run_sanity_tests"`; traceable Case9 smoke with `cfg.case9.backendName = 'pairwise_grid_ml'`, source pairs `[23.8 31.8; 35.8 45.8]`, `monteCarlo = 2`, and candidate stride `1 deg`.
+- Result path: `results/local-33952ce8/`
+- Case outputs: `case09_two_source_resolution/`
+
+#### Case9 pairwise-backend smoke observations
+
+- Backend: `pairwise_grid_ml`
+- Candidate count: `57`
+- Method order: `Ideal / Interpolation / ARD / Proposed V1 / Proposed V2 / Proposed V3.3 / HFSS Oracle`
+- Mean resolution: `1.000000 / 1.000000 / 1.000000 / 1.000000 / 1.000000 / 1.000000 / 1.000000`
+- Mean stable rate: `0.000000 / 0.250000 / 0.250000 / 0.250000 / 0.250000 / 0.250000 / 0.250000`
+- Mean pair RMSE: `3.546600 / 0.603600 / 0.926800 / 1.176800 / 0.853600 / 0.926800 / 0.926800`
+- Mean separation-collapse rate: `0.000000 / 0.000000 / 0.000000 / 0.000000 / 0.000000 / 0.000000 / 0.000000`
+
+#### Interpretation
+
+- This confirms that the Case9 backend can now be swapped without changing the manifold-method construction path.
+- The pairwise-grid backend removes unresolved/collapse failures in this two-pair smoke, but the coarse `1 deg` candidate grid limits stable-rate and RMSE. This run is therefore a backend plumbing and diagnostic smoke, not a final performance claim.
+- A defensible next backend step is local continuous refinement or a finer two-stage grid around the best covariance-fit pairs, rather than relying on a coarse exhaustive grid.
+
+#### Key image
+
+![case09 pairwise backend smoke](assets/case09-pairwise-backend-smoke-local-33952ce8.png)
+
+### 2026-05-08：`local-ab0828c3` Case11 backend diagnostic plot-label fix
+
+- Version hash: `local-ab0828c3`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: uncommitted code changes; this local directory did not expose a `.git` repository.
+- Change: fixed Case11 backend diagnostic plotting labels. Backend names now render as plain display names instead of TeX-interpreted identifiers, and the long truth-snapshot subtitle was removed from compact summary plots to avoid title overlap.
+- Algorithm impact: none. No DOA backend objective, manifold estimator, snapshot policy, or Case9 metric definition was changed.
+- Affected cases: Case11 backend diagnostic output only; main Case9 benchmark path remains unchanged.
+- Validation: `checkcode run_project.m`; `matlab -batch "addpath(genpath(pwd)); run_sanity_tests"`; traceable `run_project(11,cfg)` smoke with `[23.8 31.8; 35.8 45.8]` and `monteCarlo = 20`.
+- Result path: `results/local-ab0828c3/`
+- Case outputs: `case11_backend_diagnostic/`
+
+#### Case11 smoke observations
+
+- Backend order: `MUSIC / MUSIC pair rescore / Pairwise grid ML`.
+- Method order: `ARD / Proposed V1 / Proposed V3.3 / HFSS Oracle`.
+- Mean resolution:
+  - MUSIC: `0.675000 / 0.500000 / 0.675000 / 0.675000`
+  - MUSIC pair-rescore: `0.675000 / 0.500000 / 0.675000 / 0.675000`
+  - Pairwise grid ML: `1.000000 / 1.000000 / 1.000000 / 1.000000`
+- Mean stable rate:
+  - MUSIC: `0.125000 / 0.025000 / 0.100000 / 0.100000`
+  - MUSIC pair-rescore: `0.225000 / 0.025000 / 0.250000 / 0.200000`
+  - Pairwise grid ML: `0.375000 / 0.300000 / 0.325000 / 0.375000`
+- Mean pair RMSE:
+  - MUSIC: `11.411900 / 17.339400 / 11.385500 / 11.403300`
+  - MUSIC pair-rescore: `11.301400 / 17.272400 / 11.247200 / 11.284200`
+  - Pairwise grid ML: `0.761300 / 0.888600 / 0.796700 / 0.736300`
+- Oracle gain over MUSIC in mean resolution: `0.000000 / 0.000000 / 0.325000`.
+- V3-to-Oracle resolution gap: `0.000000 / 0.000000 / 0.000000`.
+
+#### Interpretation
+
+- The previously reported `backend_oracle_ceiling.png` issue was a plotting/labeling problem, not a data-path bug.
+- The orange `V3 gap to oracle` bar is absent because its value is exactly zero in this smoke; the blue `Pairwise grid ML` bar remains the meaningful oracle-ceiling signal.
+- These numbers match the earlier Case11 smoke, so this rerun should not be interpreted as a new performance result.
+
+#### Key image
+
+![case11 backend oracle ceiling fixed](assets/case11-backend-oracle-ceiling-fixed-local-ab0828c3.png)
+
+### 2026-05-08：`local-9b970264` Case11 enhanced backend diagnostic smoke
+
+- Version hash: `local-9b970264`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: uncommitted code changes; this local directory did not expose a `.git` repository, so `git status --short` returned `fatal: not a git repository`.
+- Change: added a separate Case11 enhanced-backend diagnostic with common HFSS-truth snapshots across backends and methods. The diagnostic compares MUSIC, MUSIC pair-rescoring, and pairwise grid ML without replacing the main MUSIC Case9 benchmark.
+- Affected cases: Case11 only; Case9 main benchmark remains unchanged.
+- Validation: `checkcode default_config.m run_project.m src/*.m tests/*.m`; `matlab -batch "addpath(genpath(pwd)); run_sanity_tests"`; direct backend benchmark smoke; traceable Case11 smoke with `[23.8 31.8; 35.8 45.8]` and `monteCarlo = 20`.
+- Result path: `results/local-9b970264/`
+- Case outputs: `case11_backend_diagnostic/`
+- Remaining risk: diagnostic smoke only; do not treat enhanced-backend numbers as main Proposed V3.3 performance claims.
+
+#### Code and behavior changes
+
+- Added backend utilities and callable backends: `doa_backend_music_baseline`, `doa_backend_music_pair_rescore`, and `doa_backend_pairwise_grid_ml`.
+- Added `benchmark_doa_backends`, which keeps one common HFSS-truth snapshot matrix per `(target, MC)` trial and reuses it across all backends and methods.
+- Added `cfg.case11` defaults and `run_project(11, cfg)` orchestration with traceable output, separate summary figures, and Case11-specific run notes.
+- Added sanity tests for covariance fitting, backend classification guards, peak backfill, high-SNR backend recovery, common snapshots, singleton backend/method summary shapes, and malformed backend-output penalties.
+
+#### Case11 smoke observations
+
+- Backend order: `music / music_pair_rescore / pairwise_grid_ml`.
+- Method order: `ARD / Proposed V1 / Proposed V3.3 / HFSS Oracle`.
+- Mean resolution over the two smoke pairs:
+  - MUSIC: `0.675000 / 0.500000 / 0.675000 / 0.675000`
+  - MUSIC pair-rescore: `0.675000 / 0.500000 / 0.675000 / 0.675000`
+  - Pairwise grid ML: `1.000000 / 1.000000 / 1.000000 / 1.000000`
+- Mean stable rate:
+  - MUSIC: `0.125000 / 0.025000 / 0.100000 / 0.100000`
+  - MUSIC pair-rescore: `0.225000 / 0.025000 / 0.250000 / 0.200000`
+  - Pairwise grid ML: `0.375000 / 0.300000 / 0.325000 / 0.375000`
+- Mean pair RMSE:
+  - MUSIC: `11.411900 / 17.339400 / 11.385500 / 11.403300`
+  - MUSIC pair-rescore: `11.301400 / 17.272400 / 11.247200 / 11.284200`
+  - Pairwise grid ML: `0.761300 / 0.888600 / 0.796700 / 0.736300`
+- Oracle gain over MUSIC in mean resolution: `0.000000 / 0.000000 / 0.325000` for `music / music_pair_rescore / pairwise_grid_ml`.
+- V3-to-Oracle resolution gap: `0.000000 / 0.000000 / 0.000000` in this two-pair smoke.
+
+#### Interpretation
+
+- Pairwise grid ML greatly improves the two-pair diagnostic result, including HFSS Oracle, which supports the hypothesis that plain MUSIC peak picking / independent peak selection is a material Case9 bottleneck.
+- MUSIC pair-rescore improves stable rate but not mean resolution in this smoke, suggesting the current MUSIC spectrum still carries some useful information but the main ceiling lift comes from joint pair covariance fitting.
+- Because this run uses only two source pairs and `monteCarlo = 20`, it is diagnostic evidence only. It should motivate a broader Case11 run before making paper-level claims.
+
+#### Key image
+
+![case11 enhanced backend smoke](assets/case11-enhanced-backend-smoke-local-9b970264.png)
+
+### 2026-05-08：`local-946087b9` reference-inspired cleanup and Case 9 smoke
+
+- Version hash: `local-946087b9`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: uncommitted code changes; this local directory did not expose a `.git` repository, so `git status --short` returned `fatal: not a git repository`.
+- Change basis: read `reference/test` as an engineering reference and adopted the useful parts: explicit sanity tests, common-snapshot regression coverage, cleaner Case 9 helper separation, and narrower active algorithm surface.
+- Result path: `results/local-946087b9/`
+- Case outputs: `case09_two_source_resolution/`
+- Run scope: Case 9 smoke only with `cfg.case9.sourcePairsDeg = [23.8 31.8; 35.8 45.8]` and `cfg.case9.monteCarlo = 2`; this is structural validation, not a new performance benchmark.
+
+#### Code and behavior changes
+
+- Added `tests/run_sanity_tests.m` using main project functions rather than copying `reference/test` simplified algorithms.
+- Kept `benchmark_music.snapshotPolicy = common_truth_snapshots_across_methods` as the active policy and added a sanity regression that identical methods reuse identical snapshots per `(target, MC)` trial.
+- Removed active GP-ANM fallback code from the current run path: no `cfg.case9.gpAnmFallback`, no `GP Diag Proxy`, no `gainPhaseDiagDiagnostics`, no `gpAnmFallback` output, and no active `src/benchmark_gp_anm_fallback.m`.
+- Moved Case 9 pair generation/filtering, selection scoring, subset summaries, pair labels, stratum histograms, V1 diagnostics, and example selection into `src/case09_helpers.m`; `run_project.m` now keeps orchestration, plotting, and saving.
+- Added diagnostic-only `estimatedSeparationCollapseRate`, defined as `estimated separation < 0.5 * true separation`. It does not replace the existing stable/biased/marginal/unresolved definitions.
+- Updated README and V3.3 algorithm notes to say GP-ANM was evaluated as an offline diagnostic / future expensive baseline, not an active V3.3 fallback.
+
+#### Validation
+
+- Static check: `matlab -batch "checkcode default_config.m run_project.m src/*.m tests/*.m"` completed without run-blocking errors. Remaining messages are existing `datestr/now`, `STRCMPI`, and stale suppression warnings.
+- The requested command `matlab -batch "addpath(genpath(pwd)); tests/run_sanity_tests"` is not valid MATLAB command syntax in this environment; MATLAB parsed `tests/run_sanity_tests` as an expression and returned `函数或变量 'tests' 无法识别`.
+- Equivalent sanity command `matlab -batch "addpath(genpath(pwd)); run_sanity_tests"` passed all tests: HFSS loader/grid/normalization, calibration split, ideal manifold, ARD calibration reconstruction, HFSS oracle lookup, snapshot SNR eigengap, MUSIC single/double oracle, and common-snapshot policy.
+- Case 9 smoke command used traceable output with `sourcePairsDeg = [23.8 31.8; 35.8 45.8]` and `monteCarlo = 2`.
+- Smoke verification confirmed `case09_results.mat` contains `benchmark.snapshotPolicy = common_truth_snapshots_across_methods`, existing summaries, and `estimatedSeparationCollapseRate`; it does not contain `gpAnmFallback` or `gainPhaseDiagDiagnostics`.
+
+#### Smoke observations
+
+- Smoke method order: `Ideal / Interpolation / ARD / Proposed V1 / Proposed V2 / Proposed V3.3 / HFSS Oracle`.
+- Mean resolution over the two smoke pairs: `0.000000 / 0.000000 / 0.500000 / 0.000000 / 0.250000 / 0.500000 / 0.500000`.
+- Mean stable rate over the two smoke pairs: all methods `0.000000`.
+- Mean pair RMSE over the two smoke pairs: `34.792081 / 33.566065 / 17.481492 / 33.598855 / 25.352719 / 17.545826 / 17.446554`.
+- Mean estimated-separation collapse rate: all methods `0.000000`.
+
+#### Key image
+
+![case09 reference cleanup smoke](assets/case09-reference-cleanup-smoke-local-946087b9.png)
+
+#### Remaining risk
+
+- This smoke has only two pairs and two Monte Carlo trials; it validates structure and diagnostics, not final Case 9 performance.
+- The exact slash-form sanity command in the plan is syntactically invalid in MATLAB; the executed command runs the same test file through the project path.
+- Historical GP-ANM logs/results/PDF are intentionally retained as research history; only active code/config paths were removed.
+
+### 2026-05-07：`local-9cd046fd` V3 algorithm documentation standalone rewrite
+
+- Version hash: `local-9cd046fd`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: uncommitted documentation reorganization; this local directory did not expose a `.git` repository, so `git status --short` returned `fatal: not a git repository`.
+- Change: moved the previous V3 algorithm documents into `algorithms/archive/v3-before-independent-rewrite-20260507/` and rebuilt the root V3 documents as standalone complete algorithm flow descriptions.
+- Affected cases: no experiment behavior changed.
+- Validation: verified the archive contains the four prior V3 documents and the root `algorithms/proposed_algorithm_v3.0.md`, `proposed_algorithm_v3.1.md`, `proposed_algorithm_v3_2.md`, and `proposed_algorithm_v3_3.md` exist with independent sections for purpose, inputs/outputs, model, objective, optimization, algorithm flow, evaluation interpretation, limitations, and implementation pointers.
+- Result path: `results/local-9cd046fd/`
+- Case outputs: none.
+- Remaining risk: documentation-only batch; no Case 9 rerun was performed and no new empirical claim is introduced.
+
+#### Documentation scope
+
+- `proposed_algorithm_v3.0.md`: describes the first ARD-anchored task-aware residual method and its known safety failure modes.
+- `proposed_algorithm_v3.1.md`: describes the calibration-guarded safe residual method with trust radius, held-out guard, and ARD fallback.
+- `proposed_algorithm_v3_2.md`: describes the distribution-matched stable-neighborhood pair objective as a full standalone method.
+- `proposed_algorithm_v3_3.md`: describes the current Case-9-aligned global stable-pair method with 5 dB task projector, peak score, and global competitor background.
+
+### 2026-05-07：`local-8e3fd21c` Proposed V3.3 algorithm documentation
+
+- Version hash: `local-8e3fd21c`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: uncommitted documentation changes; this local directory did not expose a `.git` repository, so `git status --short` returned `fatal: not a git repository`.
+- Change: added `algorithms/proposed_algorithm_v3_3.md` to document the current Proposed V3.3 implementation.
+- Affected cases: no experiment behavior changed; the document describes the current Case 9-aligned V3.3 algorithm.
+- Validation: inspected the document and confirmed it records the implemented V3.3 stage, backbone, task SNR, weights, peak score, global competitor background, objective terms, evaluation interpretation, and known limitations.
+- Result path: `results/local-8e3fd21c/`
+- Case outputs: none.
+- Remaining risk: documentation-only batch; no Case 9 rerun was performed and no new empirical claim is introduced.
+
+#### Documentation scope
+
+- The document names the method as **AATRC-V3.3: ARD-Anchored Case-9-Aligned Global Stable-Pair Residual Calibration**.
+- It records that V3.3 keeps the ARD-anchored safe phase residual backbone from V3.2.
+- It documents the V3.3-specific changes: `taskSnrDb = 5`, `lambdaSingle = 0.02`, `lambdaPair = 0.08`, `stableScoreMode = peak`, and `stableBackgroundMode = global_competitor`.
+- It explicitly states that V3.3 remains competitive in resolution/RMSE but still does not close the stable-rate gap to Proposed V1.
+
 ### 2026-05-06：`602158e` Case 9 common-snapshot rerun for meaningful spectrum comparison
 
 - Version hash: `602158e`
