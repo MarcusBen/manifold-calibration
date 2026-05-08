@@ -183,9 +183,9 @@ if isfield(modelCfg, 'v3') && ~isempty(modelCfg.v3)
 end
 
 v3Cfg = local_set_default_field(v3Cfg, 'enabled', true);
-v3Cfg = local_set_default_field(v3Cfg, 'label', 'Proposed V3.2');
+v3Cfg = local_set_default_field(v3Cfg, 'label', 'Proposed V3.3');
 v3Cfg = local_set_default_field(v3Cfg, 'base', 'ard');
-v3Cfg = local_set_default_field(v3Cfg, 'stage', 'distribution_matched_stable_pair_refinement');
+v3Cfg = local_set_default_field(v3Cfg, 'stage', 'case9_aligned_global_stable_refinement');
 v3Cfg = local_set_default_field(v3Cfg, 'segmentCentersDeg', [-50 0 50]);
 v3Cfg = local_set_default_field(v3Cfg, 'order', 1);
 v3Cfg = local_set_default_field(v3Cfg, 'lambda', 1e-3);
@@ -197,7 +197,7 @@ v3Cfg = local_set_default_field(v3Cfg, 'taskScanStrideDeg', 1);
 v3Cfg = local_set_default_field(v3Cfg, 'taskSingleHeldoutCount', 12);
 v3Cfg = local_set_default_field(v3Cfg, 'taskPairSeparationDeg', [4 5 6 8 10]);
 v3Cfg = local_set_default_field(v3Cfg, 'taskPairCount', 20);
-v3Cfg = local_set_default_field(v3Cfg, 'taskSnrDb', 25);
+v3Cfg = local_set_default_field(v3Cfg, 'taskSnrDb', 5);
 v3Cfg = local_set_default_field(v3Cfg, 'taskPairSelectionMode', 'distribution_matched');
 v3Cfg = local_set_default_field(v3Cfg, 'taskPairCenterBinDeg', 10);
 v3Cfg = local_set_default_field(v3Cfg, 'guardHeldoutCount', 64);
@@ -206,8 +206,8 @@ v3Cfg = local_set_default_field(v3Cfg, 'learningRate', 0.004);
 v3Cfg = local_set_default_field(v3Cfg, 'perturbationScale', 0.004);
 v3Cfg = local_set_default_field(v3Cfg, 'maxGradNorm', 5);
 v3Cfg = local_set_default_field(v3Cfg, 'lambdaCal', 1);
-v3Cfg = local_set_default_field(v3Cfg, 'lambdaSingle', 0.04);
-v3Cfg = local_set_default_field(v3Cfg, 'lambdaPair', 0.05);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaSingle', 0.02);
+v3Cfg = local_set_default_field(v3Cfg, 'lambdaPair', 0.08);
 v3Cfg = local_set_default_field(v3Cfg, 'lambdaMid', 0);
 v3Cfg = local_set_default_field(v3Cfg, 'lambdaAnchor', 50);
 v3Cfg = local_set_default_field(v3Cfg, 'lambdaGuard', 10);
@@ -218,6 +218,8 @@ v3Cfg = local_set_default_field(v3Cfg, 'softmaxGamma', 8);
 v3Cfg = local_set_default_field(v3Cfg, 'midMargin', 0.2);
 v3Cfg = local_set_default_field(v3Cfg, 'pairObjectiveMode', 'stable_neighborhood');
 v3Cfg = local_set_default_field(v3Cfg, 'stableNeighborhoodDeg', 0.6);
+v3Cfg = local_set_default_field(v3Cfg, 'stableScoreMode', 'peak');
+v3Cfg = local_set_default_field(v3Cfg, 'stableBackgroundMode', 'global_competitor');
 v3Cfg = local_set_default_field(v3Cfg, 'stableBackgroundWindowDeg', 4);
 v3Cfg = local_set_default_field(v3Cfg, 'stableEndpointFloor', -2.5);
 v3Cfg = local_set_default_field(v3Cfg, 'stableMidMargin', 0.15);
@@ -433,7 +435,7 @@ diagnostics.taskPairSelectionMode = local_optional_v2_field(v3Cfg, 'taskPairSele
 diagnostics.pairObjectiveMode = local_optional_v2_field(v3Cfg, 'pairObjectiveMode', 'legacy');
 diagnostics.pairSelection = tasks.pairSelection;
 diagnostics.stablePairDiagnostics = local_stable_pair_diagnostics(aProposedV3, state);
-diagnostics.selectionReason = sprintf(['Proposed V3.2 used distribution-matched stable-pair residuals ' ...
+diagnostics.selectionReason = sprintf(['Proposed V3.3 used case9-aligned global stable-pair residuals ' ...
     'around ARD with %d deterministic SPSA iterations, anchor %.3g, guard %.3g.'], ...
     v3Cfg.numSpsaIterations, v3Cfg.lambdaAnchor, v3Cfg.lambdaGuard);
 end
@@ -441,7 +443,7 @@ end
 function model = local_build_v3_zero_model(ctx, calIdx, v3Cfg)
 numBasis = numel(v3Cfg.segmentCentersDeg) * (v3Cfg.order + 1);
 model = struct();
-model.type = 'v3_distribution_matched_stable_pair_refinement';
+model.type = 'v3_case9_aligned_global_stable_refinement';
 model.enabled = true;
 model.stage = v3Cfg.stage;
 model.calIdx = calIdx(:).';
@@ -965,6 +967,20 @@ positions = positions(:).';
 end
 
 function positions = local_stable_background_positions(scanAngles, targetAngles, task, v2Cfg)
+modeName = strtrim(local_optional_v2_field(v2Cfg, 'stableBackgroundMode', 'local_window'));
+if strcmpi(modeName, 'global_competitor')
+    excluded = false(numel(scanAngles), 1);
+    excluded(task.leftNeighborhoodPos) = true;
+    excluded(task.rightNeighborhoodPos) = true;
+    excluded(task.midNeighborhoodPos) = true;
+    positions = find(~excluded);
+    if isempty(positions)
+        positions = task.midScanPos;
+    end
+    positions = positions(:).';
+    return;
+end
+
 windowDeg = local_optional_v2_field(v2Cfg, 'stableBackgroundWindowDeg', 4);
 lowAngle = min(targetAngles) - windowDeg;
 highAngle = max(targetAngles) + windowDeg;
@@ -1269,10 +1285,11 @@ for taskIdx = 1:numel(state.pairTasks)
         real(rightVector' * task.projector * rightVector);
 
     z = local_task_logits(task.projector, scanManifold, state.v2Cfg.softmaxGamma);
-    s1 = local_logmeanexp(z(task.leftNeighborhoodPos));
-    s2 = local_logmeanexp(z(task.rightNeighborhoodPos));
-    sm = local_logmeanexp(z(task.midNeighborhoodPos));
-    sb = local_logmeanexp(z(task.backgroundScanPos));
+    scoreMode = local_optional_v2_field(state.v2Cfg, 'stableScoreMode', 'mean');
+    s1 = local_stable_region_score(z, task.leftNeighborhoodPos, scoreMode);
+    s2 = local_stable_region_score(z, task.rightNeighborhoodPos, scoreMode);
+    sm = local_stable_region_score(z, task.midNeighborhoodPos, scoreMode);
+    sb = local_stable_region_score(z, task.backgroundScanPos, scoreMode);
     minEndpoint = min(s1, s2);
 
     endFloor = local_optional_v2_field(state.v2Cfg, 'stableEndpointFloor', -2.5);
@@ -1318,6 +1335,19 @@ end
 
 function value = local_logmeanexp(z)
 value = local_logsumexp(z) - log(max(numel(z), 1));
+end
+
+function value = local_stable_region_score(z, positions, scoreMode)
+if isempty(positions)
+    value = -Inf;
+    return;
+end
+
+if strcmpi(scoreMode, 'peak') || strcmpi(scoreMode, 'max')
+    value = max(z(positions));
+else
+    value = local_logmeanexp(z(positions));
+end
 end
 
 function value = local_softplus(x)
@@ -1390,7 +1420,7 @@ end
 
 function warningText = local_v3_fallback_warning(usedARDFallback, fallbackReason)
 if usedARDFallback
-    warningText = sprintf('Proposed V3.2 kept the ARD initializer because %s failed.', fallbackReason);
+    warningText = sprintf('Proposed V3.3 kept the ARD initializer because %s failed.', fallbackReason);
 else
     warningText = '';
 end
@@ -1418,10 +1448,11 @@ diagnostics.weight = zeros(numel(state.pairTasks), 1);
 for taskIdx = 1:numel(state.pairTasks)
     task = state.pairTasks(taskIdx);
     z = local_task_logits(task.projector, scanManifold, state.v2Cfg.softmaxGamma);
-    diagnostics.s1(taskIdx) = local_logmeanexp(z(task.leftNeighborhoodPos));
-    diagnostics.s2(taskIdx) = local_logmeanexp(z(task.rightNeighborhoodPos));
-    diagnostics.sm(taskIdx) = local_logmeanexp(z(task.midNeighborhoodPos));
-    diagnostics.sb(taskIdx) = local_logmeanexp(z(task.backgroundScanPos));
+    scoreMode = local_optional_v2_field(state.v2Cfg, 'stableScoreMode', 'mean');
+    diagnostics.s1(taskIdx) = local_stable_region_score(z, task.leftNeighborhoodPos, scoreMode);
+    diagnostics.s2(taskIdx) = local_stable_region_score(z, task.rightNeighborhoodPos, scoreMode);
+    diagnostics.sm(taskIdx) = local_stable_region_score(z, task.midNeighborhoodPos, scoreMode);
+    diagnostics.sb(taskIdx) = local_stable_region_score(z, task.backgroundScanPos, scoreMode);
     diagnostics.weight(taskIdx) = task.weight;
 end
 diagnostics.minEndpointMinusMid = min(diagnostics.s1, diagnostics.s2) - diagnostics.sm;

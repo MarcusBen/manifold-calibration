@@ -18,6 +18,238 @@
 
 > Branch artifact policy: `codex/proposed_v3` 使用 version-first traceable results layout：`results/<version-hash>/<case-name>/`。2026-04-20 当前同步范围包括 `87d7f16` V3 screening、`71650f7` ARD Method 2 full run、`local-8e021ea7` Full V2 C-route full run、`2962bc3` V2-lite run，以及仅含失败启动日志的 `local-aa29a0fd`。
 
+### 2026-05-06：`local-b2472f86` Case 9 common-snapshot rerun for meaningful spectrum comparison
+
+- Version hash: `local-b2472f86`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: uncommitted code changes; this local directory did not expose a `.git` repository, so `git status --short` returned `fatal: not a git repository`.
+- Change basis: the prior Case 9 representative spectrum could be misleading because `benchmark_music` generated independent random snapshots inside each method loop. That allowed one method to look better partly because it received a more favorable noise realization.
+- Run command: `run_project(9, cfg)` with traceable output enabled, default Case 9 pair sweep, default SNR/snapshots, `monteCarlo = 80`, V3.3, and GP-ANM fallback disabled.
+- Result path: `results/local-b2472f86/`
+- Case outputs: `case09_two_source_resolution/`
+- Run scope: Case 9 only; this is a screening rerun with corrected snapshot policy, not a full paper-profile result.
+
+#### Code and behavior changes
+
+- `src/benchmark_music.m` now pre-generates one HFSS-truth snapshot matrix per `(target, Monte Carlo)` trial and reuses that same matrix for every evaluated method.
+- `benchmark_music` records `snapshotPolicy = common_truth_snapshots_across_methods` in its result struct.
+- `run_project.m` writes the MUSIC snapshot policy into version-level `RUN_NOTES.md`.
+- No V3.3 training objective, label, or manifold construction was changed.
+
+#### Validation and Case 9 result
+
+- Smoke validation asserted `snapshotPolicy = common_truth_snapshots_across_methods` on a two-method benchmark.
+- `checkcode`: `src/benchmark_music.m` had no output; `run_project.m` retained existing `datestr/now`, `STRCMPI`, and suppressed-message style warnings only.
+- Case 9 leakage check remained clean: `taskEvalOverlapCount = 0`, `taskExcludedPairCount = 16`, evaluation pairs `152`.
+- All-separation resolution: `ARD 0.123520 / Proposed V1 0.126891 / V3.3 0.126562 / HFSS Oracle 0.122533`.
+- All-separation stable: `ARD 0.032730 / Proposed V1 0.037253 / V3.3 0.033388 / HFSS Oracle 0.032730`.
+- Discriminative `>=6 deg` resolution: `ARD 0.305328 / Proposed V1 0.314344 / V3.3 0.312500 / HFSS Oracle 0.303074`.
+- Discriminative `>=6 deg` stable: `ARD 0.081148 / Proposed V1 0.092828 / V3.3 0.082582 / HFSS Oracle 0.081148`.
+- Discriminative `>=6 deg` mean pair RMSE: `ARD 28.107252 / Proposed V1 27.747758 / V3.3 27.664849 / HFSS Oracle 28.195703`.
+- Representative pair selected by the existing Case 9 selector was `[35.8, 45.8] deg`. Under common snapshots, ARD, V1, V3.3, and HFSS Oracle all produced marginal two-source estimates clustered around `[36.8, 43] deg`; the plot no longer supports interpreting a single V3.3 spectrum as uniquely strong.
+
+#### Key image
+
+![case09 common snapshots v33](assets/case09-common-snapshots-v33-local-b2472f86.png)
+
+#### Judgment and risk
+
+- The common-snapshot rerun makes the visual comparison more meaningful and removes the previous method-specific noise draw artifact.
+- The result still supports the earlier diagnosis: V3.3 is competitive on resolution and RMSE, especially for `>=6 deg`, but its stable-rate gap to Proposed V1 remains material.
+- Proposed V1 remains the clearest stable-rate reference in this Case 9 setup. V3.3's representative spectrum can look good, but the corrected run shows that the statistically reliable advantage has not arrived yet.
+
+### 2026-05-06：`local-2f83ff50` GP-ANM fallback backend smoke
+
+- Version hash: `local-2f83ff50`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: uncommitted code changes; this local directory did not expose a `.git` repository, so `git status --short` returned `fatal: not a git repository`.
+- Change basis: local review of `algorithms/A_New_Atomic_Norm_for_DOA_Estimation_With_Gain-Phase_Errors.pdf` suggested GP-ANM could be tested as an expensive backend fallback, but its fixed diagonal gain-phase error model may not match the angle-dependent HFSS manifold residual.
+- Run command: `run_project(9, cfg)` with traceable output enabled, manual Case 9 pair `[23.8, 31.8] deg`, default SNR/snapshots, `monteCarlo = 2`, `GP Diag Proxy` enabled, and GP-ANM SDP probe enabled.
+- Result path: `results/local-2f83ff50/`
+- Case outputs: `case09_two_source_resolution/`
+- Run scope: Case 9 smoke only; this is not a full paper-profile result.
+
+#### Code and behavior changes
+
+- `default_config.m` now has `cfg.case9.gpAnmFallback`, disabled by default, with explicit controls for `enabled`, `addDiagonalProxy`, `maxPairs`, `monteCarlo`, `errorRadius`, and `tauEta`.
+- `run_project.m` keeps the normal V3.3/MUSIC flow unchanged by default. When `cfg.case9.gpAnmFallback.addDiagonalProxy = true`, Case 9 appends `GP Diag Proxy`, a fixed common diagonal gain-phase correction fitted only from calibration angles.
+- `run_project.m` also records `gainPhaseDiagDiagnostics` and `gpAnmFallback` inside `case09_results.mat`.
+- `src/benchmark_gp_anm_fallback.m` was added as an isolated GP-ANM backend probe. It checks for CVX before solving the SDP; without CVX it returns `status = skipped` rather than failing the Case 9 run.
+- Version-level `RUN_NOTES.md` now records the Case 9 GP-ANM fallback settings.
+
+#### Smoke result
+
+- MATLAB environment check found no `cvx_begin`, `mosekopt`, `sedumi`, `sdpt3`, or `sdpvar`; therefore the true GP-ANM SDP backend was skipped with reason `CVX is not available on the MATLAB path; GP-ANM SDP was not run.`
+- The fast fixed-diagonal proxy barely changed the held-out manifold error: Ideal mean relative error `0.320988`, GP Diag Proxy mean relative error `0.320915`, delta `-0.000073`.
+- On the two-trial `[23.8, 31.8] deg` smoke pair, `GP Diag Proxy` did not resolve the pair: RMSE `33.969721`, stable `0.000000`, resolution `0.000000`.
+- Same smoke pair reference values were: ARD RMSE `16.149826`, resolution `0.500000`; HFSS Oracle RMSE `16.879381`, resolution `0.500000`; Proposed V3.3 RMSE `32.167814`, resolution `0.000000`.
+- `checkcode` did not show run-blocking errors. `run_project.m` retained existing `datestr/now`, `STRCMPI`, and suppressed-message warnings; `src/benchmark_gp_anm_fallback.m` showed expected Code Analyzer warnings on CVX constraint lines when CVX is not installed.
+
+#### Key image
+
+![case09 gp anm fallback smoke](assets/case09-gp-anm-fallback-smoke-local-2f83ff50.png)
+
+#### Judgment and risk
+
+- This smoke does not evaluate the full GP-ANM SDP because the local MATLAB environment lacks CVX or an equivalent SDP stack.
+- The fixed diagonal proxy result is still informative: a single common gain-phase vector fitted from calibration angles explains almost none of the HFSS-vs-ideal manifold gap. That weakens the case for treating the paper's model as a direct backend fallback for this project.
+- If GP-ANM is pursued further, it should remain an isolated expensive baseline after installing CVX/SDPT3/SeDuMi/MOSEK, not a default Proposed V3.3 backend component.
+
+### 2026-05-05：`local-f4d31977` rollback to Proposed V3.3
+
+- Version hash: `local-f4d31977`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: rollback code changes; this local directory did not expose a `.git` repository, so `git status --short` returned `fatal: not a git repository`.
+- Change: reverted the V3.4 V1-shape teacher code path and restored Proposed V3.3 defaults and labels.
+- Affected files: `default_config.m`, `src/build_sparse_models.m`, `run_project.m`, `docs/research-log.md`, `results/local-f4d31977/RUN_NOTES.md`, `results/local-f4d31977/manifest.md`.
+- Validation: MATLAB model smoke only; no full Case 9 rerun.
+- Result path: `results/local-f4d31977/`
+- Case outputs: none.
+- Remaining risk: this rollback restores the V3.3 code path and keeps the prior V3.3 Case 9 evidence in `results/local-908d3013/`; it does not regenerate Case 9 under a new hash.
+
+#### Rollback details
+
+- `default_config.m` now sets `cfg.model.v3.label = Proposed V3.3` and `cfg.model.v3.stage = case9_aligned_global_stable_refinement`.
+- V3.4-only fields `lambdaV1Shape`, `v1ShapeEnabled`, `v1ShapeValleySlack`, and `v1ShapeBalanceSlack` were removed from the active config/default completion path.
+- `src/build_sparse_models.m` no longer passes `AProposedV1` into V3 refinement, no longer creates `v1ShapeTargets`, and no longer includes `components.v1Shape` in the V3 objective.
+- `run_project.m` method labels and run notes now report `Proposed V3.3` again.
+- Case 9 `>=6 deg` discriminative summaries, true-DOA spectrum markers, and `v1ExperienceDiagnostics` were retained because they are evaluation/diagnostic improvements from `local-908d3013`, not part of the V3.4 teacher rollback.
+- Historical `results/local-9023b401/` and its log entry are retained as the failed V3.4 screening record.
+
+#### Validation
+
+- MATLAB smoke command built the project context, selected representative calibration indices, and ran `build_sparse_models`.
+- Assertions passed:
+  - `models.v3Diagnostics.label == Proposed V3.3`
+  - `models.v3Diagnostics.finalComponents` has no `v1Shape`
+  - `models.v3Diagnostics` has no `v1ShapeDiagnostics`
+- Smoke output: `label=Proposed V3.3 stage=case9_aligned_global_stable_refinement obj 0.730981 -> 0.458960 fallback=0`。
+
+### 2026-05-05：`local-9023b401` Proposed V3.4 V1 shape-guided screening
+
+- Version hash: `local-9023b401`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: uncommitted code changes; this local directory did not expose a `.git` repository, so `git status --short` returned `fatal: not a git repository`.
+- Change basis: visual inspection of Case 9 representative spectrum showed Proposed V1 has lower absolute peaks but a more standard two-peak shape: better endpoint balance, clearer valley, and peaks aligned with true DOA markers.
+- Run command: `run_project(9, cfg)` with `default_config(pwd)`, traceable output enabled, default Case 9 Monte Carlo `80`.
+- Result path: `results/local-9023b401/`
+- Case outputs: `case09_two_source_resolution/`
+- Run scope: Case 9 only screening; this is not a full paper-profile result.
+
+#### 代码与行为变化
+
+- `default_config.m` 和 `run_project.m` 将 V3 label 更新为 `Proposed V3.4`，stage 更新为 `v1_shape_guided_global_stable_refinement`。
+- `src/build_sparse_models.m` 的 V3 构建现在接收 `AProposedV1` 作为 training-only shape teacher。
+- V3 objective 新增 `components.v1Shape` 和 `lambdaV1Shape = 0.06`。该项只在 V3 held-out task pairs 上比较谱形，不使用 Case 9 evaluation pairs。
+- V1 shape teacher 只约束两个谱形量：`valleyMargin = min(endpoint scores) - midpoint score` 和 `balance = |left endpoint score - right endpoint score|`。它不模仿绝对峰高，避免把 V1 的低峰值也学进去。
+- V3 diagnostics 新增 `v1ShapeDiagnostics`，记录 V1 与 candidate 的 valley margin / balance gap。
+
+#### 验证与 Case 9 结果
+
+- MATLAB model smoke：`AProposedV3` 尺寸匹配 `ctx.AH`，`finalComponents.v1Shape` 和 `v1ShapeDiagnostics` 存在；V3.4 未触发 fallback。
+- V3.4 objective: initial `1.144583`，final `0.722737`，`usedARDFallback = 0`。
+- V1-shape diagnostics: final `v1Shape = 4.345433`，mean valley margin gap `+28.4511`，mean balance gap `+3.7659`。这说明 V3.4 的 valley 已不弱于 V1，但左右峰 balance 仍明显差于 V1。
+- Guard metrics: calibration drift `1.68e-16`，guard relative excess `0.00258`，anchor RMS drift `0.00354`，均低于当前 guard 阈值。
+- Case 9 all-separation stable rate: `ARD 0.035691 / Proposed V1 0.038898 / V3.4 0.036266 / HFSS Oracle 0.035033`。
+- Case 9 discriminative `>=6 deg` stable rate: `ARD 0.088730 / Proposed V1 0.096311 / V3.4 0.089959 / HFSS Oracle 0.087295`。
+- Case 9 discriminative `>=6 deg` resolution: `ARD 0.307172 / Proposed V1 0.313730 / V3.4 0.309426 / HFSS Oracle 0.303689`。
+- V3.4 versus V3.3: stable rate did not improve in this default Case 9 run; discriminative resolution increased slightly from `0.308402` to `0.309426` and discriminative RMSE improved from `28.006790` to `27.960250`。
+- Proposed V1 remains ahead of V3.4 on stable rate: all-separation gap `-0.002632`，discriminative `>=6 deg` gap `-0.006352`。
+- A small weight probe with `lambdaV1Shape = 0.06 / 0.15 / 0.30 / 0.60` showed the balance gap did not materially shrink under the current SPSA/residual/anchor setup; simply increasing teacher weight is not sufficient.
+- `checkcode`: `default_config.m` no output；`src/build_sparse_models.m` only retained existing suppressed-message notices；`run_project.m` retained existing `datestr/now`、`STRCMPI` and suppressed-message style warnings. No run-blocking warning was observed.
+
+#### 关键图片
+
+![case09 v34 v1 shape](assets/case09-v34-v1-shape-local-9023b401.png)
+
+#### 判断与风险
+
+- This run implemented the requested V1 experience transfer in a controlled way, but the result is not yet a successful V3 improvement on stable rate.
+- The useful signal is diagnostic: V1's main advantage is endpoint balance, not endpoint height or valley depth. V3.4 already has strong valley margin but still has excessive endpoint imbalance.
+- The next improvement should target the residual parameterization or optimization path that can specifically change endpoint balance, rather than only increasing `lambdaV1Shape`.
+
+### 2026-05-05：`local-908d3013` Case 9 discriminative split and true-DOA spectrum markers
+
+- Version hash: `local-908d3013`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: uncommitted code changes; this local directory did not expose a `.git` repository, so `git status --short` returned `fatal: not a git repository`.
+- Change basis: previous Case 9 diagnosis that the all-separation mean is dominated by near-impossible `1-5 deg` pairs, and that Proposed V1 remains a useful two-source reference.
+- Run command: `run_project(9, cfg)` with `default_config(pwd)`, traceable output enabled, default Case 9 Monte Carlo `80`.
+- Result path: `results/local-908d3013/`
+- Case outputs: `case09_two_source_resolution/`
+- Run scope: Case 9 only screening; this is not a full paper-profile result.
+
+#### 代码与行为变化
+
+- `default_config.m` 新增 `cfg.case9.discriminativeMinSeparationDeg = 6`，将 Case 9 的可区分区间固定为 separation `>= 6 deg`。
+- `run_project.m` 的 Case 9 结果新增 `overallSummary`、`discriminativeSummary`、`discriminativeMask` 和 `discriminativeMinSeparationDeg`，同时保存 all-separation 与 `>=6 deg` 两套 method-level 指标。
+- Case 9 代表谱图新增两条 true DOA 黑色虚线，便于直接检查各方法谱峰相对真实角的位置。
+- Case 9 新增 `v1ExperienceDiagnostics`，记录 Proposed V1 相对 ARD、V3.3 相对 V1 的 resolution/stable 差值，用于后续从 V1 的双源表现中提炼训练目标，而不把测试集结果用于方法选择。
+
+#### 验证与 Case 9 结果
+
+- MATLAB smoke：用 `cfg.case9.monteCarlo = 2` 跑通 Case 9，确认 `discriminativeSummary`、`overallSummary` 和 `v1ExperienceDiagnostics` 存在。
+- `checkcode`: `default_config.m` no output；`src/build_sparse_models.m` 仅保留既有 suppressed-message notices；`run_project.m` 保留既有 `datestr/now`、`STRCMPI` 和 suppressed-message 风格提示，无 run-blocking warning。
+- Case 9 leakage check 仍由原逻辑执行，正式结果保存在 `results/local-908d3013/case09_two_source_resolution/case09_results.mat`。
+- All-separation stable rate: `ARD 0.035691 / Proposed V1 0.038898 / V3.3 0.036266 / HFSS Oracle 0.035033`。
+- Discriminative `>=6 deg` stable rate: `ARD 0.088730 / Proposed V1 0.096311 / V3.3 0.089959 / HFSS Oracle 0.087295`。
+- Discriminative `>=6 deg` resolution: `ARD 0.307172 / Proposed V1 0.313730 / V3.3 0.308402 / HFSS Oracle 0.303689`。
+- Proposed V1 stable advantage over ARD: all-separation `+0.003207`，discriminative `>=6 deg` `+0.007582`。
+- V3.3 stable gap to Proposed V1: all-separation `-0.002632`，discriminative `>=6 deg` `-0.006352`。
+- Proposed V1 stable delta over ARD by separation `1/2/3/4/5/6/8/10 deg`: `+0.0000 / +0.0000 / +0.0000 / +0.0000 / +0.0016 / +0.0007 / +0.0131 / +0.0083`。
+- V3.3 stable delta against Proposed V1 by separation `1/2/3/4/5/6/8/10 deg`: `+0.0006 / +0.0000 / +0.0000 / +0.0000 / -0.0016 / -0.0033 / +0.0000 / -0.0155`。
+
+#### 关键图片
+
+![case09 discriminative true doa](assets/case09-discriminative-true-doa-local-908d3013.png)
+
+#### 判断与风险
+
+- Case 9 拆分后更清楚：`1-5 deg` 主要是 feasibility stress，不适合单独支撑 proposed 方法优劣；`>=6 deg` 更适合作为 discriminative resolution 指标。
+- Proposed V1 在 `>=6 deg` stable 上比 ARD 高 `+0.007582`，说明它的低阶全局 phase residual 对双源 peak selection 有可借鉴价值。
+- 当前 V3.3 虽然在 all-separation stable 上略高于 ARD，但在 discriminative stable 上仍低于 Proposed V1 `-0.006352`。下一步应从 V1 的全局平滑/谱峰选择特性提炼训练约束，而不是用测试结果做 V1/V3 后验选择。
+
+### 2026-05-05：`local-e3cbbcee` Proposed V3.3 Case 9-aligned global stable-pair screening
+
+- Version hash: `local-e3cbbcee`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: uncommitted code changes; this local directory did not expose a `.git` repository, so `git status --short` and `git rev-parse --short HEAD` both returned `fatal: not a git repository`.
+- Change basis: local diagnosis that V3.2's pair surrogate optimized local exact-covariance double peaks at 25 dB, while Case 9 evaluates 5 dB random-snapshot MUSIC with global top-k peak competition and a strict stable criterion.
+- Run command: `run_project(9, cfg)` with `default_config(pwd)`, traceable output enabled, default Case 9 Monte Carlo `80`.
+- Result path: `results/local-e3cbbcee/`
+- Case outputs: `case09_two_source_resolution/`
+- Run scope: Case 9 only screening; this is not a full paper-profile result.
+
+#### 代码与行为变化
+
+- `default_config.m` 将 V3 label 更新为 `Proposed V3.3`，stage 更新为 `case9_aligned_global_stable_refinement`。
+- V3 task SNR 从 `25 dB` 调整为 `5 dB`，与 Case 9 evaluation SNR 对齐。
+- V3 task weights 调整为 `lambdaSingle = 0.02`、`lambdaPair = 0.08`，把本轮筛选重心放在双源 pair loss。
+- `src/build_sparse_models.m` 新增 `stableScoreMode = peak` 和 `stableBackgroundMode = global_competitor`：endpoint、midpoint、background 评分改为 peak score，background 从局部窗口改为除 endpoint/mid neighborhoods 外的全训练扫描角，以更贴近 `benchmark_music` 的全局 top-k 竞争。
+- `run_project.m` 的 traceable run notes 和方法标签同步记录 V3.3 的 task SNR、stable score mode 和 background mode。
+
+#### 验证与 Case 9 结果
+
+- 模型 smoke：`AProposedV3` 尺寸匹配 `ctx.AH`，`v3Diagnostics.stablePairDiagnostics` 存在；V3.3 未触发 fallback。
+- V3.3 objective: initial `0.730981`，final `0.458960`，`usedARDFallback = 0`。
+- Guard metrics: calibration drift `1.68e-16`，guard relative excess `0.00247`，anchor RMS drift `0.00341`，均低于当前 guard 阈值。
+- Case 9 leakage check: `taskEvalOverlapCount = 0`，`taskExcludedPairCount = 16`，evaluation pairs `152`。
+- Case 9 mean resolution: `ARD 0.124013 / Proposed V1 0.126645 / V3.3 0.125000 / HFSS Oracle 0.122697`。
+- Case 9 mean stable rate: `ARD 0.035691 / Proposed V1 0.038898 / V3.3 0.036266 / HFSS Oracle 0.035033`。
+- Case 9 per-separation `V3.3 - ARD` resolution delta: `+0.0006 / +0.0030 / -0.0012 / +0.0010 / +0.0008 / -0.0046 / +0.0101 / -0.0024` for separation `1/2/3/4/5/6/8/10 deg`。
+- Case 9 per-separation `V3.3 - ARD` stable delta: `+0.0006 / +0.0000 / +0.0000 / +0.0000 / +0.0000 / -0.0026 / +0.0131 / -0.0071` for separation `1/2/3/4/5/6/8/10 deg`。
+- `checkcode`: `default_config.m` no output; `src/build_sparse_models.m` reports one new style warning at the new `lower/strcmp` branch plus existing suppressed-message notices; `run_project.m` reports existing style warnings including `datestr/now` and suppressed-message notices. No run-blocking warning was observed.
+
+#### 关键图片
+
+![case09 v33 global stable](assets/case09-v33-global-stable-local-e3cbbcee.png)
+
+#### 判断与风险
+
+- 本轮说明“全局 competitor + 5 dB task SNR”方向有局部效果：8° separation 的 stable rate 相对 ARD 增加 `+0.0131`，且 overall stable 略高于 ARD。
+- 但 V3.3 仍没有超过 Proposed V1 的 overall stable rate，10° separation stable 相对 ARD 下降 `-0.0071`，说明 endpoint balance / global top-k surrogate 仍未完全对齐正式 benchmark。
+- 这只是 Case 9 default Monte Carlo screening，不应写成最终 paper-profile 结论；下一步若继续，应优先分析 8° 与 10° 的 endpoint imbalance 差异，而不是直接增加 SPSA iterations。
+
 ### 2026-04-20：`179f579` Proposed V3.2 distribution-matched stable-pair screening run
 
 - Version hash: `179f579`

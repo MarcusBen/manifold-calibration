@@ -286,7 +286,7 @@ outDir = local_case_output_dir(cfg, 'case03_unseen_generalization');
 
 lValues = cfg.case3.lValues;
 methodNames = {'Ideal', 'Interpolation', 'ARD', 'Proposed V1', 'Proposed V2', ...
-    'Proposed V3.2', 'HFSS Oracle'};
+    'Proposed V3.3', 'HFSS Oracle'};
 meanUnseenError = zeros(numel(lValues), numel(methodNames));
 edgeUnseenError = zeros(numel(lValues), numel(methodNames));
 worst10UnseenError = zeros(numel(lValues), numel(methodNames));
@@ -396,7 +396,7 @@ for plotIdx = 1:numel(cfg.case3.representativeElements)
 end
 xlabel('Angle (deg)');
 legend({'HFSS truth', 'Interpolation', 'Proposed V1 fit', 'Proposed V2 fit', ...
-    'Proposed V3.2 fit', ...
+    'Proposed V3.3 fit', ...
     'Calibration samples'}, 'Location', 'eastoutside');
 save_figure(fig, fullfile(outDir, 'phase_reconstruction.png'));
 
@@ -438,7 +438,7 @@ for angleIdx = 1:numRepAngles
     title(sprintf('Phase at %.1f deg', queryAngle));
 end
 legend({'HFSS truth', 'Ideal', 'Interpolation', 'ARD', 'Proposed V1', 'Proposed V2', ...
-    'Proposed V3.2'}, ...
+    'Proposed V3.3'}, ...
     'Location', 'eastoutside');
 save_figure(fig, fullfile(outDir, 'steering_vector_comparison.png'));
 
@@ -1151,6 +1151,12 @@ calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'un
 models = build_sparse_models(ctx, calIdx, cfg.model);
 methods = local_named_methods(ctx, models, {'ideal', 'interp', 'ard', 'proposed_v1', ...
     'proposed_v2', 'proposed_v3', 'oracle'});
+gpAnmCfg = local_case9_gp_anm_fallback_config(cfg.case9);
+gainPhaseDiagDiagnostics = struct();
+if gpAnmCfg.addDiagonalProxy
+    [gainPhaseDiagManifold, gainPhaseDiagDiagnostics] = local_gain_phase_diag_proxy(ctx, calIdx);
+    methods(end+1) = local_method('gain_phase_diag_proxy', 'GP Diag Proxy', gainPhaseDiagManifold); %#ok<AGROW>
+end
 
 [sourcePairs, pairSelection] = local_case9_source_pairs(cfg.case9, ctx, models.calAnglesDeg);
 [taskPairsDeg, v2TaskPairsDeg, v3TaskPairsDeg] = local_task_pairs_from_models(models);
@@ -1160,6 +1166,9 @@ taskEvalOverlapCount = local_count_task_eval_overlap(sourcePairs, taskPairsDeg);
 pairLabels = local_case9_pair_labels(sourcePairs);
 separationDeg = round(sourcePairs(:, 2) - sourcePairs(:, 1), 10);
 pairCenterDeg = mean(sourcePairs, 2);
+discriminativeMinSeparationDeg = local_optional_case9_field( ...
+    cfg.case9, 'discriminativeMinSeparationDeg', 6);
+discriminativeMask = separationDeg >= discriminativeMinSeparationDeg;
 
 evalCfg = struct();
 evalCfg.mode = 'double';
@@ -1172,6 +1181,7 @@ evalCfg.biasedToleranceDeg = cfg.case9.biasedToleranceDeg;
 evalCfg.marginalToleranceDeg = cfg.case9.marginalToleranceDeg;
 evalCfg.collectRepresentativeSpectrum = false;
 bench = benchmark_music(ctx, methods, evalCfg);
+gpAnmFallback = benchmark_gp_anm_fallback(ctx, evalCfg, gpAnmCfg);
 
 resolutionProb = zeros(numel(separationDeg), numel(methods));
 pairRmse = zeros(numel(separationDeg), numel(methods));
@@ -1193,6 +1203,12 @@ end
 [~, stableMean, stableStd] = local_case9_group_metric(separationDeg, stableRate);
 [pairDeltaResolution, pairDeltaStable] = local_case9_v3_delta_from_ard( ...
     methods, resolutionMean, stableMean);
+overallSummary = local_case9_subset_summary(methods, true(size(separationDeg)), ...
+    resolutionProb, stableRate, pairRmse, marginalRate, biasedRate, unresolvedRate);
+discriminativeSummary = local_case9_subset_summary(methods, discriminativeMask, ...
+    resolutionProb, stableRate, pairRmse, marginalRate, biasedRate, unresolvedRate);
+v1ExperienceDiagnostics = local_case9_v1_experience_diagnostics( ...
+    methods, overallSummary, discriminativeSummary, uniqueSep, resolutionMean, stableMean);
 centerBinDeg = local_optional_struct_field(cfg.model.v3, 'taskPairCenterBinDeg', 10);
 taskStratumHist = local_case9_pair_stratum_hist(v3TaskPairsDeg, centerBinDeg);
 evalStratumHist = local_case9_pair_stratum_hist(sourcePairs, centerBinDeg);
@@ -1258,6 +1274,9 @@ for methodIdx = 1:numel(methods)
     plot(ctx.thetaDeg, 10 * log10(exampleBench.methods(methodIdx).representativeSpectrum), ...
         'LineWidth', 1.4);
 end
+for trueIdx = 1:numel(examplePair)
+    xline(examplePair(trueIdx), 'k--', 'LineWidth', 1.0, 'HandleVisibility', 'off');
+end
 grid on;
 xlabel('Scan angle (deg)');
 ylabel('Pseudo-spectrum (dB)');
@@ -1282,6 +1301,8 @@ caseResult.taskExcludedPairCount = taskExcludedPairCount;
 caseResult.taskEvalOverlapCount = taskEvalOverlapCount;
 caseResult.separationDeg = separationDeg;
 caseResult.pairCenterDeg = pairCenterDeg;
+caseResult.discriminativeMinSeparationDeg = discriminativeMinSeparationDeg;
+caseResult.discriminativeMask = discriminativeMask;
 caseResult.resolutionProb = resolutionProb;
 caseResult.pairRmse = pairRmse;
 caseResult.marginalRate = marginalRate;
@@ -1297,9 +1318,14 @@ caseResult.groupedStableMean = stableMean;
 caseResult.groupedStableStd = stableStd;
 caseResult.pairDeltaResolution = pairDeltaResolution;
 caseResult.pairDeltaStable = pairDeltaStable;
+caseResult.overallSummary = overallSummary;
+caseResult.discriminativeSummary = discriminativeSummary;
+caseResult.v1ExperienceDiagnostics = v1ExperienceDiagnostics;
 caseResult.taskStratumHist = taskStratumHist;
 caseResult.evalStratumHist = evalStratumHist;
 caseResult.v3StablePairDiagnostics = v3StablePairDiagnostics;
+caseResult.gainPhaseDiagDiagnostics = gainPhaseDiagDiagnostics;
+caseResult.gpAnmFallback = gpAnmFallback;
 caseResult.examplePairIndex = exampleIdx;
 caseResult.exampleSelectionReason = exampleSelectionReason;
 caseResult.benchmark = bench;
@@ -1313,7 +1339,7 @@ outDir = local_case_output_dir(cfg, 'case10_random_split_robustness');
 
 numSplits = cfg.case10.numSplits;
 methodKeys = {'ideal', 'interp', 'ard', 'proposed_v1', 'proposed_v2', 'proposed_v3'};
-methodLabels = {'Ideal', 'Interp', 'ARD', 'Proposed V1', 'Proposed V2', 'Proposed V3.2'};
+methodLabels = {'Ideal', 'Interp', 'ARD', 'Proposed V1', 'Proposed V2', 'Proposed V3.3'};
 manifoldError = zeros(numSplits, numel(methodKeys));
 singleRmse = zeros(numSplits, numel(methodKeys));
 splitAngles = cell(numSplits, 1);
@@ -1452,6 +1478,9 @@ fprintf(fid, '- Element spacing lambda: `%.12g`\n', cfg.array.elementSpacingLamb
 fprintf(fid, '- Case 1 high SNR dB: `%.12g`\n', cfg.case1.highSNRDb);
 fprintf(fid, '- Case 9 Monte Carlo: `%d`\n', cfg.case9.monteCarlo);
 fprintf(fid, '- Case 9 separation sweep: `%s`\n\n', mat2str(cfg.case9.separationSweepDeg));
+fprintf(fid, '- Case 9 discriminative minimum separation deg: `%.12g`\n\n', ...
+    cfg.case9.discriminativeMinSeparationDeg);
+fprintf(fid, '- MUSIC snapshot policy: `common_truth_snapshots_across_methods`\n\n');
 if isfield(cfg, 'model') && isfield(cfg.model, 'ard')
     fprintf(fid, '- ARD enabled: `%d`\n', logical(cfg.model.ard.enabled));
     fprintf(fid, '- ARD method: `%s`\n', cfg.model.ard.method);
@@ -1477,7 +1506,18 @@ fprintf(fid, '- Proposed V3 SPSA iterations: `%d`\n', cfg.model.v3.numSpsaIterat
 fprintf(fid, '- Proposed V3 anchor weight: `%.12g`\n', cfg.model.v3.lambdaAnchor);
 fprintf(fid, '- Proposed V3 guard weight: `%.12g`\n', cfg.model.v3.lambdaGuard);
 fprintf(fid, '- Proposed V3 trust radius rad: `%.12g`\n', cfg.model.v3.trustRadiusRad);
-fprintf(fid, '- Proposed V3 note: `V3.2 distribution-matched stable-pair residual; screening result, not final full paper-profile evidence unless stated.`\n\n');
+fprintf(fid, '- Proposed V3 task SNR dB: `%.12g`\n', cfg.model.v3.taskSnrDb);
+fprintf(fid, '- Proposed V3 stable score mode: `%s`\n', cfg.model.v3.stableScoreMode);
+fprintf(fid, '- Proposed V3 stable background mode: `%s`\n', cfg.model.v3.stableBackgroundMode);
+fprintf(fid, '- Proposed V3 note: `V3.3 case9-aligned global stable-pair residual; screening result, not final full paper-profile evidence unless stated.`\n\n');
+end
+if isfield(cfg, 'case9') && isfield(cfg.case9, 'gpAnmFallback')
+fprintf(fid, '- Case 9 GP-ANM fallback enabled: `%d`\n', logical(cfg.case9.gpAnmFallback.enabled));
+fprintf(fid, '- Case 9 GP diagonal proxy enabled: `%d`\n', logical(cfg.case9.gpAnmFallback.addDiagonalProxy));
+fprintf(fid, '- Case 9 GP-ANM fallback max pairs: `%d`\n', cfg.case9.gpAnmFallback.maxPairs);
+fprintf(fid, '- Case 9 GP-ANM fallback Monte Carlo: `%d`\n', cfg.case9.gpAnmFallback.monteCarlo);
+fprintf(fid, '- Case 9 GP-ANM error radius: `%.12g`\n', cfg.case9.gpAnmFallback.errorRadius);
+fprintf(fid, '- Case 9 GP-ANM tau eta: `%.12g`\n\n', cfg.case9.gpAnmFallback.tauEta);
 end
 fprintf(fid, '## Git Status Short\n\n');
 fprintf(fid, '```text\n%s\n```\n', cfg.run.gitStatusShort);
@@ -1587,9 +1627,9 @@ cfg.model.v2 = local_set_default_field(cfg.model.v2, 'lambdaReg', 1e-4);
 cfg.model.v2 = local_set_default_field(cfg.model.v2, 'softmaxGamma', 8);
 cfg.model.v2 = local_set_default_field(cfg.model.v2, 'midMargin', 0.2);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'enabled', true);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'label', 'Proposed V3.2');
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'label', 'Proposed V3.3');
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'base', 'ard');
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stage', 'distribution_matched_stable_pair_refinement');
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stage', 'case9_aligned_global_stable_refinement');
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'segmentCentersDeg', [-50 0 50]);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'order', 1);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambda', 1e-3);
@@ -1602,14 +1642,14 @@ cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskPairCount', 20);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskPairSelectionMode', 'distribution_matched');
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskPairCenterBinDeg', 10);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'guardHeldoutCount', 64);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskSnrDb', 25);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'taskSnrDb', 5);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'numSpsaIterations', 8);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'learningRate', 0.004);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'perturbationScale', 0.004);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'maxGradNorm', 5);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaCal', 1);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaSingle', 0.04);
-cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaPair', 0.05);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaSingle', 0.02);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaPair', 0.08);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaMid', 0);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaAnchor', 50);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'lambdaGuard', 10);
@@ -1620,6 +1660,8 @@ cfg.model.v3 = local_set_default_field(cfg.model.v3, 'softmaxGamma', 8);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'midMargin', 0.2);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'pairObjectiveMode', 'stable_neighborhood');
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableNeighborhoodDeg', 0.6);
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableScoreMode', 'peak');
+cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableBackgroundMode', 'global_competitor');
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableBackgroundWindowDeg', 4);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableEndpointFloor', -2.5);
 cfg.model.v3 = local_set_default_field(cfg.model.v3, 'stableMidMargin', 0.15);
@@ -1643,9 +1685,18 @@ cfg.model.v3 = local_set_default_field(cfg.model.v3, 'maxAnchorRmsDrift', 0.02);
 if isfield(cfg, 'case9')
     cfg.case9 = local_set_default_field(cfg.case9, 'maxPairsPerSeparation', 21);
     cfg.case9 = local_set_default_field(cfg.case9, 'separationSweepDeg', [1 2 3 4 5 6 8 10]);
+    cfg.case9 = local_set_default_field(cfg.case9, 'discriminativeMinSeparationDeg', 6);
     cfg.case9 = local_set_default_field(cfg.case9, 'biasedToleranceDeg', 2);
     cfg.case9 = local_set_default_field(cfg.case9, 'marginalToleranceDeg', 5);
     cfg.case9 = local_set_default_field(cfg.case9, 'pairSelectionMode', 'research_coverage');
+    cfg.case9 = local_set_default_field(cfg.case9, 'gpAnmFallback', struct());
+    cfg.case9.gpAnmFallback = local_set_default_field(cfg.case9.gpAnmFallback, 'enabled', false);
+    cfg.case9.gpAnmFallback = local_set_default_field(cfg.case9.gpAnmFallback, 'addDiagonalProxy', false);
+    cfg.case9.gpAnmFallback = local_set_default_field(cfg.case9.gpAnmFallback, 'maxPairs', 4);
+    cfg.case9.gpAnmFallback = local_set_default_field(cfg.case9.gpAnmFallback, 'monteCarlo', 1);
+    cfg.case9.gpAnmFallback = local_set_default_field(cfg.case9.gpAnmFallback, 'errorRadius', 0.5);
+    cfg.case9.gpAnmFallback = local_set_default_field(cfg.case9.gpAnmFallback, 'tauEta', 1);
+    cfg.case9.gpAnmFallback = local_set_default_field(cfg.case9.gpAnmFallback, 'label', 'GP-ANM fallback');
 end
 if isfield(cfg, 'case7')
     cfg.case7 = local_set_default_field(cfg.case7, 'toleranceDeg', 0.5);
@@ -1883,6 +1934,41 @@ function method = local_method(name, label, manifold)
 method = struct('name', name, 'label', label, 'manifold', manifold);
 end
 
+function gpAnmCfg = local_case9_gp_anm_fallback_config(caseCfg)
+gpAnmCfg = struct();
+if isfield(caseCfg, 'gpAnmFallback') && ~isempty(caseCfg.gpAnmFallback)
+    gpAnmCfg = caseCfg.gpAnmFallback;
+end
+gpAnmCfg = local_set_default_field(gpAnmCfg, 'enabled', false);
+gpAnmCfg = local_set_default_field(gpAnmCfg, 'addDiagonalProxy', false);
+gpAnmCfg = local_set_default_field(gpAnmCfg, 'maxPairs', 4);
+gpAnmCfg = local_set_default_field(gpAnmCfg, 'monteCarlo', 1);
+gpAnmCfg = local_set_default_field(gpAnmCfg, 'errorRadius', 0.5);
+gpAnmCfg = local_set_default_field(gpAnmCfg, 'tauEta', 1);
+gpAnmCfg = local_set_default_field(gpAnmCfg, 'label', 'GP-ANM fallback');
+end
+
+function [manifold, diagnostics] = local_gain_phase_diag_proxy(ctx, calIdx)
+calRatio = ctx.AH(:, calIdx) ./ max(abs(ctx.AI(:, calIdx)), eps) .* exp(-1i * angle(ctx.AI(:, calIdx)));
+diagGain = mean(calRatio, 2);
+manifold = local_normalize_columns(diagGain .* ctx.AI);
+
+testIdx = setdiff(1:numel(ctx.thetaDeg), calIdx);
+if isempty(testIdx)
+    testIdx = 1:numel(ctx.thetaDeg);
+end
+idealMetrics = compute_manifold_metrics(ctx.AH(:, testIdx), ctx.AI(:, testIdx));
+proxyMetrics = compute_manifold_metrics(ctx.AH(:, testIdx), manifold(:, testIdx));
+
+diagnostics = struct();
+diagnostics.model = 'single common diagonal gain-phase correction fitted on calibration angles';
+diagnostics.calibrationAnglesDeg = ctx.thetaDeg(calIdx);
+diagnostics.diagGain = diagGain;
+diagnostics.meanIdealRelativeError = mean(idealMetrics.relativeError);
+diagnostics.meanProxyRelativeError = mean(proxyMetrics.relativeError);
+diagnostics.meanRelativeErrorDelta = diagnostics.meanProxyRelativeError - diagnostics.meanIdealRelativeError;
+end
+
 function methods = local_named_methods(ctx, models, methodKeys)
 methods = repmat(struct('name', '', 'label', '', 'manifold', []), 1, numel(methodKeys));
 
@@ -1902,7 +1988,7 @@ for methodIdx = 1:numel(methodKeys)
         case 'proposed_v2'
             methods(methodIdx) = local_method('proposed_v2', 'Proposed V2', models.AProposedV2);
         case 'proposed_v3'
-            methodLabel = 'Proposed V3.2';
+            methodLabel = 'Proposed V3.3';
             if isfield(models, 'v3Diagnostics') && isfield(models.v3Diagnostics, 'label') && ...
                     ~isempty(models.v3Diagnostics.label)
                 methodLabel = models.v3Diagnostics.label;
@@ -2261,6 +2347,72 @@ if isempty(ardIdx) || isempty(v3Idx)
 end
 deltaResolution = resolutionMean(:, v3Idx) - resolutionMean(:, ardIdx);
 deltaStable = stableMean(:, v3Idx) - stableMean(:, ardIdx);
+end
+
+function summary = local_case9_subset_summary(methods, pairMask, resolutionProb, stableRate, ...
+    pairRmse, marginalRate, biasedRate, unresolvedRate)
+pairMask = pairMask(:);
+summary = struct();
+summary.methodLabels = {methods.label};
+summary.pairCount = sum(pairMask);
+summary.meanResolution = NaN(1, numel(methods));
+summary.meanStable = NaN(1, numel(methods));
+summary.meanPairRmse = NaN(1, numel(methods));
+summary.meanMarginal = NaN(1, numel(methods));
+summary.meanBiased = NaN(1, numel(methods));
+summary.meanUnresolved = NaN(1, numel(methods));
+if ~any(pairMask)
+    return;
+end
+summary.meanResolution = mean(resolutionProb(pairMask, :), 1);
+summary.meanStable = mean(stableRate(pairMask, :), 1);
+summary.meanPairRmse = mean(pairRmse(pairMask, :), 1);
+summary.meanMarginal = mean(marginalRate(pairMask, :), 1);
+summary.meanBiased = mean(biasedRate(pairMask, :), 1);
+summary.meanUnresolved = mean(unresolvedRate(pairMask, :), 1);
+end
+
+function diagnostics = local_case9_v1_experience_diagnostics(methods, overallSummary, ...
+    discriminativeSummary, uniqueSep, resolutionMean, stableMean)
+diagnostics = struct();
+diagnostics.note = ['Proposed V1 remains a useful reference because its low-order global ' ...
+    'phase residual can improve two-source peak selection without task-specific leakage.'];
+diagnostics.uniqueSeparationDeg = uniqueSep;
+diagnostics.v1Idx = find(strcmp({methods.name}, 'proposed_v1'), 1, 'first');
+diagnostics.ardIdx = find(strcmp({methods.name}, 'ard'), 1, 'first');
+diagnostics.v3Idx = find(strcmp({methods.name}, 'proposed_v3'), 1, 'first');
+diagnostics.v1MinusArdStableBySeparation = [];
+diagnostics.v3MinusV1StableBySeparation = [];
+diagnostics.v1MinusArdResolutionBySeparation = [];
+diagnostics.v3MinusV1ResolutionBySeparation = [];
+diagnostics.overallV1MinusArdStable = NaN;
+diagnostics.discriminativeV1MinusArdStable = NaN;
+diagnostics.overallV3MinusV1Stable = NaN;
+diagnostics.discriminativeV3MinusV1Stable = NaN;
+if isempty(diagnostics.v1Idx) || isempty(diagnostics.ardIdx)
+    return;
+end
+
+diagnostics.v1MinusArdStableBySeparation = ...
+    stableMean(:, diagnostics.v1Idx) - stableMean(:, diagnostics.ardIdx);
+diagnostics.v1MinusArdResolutionBySeparation = ...
+    resolutionMean(:, diagnostics.v1Idx) - resolutionMean(:, diagnostics.ardIdx);
+diagnostics.overallV1MinusArdStable = ...
+    overallSummary.meanStable(diagnostics.v1Idx) - overallSummary.meanStable(diagnostics.ardIdx);
+diagnostics.discriminativeV1MinusArdStable = ...
+    discriminativeSummary.meanStable(diagnostics.v1Idx) - discriminativeSummary.meanStable(diagnostics.ardIdx);
+
+if isempty(diagnostics.v3Idx)
+    return;
+end
+diagnostics.v3MinusV1StableBySeparation = ...
+    stableMean(:, diagnostics.v3Idx) - stableMean(:, diagnostics.v1Idx);
+diagnostics.v3MinusV1ResolutionBySeparation = ...
+    resolutionMean(:, diagnostics.v3Idx) - resolutionMean(:, diagnostics.v1Idx);
+diagnostics.overallV3MinusV1Stable = ...
+    overallSummary.meanStable(diagnostics.v3Idx) - overallSummary.meanStable(diagnostics.v1Idx);
+diagnostics.discriminativeV3MinusV1Stable = ...
+    discriminativeSummary.meanStable(diagnostics.v3Idx) - discriminativeSummary.meanStable(diagnostics.v1Idx);
 end
 
 function histInfo = local_case9_pair_stratum_hist(pairAnglesDeg, centerBinDeg)

@@ -26,6 +26,7 @@ result = struct();
 result.mode = modeName;
 result.requestedAngleSetsDeg = requestedAngleSets;
 result.trueAngleSetsDeg = trueAngleSets;
+result.snapshotPolicy = 'common_truth_snapshots_across_methods';
 result.methods = repmat(struct(), 1, numMethods);
 
 for methodIdx = 1:numMethods
@@ -54,6 +55,16 @@ for methodIdx = 1:numMethods
     result.methods(methodIdx).representativeResolutionState = '';
 end
 
+snapshotsByTarget = cell(numTargets, evalCfg.monteCarlo);
+for targetIdx = 1:numTargets
+    trueIdx = trueIdxSets(targetIdx, :);
+    aTrue = ctx.AH(:, trueIdx);
+    for mcIdx = 1:evalCfg.monteCarlo
+        snapshotsByTarget{targetIdx, mcIdx} = local_simulate_snapshots( ...
+            aTrue, evalCfg.snrDb, evalCfg.snapshots);
+    end
+end
+
 for methodIdx = 1:numMethods
     switch modeName
         case 'single'
@@ -69,11 +80,9 @@ for methodIdx = 1:numMethods
 
     for targetIdx = 1:numTargets
         trueAngles = trueAngleSets(targetIdx, :);
-        trueIdx = trueIdxSets(targetIdx, :);
-        aTrue = ctx.AH(:, trueIdx);
 
         for mcIdx = 1:evalCfg.monteCarlo
-            x = local_simulate_snapshots(aTrue, evalCfg.snrDb, evalCfg.snapshots);
+            x = snapshotsByTarget{targetIdx, mcIdx};
             [estAngles, spectrum] = local_estimate_music(x, methods(methodIdx).manifold, ctx.thetaDeg, numSources);
 
             if strcmp(modeName, 'single')
