@@ -283,6 +283,7 @@
 ### 2026-05-07：`fadea59` Proposed V3.3 algorithm documentation
 
 - Version hash: `fadea59`
+- Former pending local hash: `local-8e3fd21c`
 - Base HEAD: `not-a-git-repo`
 - Worktree state: uncommitted documentation changes; this local directory did not expose a `.git` repository, so `git status --short` returned `fatal: not a git repository`.
 - Change: added `algorithms/proposed_algorithm_v3_3.md` to document the current Proposed V3.3 implementation.

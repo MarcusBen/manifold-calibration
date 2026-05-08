@@ -1,6 +1,7 @@
 # Manifest
 
 - Version hash: `fadea59`
+- Former pending local hash: `local-8e3fd21c`
 - Base HEAD: `not-a-git-repo`
 - Batch type: documentation-only
 - Files:
