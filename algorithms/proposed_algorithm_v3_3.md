@@ -19,6 +19,8 @@ V3.3 是当前代码线中的 V3 默认算法。它保留 ARD-anchored safe resi
 - global top-k peak competition；
 - strict stable / biased / marginal / unresolved classification。
 
+2026-05-08 之后，Case 9 的双源主线评估后端切换为 pairwise covariance-fit ML。MUSIC peak picking 仍保留为谱图解释和 Case 11 后端消融基线，但不再作为 Case 9 主结果后端。
+
 V3.3 的目标是：
 
 1. 继续使用 ARD 作为 coarse manifold；
@@ -342,7 +344,15 @@ Output: A_V3.3(theta), diagnostics, fallback status, Case 9 metrics.
 
 ## 13. Evaluation interpretation
 
-V3.3 improves surrogate alignment with Case 9 but is not a final win over Proposed V1.
+V3.3 improves surrogate alignment with Case 9. The current Case 9 mainline should be interpreted as:
+
+```text
+A_V3.3(theta) + pairwise covariance-fit ML backend
+```
+
+The older MUSIC-backend Case 9 evidence remains useful as a historical baseline and backend-failure diagnosis, but it should not be mixed directly with the current pairwise-backend mainline numbers.
+
+### Older MUSIC-backend evidence
 
 Common-snapshot Case 9 rerun, discriminative `>=6 deg`:
 
@@ -359,6 +369,10 @@ Interpretation:
 - V3.3 stable rate remains below Proposed V1;
 - representative spectra should be interpreted only with common snapshots;
 - endpoint balance remains the unresolved issue.
+
+### Current pairwise-backend evidence
+
+Case 9 now reports double-source recovery through a joint covariance-fit pair backend. Case 11 provides the backend ablation for `music / music_pair_rescore / pairwise_grid_ml`. Current medium Case 9 runs should be described as diagnostic mainline evidence unless a full paper-profile run is explicitly cited.
 
 ---
 

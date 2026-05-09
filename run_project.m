@@ -2,7 +2,7 @@ function results = run_project(selectedCases, cfg)
 %RUN_PROJECT Run the MATLAB manifold-calibration experiments.
 %
 % Usage:
-%   run_project()              % run all 10 cases
+%   run_project()              % run current mainline Case 12
 %   run_project([1 3 7])       % run selected cases
 %
 % The code follows the project documents:
@@ -11,7 +11,7 @@ function results = run_project(selectedCases, cfg)
 %   3) DOA snapshots are always generated from the HFSS truth manifold.
 
 if nargin < 1 || isempty(selectedCases)
-    selectedCases = 1:10;
+    selectedCases = 12;
 end
 
 rootDir = fileparts(mfilename('fullpath'));
@@ -49,7 +49,9 @@ caseRunners = { ...
     @case07_single_source_snr, ...
     @case08_single_source_snapshots, ...
     @case09_two_source_resolution, ...
-    @case10_random_split_robustness};
+    @case10_random_split_robustness, ...
+    @case11_backend_diagnostic, ...
+    @case12_core_1to3_source_mainline};
 caseFolderNames = { ...
     'case01_problem_validation', ...
     'case02_dominant_mismatch', ...
@@ -60,7 +62,9 @@ caseFolderNames = { ...
     'case07_single_source_snr', ...
     'case08_single_source_snapshots', ...
     'case09_two_source_resolution', ...
-    'case10_random_split_robustness'};
+    'case10_random_split_robustness', ...
+    'case11_backend_diagnostic', ...
+    'case12_core_1to3_source_mainline'};
 
 results = struct();
 completedCaseFolders = {};
@@ -68,7 +72,7 @@ completedCaseFolders = {};
 for runIdx = 1:numel(selectedCases)
     caseId = selectedCases(runIdx);
     if caseId < 1 || caseId > numel(caseRunners)
-        error('Case id must be an integer in [1, 10].');
+        error('Case id must be an integer in [1, 12].');
     end
 
     fprintf('\n=== Running Case %02d ===\n', caseId);
@@ -1151,22 +1155,16 @@ calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'un
 models = build_sparse_models(ctx, calIdx, cfg.model);
 methods = local_named_methods(ctx, models, {'ideal', 'interp', 'ard', 'proposed_v1', ...
     'proposed_v2', 'proposed_v3', 'oracle'});
-gpAnmCfg = local_case9_gp_anm_fallback_config(cfg.case9);
-gainPhaseDiagDiagnostics = struct();
-if gpAnmCfg.addDiagonalProxy
-    [gainPhaseDiagManifold, gainPhaseDiagDiagnostics] = local_gain_phase_diag_proxy(ctx, calIdx);
-    methods(end+1) = local_method('gain_phase_diag_proxy', 'GP Diag Proxy', gainPhaseDiagManifold); %#ok<AGROW>
-end
 
-[sourcePairs, pairSelection] = local_case9_source_pairs(cfg.case9, ctx, models.calAnglesDeg);
+[sourcePairs, pairSelection] = case09_helpers('source_pairs', cfg.case9, ctx, models.calAnglesDeg);
 [taskPairsDeg, v2TaskPairsDeg, v3TaskPairsDeg] = local_task_pairs_from_models(models);
-[sourcePairs, pairSelection, taskExcludedPairCount] = local_exclude_task_pairs_from_case9( ...
+[sourcePairs, pairSelection, taskExcludedPairCount] = case09_helpers('exclude_task_pairs', ...
     sourcePairs, pairSelection, taskPairsDeg);
-taskEvalOverlapCount = local_count_task_eval_overlap(sourcePairs, taskPairsDeg);
-pairLabels = local_case9_pair_labels(sourcePairs);
+taskEvalOverlapCount = case09_helpers('count_task_eval_overlap', sourcePairs, taskPairsDeg);
+pairLabels = case09_helpers('pair_labels', sourcePairs);
 separationDeg = round(sourcePairs(:, 2) - sourcePairs(:, 1), 10);
 pairCenterDeg = mean(sourcePairs, 2);
-discriminativeMinSeparationDeg = local_optional_case9_field( ...
+discriminativeMinSeparationDeg = case09_helpers('optional_field', ...
     cfg.case9, 'discriminativeMinSeparationDeg', 6);
 discriminativeMask = separationDeg >= discriminativeMinSeparationDeg;
 
@@ -1180,8 +1178,9 @@ evalCfg.toleranceDeg = cfg.case9.toleranceDeg;
 evalCfg.biasedToleranceDeg = cfg.case9.biasedToleranceDeg;
 evalCfg.marginalToleranceDeg = cfg.case9.marginalToleranceDeg;
 evalCfg.collectRepresentativeSpectrum = false;
+evalCfg.backendName = case09_helpers('optional_field', cfg.case9, 'backendName', 'music');
+evalCfg.backendCfg = local_case09_backend_cfg(cfg.case9, ctx.thetaDeg, sourcePairs);
 bench = benchmark_music(ctx, methods, evalCfg);
-gpAnmFallback = benchmark_gp_anm_fallback(ctx, evalCfg, gpAnmCfg);
 
 resolutionProb = zeros(numel(separationDeg), numel(methods));
 pairRmse = zeros(numel(separationDeg), numel(methods));
@@ -1189,6 +1188,7 @@ marginalRate = zeros(numel(separationDeg), numel(methods));
 biasedRate = zeros(numel(separationDeg), numel(methods));
 stableRate = zeros(numel(separationDeg), numel(methods));
 unresolvedRate = zeros(numel(separationDeg), numel(methods));
+separationCollapseRate = zeros(numel(separationDeg), numel(methods));
 for methodIdx = 1:numel(methods)
     resolutionProb(:, methodIdx) = bench.methods(methodIdx).perTargetResolutionRate;
     pairRmse(:, methodIdx) = bench.methods(methodIdx).perTargetRmse;
@@ -1196,25 +1196,29 @@ for methodIdx = 1:numel(methods)
     biasedRate(:, methodIdx) = bench.methods(methodIdx).perTargetBiasedRate;
     stableRate(:, methodIdx) = bench.methods(methodIdx).perTargetStableRate;
     unresolvedRate(:, methodIdx) = bench.methods(methodIdx).perTargetUnresolvedRate;
+    separationCollapseRate(:, methodIdx) = bench.methods(methodIdx).perTargetSeparationCollapseRate;
 end
 
-[uniqueSep, resolutionMean, resolutionStd] = local_case9_group_metric(separationDeg, resolutionProb);
-[~, pairRmseMean, pairRmseStd] = local_case9_group_metric(separationDeg, pairRmse);
-[~, stableMean, stableStd] = local_case9_group_metric(separationDeg, stableRate);
-[pairDeltaResolution, pairDeltaStable] = local_case9_v3_delta_from_ard( ...
+[uniqueSep, resolutionMean, resolutionStd] = case09_helpers('group_metric', separationDeg, resolutionProb);
+[~, pairRmseMean, pairRmseStd] = case09_helpers('group_metric', separationDeg, pairRmse);
+[~, stableMean, stableStd] = case09_helpers('group_metric', separationDeg, stableRate);
+[~, collapseMean, collapseStd] = case09_helpers('group_metric', separationDeg, separationCollapseRate);
+[pairDeltaResolution, pairDeltaStable] = case09_helpers('v3_delta_from_ard', ...
     methods, resolutionMean, stableMean);
-overallSummary = local_case9_subset_summary(methods, true(size(separationDeg)), ...
+overallSummary = case09_helpers('subset_summary', methods, true(size(separationDeg)), ...
     resolutionProb, stableRate, pairRmse, marginalRate, biasedRate, unresolvedRate);
-discriminativeSummary = local_case9_subset_summary(methods, discriminativeMask, ...
+discriminativeSummary = case09_helpers('subset_summary', methods, discriminativeMask, ...
     resolutionProb, stableRate, pairRmse, marginalRate, biasedRate, unresolvedRate);
-v1ExperienceDiagnostics = local_case9_v1_experience_diagnostics( ...
+overallSummary.meanSeparationCollapse = mean(separationCollapseRate, 1);
+discriminativeSummary.meanSeparationCollapse = mean(separationCollapseRate(discriminativeMask, :), 1);
+v1ExperienceDiagnostics = case09_helpers('v1_experience_diagnostics', ...
     methods, overallSummary, discriminativeSummary, uniqueSep, resolutionMean, stableMean);
-centerBinDeg = local_optional_struct_field(cfg.model.v3, 'taskPairCenterBinDeg', 10);
-taskStratumHist = local_case9_pair_stratum_hist(v3TaskPairsDeg, centerBinDeg);
-evalStratumHist = local_case9_pair_stratum_hist(sourcePairs, centerBinDeg);
-v3StablePairDiagnostics = local_v3_stable_pair_diagnostics_from_models(models);
+centerBinDeg = case09_helpers('optional_field', cfg.model.v3, 'taskPairCenterBinDeg', 10);
+taskStratumHist = case09_helpers('pair_stratum_hist', v3TaskPairsDeg, centerBinDeg);
+evalStratumHist = case09_helpers('pair_stratum_hist', sourcePairs, centerBinDeg);
+v3StablePairDiagnostics = case09_helpers('v3_stable_pair_diagnostics', models);
 
-[exampleIdx, exampleSelectionReason] = local_case9_select_example_pair(bench, methods, separationDeg, ...
+[exampleIdx, exampleSelectionReason] = case09_helpers('select_example_pair', bench, methods, separationDeg, ...
     cfg.case9.exampleTargetResolutionProb, pairSelection);
 examplePair = sourcePairs(exampleIdx, :);
 exampleStateMatrix = zeros(numel(methods), 4);
@@ -1280,10 +1284,11 @@ end
 grid on;
 xlabel('Scan angle (deg)');
 ylabel('Pseudo-spectrum (dB)');
-title(sprintf('Case 9: representative hard spectrum at [%g, %g] deg', ...
+title(sprintf('Case 9: representative MUSIC spectrum at [%g, %g] deg', ...
     examplePair(1), examplePair(2)));
 legend({methods.label}, 'Location', 'best');
-local_add_truth_scan_sgtitle('Case 9: near-threshold two-source resolution');
+local_add_truth_scan_sgtitle('Case 9: near-threshold two-source resolution', ...
+    local_case09_backend_subtitle(evalCfg.backendName));
 save_figure(fig, fullfile(outDir, 'two_source_resolution.png'));
 
 caseResult = struct();
@@ -1309,6 +1314,7 @@ caseResult.marginalRate = marginalRate;
 caseResult.biasedRate = biasedRate;
 caseResult.stableRate = stableRate;
 caseResult.unresolvedRate = unresolvedRate;
+caseResult.estimatedSeparationCollapseRate = separationCollapseRate;
 caseResult.groupedSeparationDeg = uniqueSep;
 caseResult.groupedResolutionMean = resolutionMean;
 caseResult.groupedResolutionStd = resolutionStd;
@@ -1316,6 +1322,8 @@ caseResult.groupedPairRmseMean = pairRmseMean;
 caseResult.groupedPairRmseStd = pairRmseStd;
 caseResult.groupedStableMean = stableMean;
 caseResult.groupedStableStd = stableStd;
+caseResult.groupedSeparationCollapseMean = collapseMean;
+caseResult.groupedSeparationCollapseStd = collapseStd;
 caseResult.pairDeltaResolution = pairDeltaResolution;
 caseResult.pairDeltaStable = pairDeltaStable;
 caseResult.overallSummary = overallSummary;
@@ -1324,13 +1332,84 @@ caseResult.v1ExperienceDiagnostics = v1ExperienceDiagnostics;
 caseResult.taskStratumHist = taskStratumHist;
 caseResult.evalStratumHist = evalStratumHist;
 caseResult.v3StablePairDiagnostics = v3StablePairDiagnostics;
-caseResult.gainPhaseDiagDiagnostics = gainPhaseDiagDiagnostics;
-caseResult.gpAnmFallback = gpAnmFallback;
 caseResult.examplePairIndex = exampleIdx;
 caseResult.exampleSelectionReason = exampleSelectionReason;
+caseResult.backendName = evalCfg.backendName;
+caseResult.backendCfg = evalCfg.backendCfg;
 caseResult.benchmark = bench;
 caseResult.exampleBenchmark = exampleBench;
 save(fullfile(outDir, 'case09_results.mat'), 'caseResult');
+end
+
+function backendCfg = local_case09_backend_cfg(case9Cfg, thetaDeg, sourcePairs)
+backendCfg = struct();
+backendCfg.numSources = 2;
+backendCfg.candidatePeakCount = case09_helpers('optional_field', ...
+    case9Cfg, 'backendCandidatePeakCount', 12);
+backendCfg.minimumSeparationDeg = case09_helpers('optional_field', ...
+    case9Cfg, 'backendMinimumSeparationDeg', 2);
+backendCfg.maximumSeparationDeg = case09_helpers('optional_field', ...
+    case9Cfg, 'backendMaximumSeparationDeg', 30);
+backendCfg.topCandidateCount = case09_helpers('optional_field', ...
+    case9Cfg, 'backendTopCandidateCount', 8);
+backendCfg.candidateAnglesDeg = local_case09_backend_candidate_angles(thetaDeg, sourcePairs, case9Cfg);
+backendCfg.pairIndex = local_case09_backend_pair_index(thetaDeg, backendCfg);
+end
+
+function candidateAnglesDeg = local_case09_backend_candidate_angles(thetaDeg, sourcePairs, case9Cfg)
+strideDeg = case09_helpers('optional_field', case9Cfg, 'backendCandidateAngleStrideDeg', 1);
+thetaDeg = thetaDeg(:).';
+minAngle = max(min(thetaDeg), min(sourcePairs(:)) - 20);
+maxAngle = min(max(thetaDeg), max(sourcePairs(:)) + 20);
+if strideDeg <= 0
+    candidateAnglesDeg = thetaDeg(thetaDeg >= minAngle & thetaDeg <= maxAngle);
+    return;
+end
+
+queryAngles = minAngle:strideDeg:maxAngle;
+candidateIdx = zeros(1, numel(queryAngles));
+tolDeg = local_angle_tolerance_from_grid(thetaDeg);
+keep = false(1, numel(queryAngles));
+for queryIdx = 1:numel(queryAngles)
+    [distance, nearestIdx] = min(abs(thetaDeg - queryAngles(queryIdx)));
+    if distance <= tolDeg
+        candidateIdx(queryIdx) = nearestIdx;
+        keep(queryIdx) = true;
+    end
+end
+candidateAnglesDeg = thetaDeg(unique(candidateIdx(keep), 'stable'));
+end
+
+function pairIdx = local_case09_backend_pair_index(thetaDeg, backendCfg)
+candidateIdx = zeros(1, numel(backendCfg.candidateAnglesDeg));
+for angleIdx = 1:numel(backendCfg.candidateAnglesDeg)
+    candidateIdx(angleIdx) = local_angle_index(thetaDeg, backendCfg.candidateAnglesDeg(angleIdx));
+end
+candidateIdx = unique(candidateIdx, 'stable');
+pairIdx = zeros(0, 2);
+for firstIdx = 1:numel(candidateIdx)-1
+    for secondIdx = firstIdx+1:numel(candidateIdx)
+        candidate = [candidateIdx(firstIdx), candidateIdx(secondIdx)];
+        separationDeg = abs(diff(thetaDeg(candidate)));
+        if separationDeg >= backendCfg.minimumSeparationDeg && separationDeg <= backendCfg.maximumSeparationDeg
+            pairIdx(end+1, :) = candidate; %#ok<AGROW>
+        end
+    end
+end
+end
+
+function subtitle = local_case09_backend_subtitle(backendName)
+switch lower(strtrim(backendName))
+    case 'music'
+        backendLabel = 'MUSIC peak picking';
+    case 'music_pair_rescore'
+        backendLabel = 'MUSIC peak candidates with covariance-fit pair rescoring';
+    case 'pairwise_grid_ml'
+        backendLabel = 'pairwise grid covariance-fit ML';
+    otherwise
+        backendLabel = strrep(backendName, '_', ' ');
+end
+subtitle = sprintf('HFSS truth snapshots; estimator manifolds use %s backend', backendLabel);
 end
 
 function caseResult = case10_random_split_robustness(cfg, ctx)
@@ -1407,6 +1486,595 @@ caseResult.calibrationAnglesDeg = splitAngles;
 save(fullfile(outDir, 'case10_results.mat'), 'caseResult');
 end
 
+function caseResult = case11_backend_diagnostic(cfg, ctx)
+rng(cfg.randomSeed + 11, 'twister');
+outDir = local_case_output_dir(cfg, 'case11_backend_diagnostic');
+
+calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'uniform');
+models = build_sparse_models(ctx, calIdx, cfg.model);
+methods = local_named_methods(ctx, models, cfg.case11.methodKeys);
+
+evalCfg = struct();
+evalCfg.mode = 'double';
+evalCfg.trueAngles = cfg.case11.sourcePairsDeg;
+evalCfg.snrDb = cfg.case11.evalSNRDb;
+evalCfg.snapshots = cfg.case11.snapshots;
+evalCfg.monteCarlo = cfg.case11.monteCarlo;
+evalCfg.toleranceDeg = cfg.case11.toleranceDeg;
+evalCfg.biasedToleranceDeg = cfg.case11.biasedToleranceDeg;
+evalCfg.marginalToleranceDeg = cfg.case11.marginalToleranceDeg;
+evalCfg.collectRepresentative = true;
+
+backendCfg = struct();
+backendCfg.backendNames = cfg.case11.backendNames;
+backendCfg.numSources = 2;
+backendCfg.candidatePeakCount = cfg.case11.candidatePeakCount;
+backendCfg.minimumSeparationDeg = cfg.case11.minimumSeparationDeg;
+backendCfg.maximumSeparationDeg = cfg.case11.maximumSeparationDeg;
+backendCfg.topCandidateCount = cfg.case11.topCandidateCount;
+backendCfg.candidateAnglesDeg = local_case11_candidate_angles(ctx.thetaDeg, cfg.case11);
+
+bench = benchmark_doa_backends(ctx, methods, evalCfg, backendCfg);
+
+caseResult = struct();
+caseResult.outputDir = outDir;
+caseResult.sourcePairsDeg = bench.trueAngleSetsDeg;
+caseResult.backendNames = bench.backendNames;
+caseResult.methodLabels = bench.methodLabels;
+caseResult.methodNames = bench.methodNames;
+caseResult.snapshotPolicy = bench.snapshotPolicy;
+caseResult.rmse = bench.rmse;
+caseResult.resolutionRate = bench.resolutionRate;
+caseResult.stableRate = bench.stableRate;
+caseResult.marginalRate = bench.marginalRate;
+caseResult.biasedRate = bench.biasedRate;
+caseResult.unresolvedRate = bench.unresolvedRate;
+caseResult.collapseRate = bench.collapseRate;
+caseResult.oracleCeilingDelta = bench.summary.oracleGainOverMusic;
+caseResult.backendDiagnostics = bench.backendDiagnostics;
+caseResult.representative = bench.representative;
+caseResult.summary = bench.summary;
+
+local_plot_case11_backend_summary(caseResult, outDir);
+save(fullfile(outDir, 'case11_results.mat'), 'caseResult');
+end
+
+function candidateAnglesDeg = local_case11_candidate_angles(thetaDeg, case11Cfg)
+strideDeg = case11Cfg.candidateAngleStrideDeg;
+if isempty(strideDeg) || strideDeg <= 0
+    strideDeg = 1;
+end
+
+minAngle = max(min(thetaDeg), min(case11Cfg.sourcePairsDeg(:)) - 20);
+maxAngle = min(max(thetaDeg), max(case11Cfg.sourcePairsDeg(:)) + 20);
+candidateAnglesDeg = minAngle:strideDeg:maxAngle;
+candidateAnglesDeg = unique([candidateAnglesDeg(:); case11Cfg.sourcePairsDeg(:)]).';
+end
+
+function local_plot_case11_backend_summary(caseResult, outDir)
+backendLabels = local_case11_display_labels(caseResult.backendNames);
+methodLabels = local_case11_display_labels(caseResult.methodLabels);
+meanResolution = local_case11_backend_method_mean(caseResult.resolutionRate);
+meanStable = local_case11_backend_method_mean(caseResult.stableRate);
+
+local_plot_case11_backend_metric(backendLabels, methodLabels, meanResolution, ...
+    'Resolution rate', 'Backend resolution rate', [0 1], ...
+    fullfile(outDir, 'backend_resolution_summary.png'));
+local_plot_case11_backend_metric(backendLabels, methodLabels, meanStable, ...
+    'Stable rate', 'Backend stable rate', [0 1], ...
+    fullfile(outDir, 'backend_stable_summary.png'));
+local_plot_case11_oracle_ceiling(backendLabels, caseResult.summary, ...
+    fullfile(outDir, 'backend_oracle_ceiling.png'));
+end
+
+function local_plot_case11_backend_metric(backendLabels, methodLabels, values, ylabelText, titleText, yLimits, filePath)
+fig = figure('Visible', 'off', 'Position', [120 120 980 560]);
+local_case11_bar(backendLabels, values);
+grid on;
+if ~isempty(yLimits)
+    ylim(yLimits);
+end
+ylabel(ylabelText);
+title(titleText, 'FontWeight', 'bold');
+set(gca, 'TickLabelInterpreter', 'none');
+if numel(methodLabels) > 1
+    legend(methodLabels, 'Location', 'bestoutside', 'Interpreter', 'none');
+end
+save_figure(fig, filePath);
+end
+
+function local_plot_case11_oracle_ceiling(backendLabels, summary, filePath)
+oracleGain = local_case11_summary_vector(summary, 'oracleGainOverMusic', numel(backendLabels));
+v3Gap = local_case11_summary_vector(summary, 'v3ToOracleGap', numel(backendLabels));
+plotValues = [oracleGain(:), v3Gap(:)];
+
+fig = figure('Visible', 'off', 'Position', [140 140 980 560]);
+local_case11_bar(backendLabels, plotValues);
+grid on;
+ylabel('Resolution-rate delta');
+title('Oracle backend gain and V3-to-oracle gap', 'FontWeight', 'bold');
+set(gca, 'TickLabelInterpreter', 'none');
+legend({'Oracle gain over MUSIC', 'V3 gap to oracle'}, ...
+    'Location', 'bestoutside', 'Interpreter', 'none');
+save_figure(fig, filePath);
+end
+
+function metricMean = local_case11_backend_method_mean(metric)
+metricMean = reshape(mean(metric, 2), [size(metric, 1), size(metric, 3)]);
+end
+
+function values = local_case11_summary_vector(summary, fieldName, expectedCount)
+values = NaN(expectedCount, 1);
+if isstruct(summary) && isfield(summary, fieldName) && ~isempty(summary.(fieldName))
+    rawValues = summary.(fieldName);
+    copyCount = min(numel(rawValues), expectedCount);
+    values(1:copyCount) = rawValues(1:copyCount);
+end
+end
+
+function local_case11_bar(backendLabels, values)
+if isempty(values)
+    bar(categorical(backendLabels), values);
+elseif size(values, 2) == 1
+    bar(categorical(backendLabels), values(:, 1));
+else
+    bar(categorical(backendLabels), values);
+end
+end
+
+function labels = local_case11_display_labels(labels)
+for labelIdx = 1:numel(labels)
+    labelText = char(labels{labelIdx});
+    switch labelText
+        case 'music'
+            labelText = 'MUSIC';
+        case 'music_pair_rescore'
+            labelText = 'MUSIC pair rescore';
+        case 'pairwise_grid_ml'
+            labelText = 'Pairwise grid ML';
+        case 'proposed_v3'
+            labelText = 'Proposed V3.3';
+        case 'proposed_v1'
+            labelText = 'Proposed V1';
+        case 'ard'
+            labelText = 'ARD';
+        case 'oracle'
+            labelText = 'HFSS Oracle';
+        otherwise
+            labelText = strrep(labelText, '_', ' ');
+    end
+    labels{labelIdx} = labelText;
+end
+end
+
+function caseResult = case12_core_1to3_source_mainline(cfg, ctx)
+rng(cfg.randomSeed + 12, 'twister');
+outDir = local_case_output_dir(cfg, 'case12_core_1to3_source_mainline');
+
+calIdx = select_calibration_indices(ctx.thetaDeg, cfg.case3.representativeL, 'uniform');
+models = build_sparse_models(ctx, calIdx, cfg.model);
+methods = local_named_methods(ctx, models, cfg.core.methodKeys);
+
+caseResult = struct();
+caseResult.outputDir = outDir;
+caseResult.coreConfig = cfg.core;
+caseResult.methodLabels = {methods.label};
+caseResult.methodNames = {methods.name};
+caseResult.calibrationAnglesDeg = ctx.thetaDeg(calIdx);
+caseResult.manifoldSanity = local_core_manifold_sanity(ctx, methods);
+caseResult.singleSource = local_core_source_run(ctx, methods, cfg, 1, ...
+    cfg.core.singleSourceAnglesDeg(:));
+caseResult.twoSource = local_core_source_run(ctx, methods, cfg, 2, ...
+    cfg.core.twoSourcePairsDeg);
+caseResult.threeSource = local_core_source_run(ctx, methods, cfg, 3, ...
+    cfg.core.threeSourceSetsDeg);
+caseResult.backendAblation = local_core_backend_ablation(ctx, methods, cfg);
+
+local_plot_case12_core_summary(caseResult, outDir);
+local_plot_case12_representative_spectra(caseResult, outDir);
+local_plot_case12_paper_figures(caseResult, outDir);
+save(fullfile(outDir, 'case12_results.mat'), 'caseResult');
+end
+
+function sanity = local_core_manifold_sanity(ctx, methods)
+numMethods = numel(methods);
+meanRelativeError = zeros(1, numMethods);
+maxRelativeError = zeros(1, numMethods);
+meanCorrelationLoss = zeros(1, numMethods);
+for methodIdx = 1:numMethods
+    metrics = compute_manifold_metrics(ctx.AH, methods(methodIdx).manifold);
+    meanRelativeError(methodIdx) = mean(metrics.relativeError);
+    maxRelativeError(methodIdx) = max(metrics.relativeError);
+    meanCorrelationLoss(methodIdx) = mean(1 - metrics.correlation);
+end
+sanity = struct();
+sanity.methodLabels = {methods.label};
+sanity.methodNames = {methods.name};
+sanity.meanRelativeError = meanRelativeError;
+sanity.maxRelativeError = maxRelativeError;
+sanity.meanCorrelationLoss = meanCorrelationLoss;
+end
+
+function result = local_core_source_run(ctx, methods, cfg, numSources, trueAngleSetsDeg)
+evalCfg = struct();
+evalCfg.numSources = numSources;
+evalCfg.trueAngles = trueAngleSetsDeg;
+evalCfg.snrDb = cfg.core.evalSNRDb;
+evalCfg.snapshots = cfg.core.snapshots;
+evalCfg.monteCarlo = cfg.core.monteCarlo;
+evalCfg.toleranceDeg = 1.0;
+evalCfg.backendName = cfg.core.backendName;
+evalCfg.threeSourceBackendName = cfg.core.threeSourceBackendName;
+
+backendCfg = local_core_backend_cfg(cfg.core, ctx.thetaDeg, trueAngleSetsDeg, numSources);
+result = benchmark_core_sources(ctx, methods, evalCfg, backendCfg);
+result.backendCfg = backendCfg;
+end
+
+function backendCfg = local_core_backend_cfg(coreCfg, thetaDeg, angleSetsDeg, numSources)
+if numSources == 3
+    strideDeg = local_optional_config_value(coreCfg, 'threeSourceCandidateAngleStrideDeg', ...
+        coreCfg.backendCandidateAngleStrideDeg);
+else
+    strideDeg = coreCfg.backendCandidateAngleStrideDeg;
+end
+if isempty(strideDeg) || strideDeg <= 0
+    strideDeg = 1;
+end
+minAngle = max(min(thetaDeg), min(angleSetsDeg(:)) - 18);
+maxAngle = min(max(thetaDeg), max(angleSetsDeg(:)) + 18);
+candidateAnglesDeg = minAngle:strideDeg:maxAngle;
+candidateAnglesDeg = unique([candidateAnglesDeg(:); angleSetsDeg(:)]).';
+
+backendCfg = struct();
+backendCfg.candidateAnglesDeg = candidateAnglesDeg;
+backendCfg.minimumSeparationDeg = coreCfg.backendMinimumSeparationDeg;
+backendCfg.maximumSeparationDeg = coreCfg.backendMaximumSeparationDeg;
+backendCfg.topCandidateCount = coreCfg.topCandidateCount;
+backendCfg.numSources = numSources;
+backendCfg.scanAnglesDeg = thetaDeg;
+end
+
+function value = local_optional_config_value(inputStruct, fieldName, defaultValue)
+if isfield(inputStruct, fieldName) && ~isempty(inputStruct.(fieldName))
+    value = inputStruct.(fieldName);
+else
+    value = defaultValue;
+end
+end
+
+function backendResult = local_core_backend_ablation(ctx, methods, cfg)
+evalCfg = struct();
+evalCfg.mode = 'double';
+evalCfg.trueAngles = cfg.core.twoSourcePairsDeg;
+evalCfg.snrDb = cfg.core.evalSNRDb;
+evalCfg.snapshots = cfg.core.snapshots;
+evalCfg.monteCarlo = cfg.core.monteCarlo;
+evalCfg.toleranceDeg = 1.0;
+evalCfg.biasedToleranceDeg = cfg.case9.biasedToleranceDeg;
+evalCfg.marginalToleranceDeg = cfg.case9.marginalToleranceDeg;
+evalCfg.collectRepresentative = true;
+
+backendCfg = local_core_backend_cfg(cfg.core, ctx.thetaDeg, cfg.core.twoSourcePairsDeg, 2);
+backendCfg.backendNames = {'music', 'music_pair_rescore', 'pairwise_grid_ml'};
+backendCfg.candidatePeakCount = 12;
+backendResult = benchmark_doa_backends(ctx, methods, evalCfg, backendCfg);
+end
+
+function local_plot_case12_core_summary(caseResult, outDir)
+methodLabels = local_case11_display_labels(caseResult.methodLabels);
+rmseValues = [caseResult.singleSource.summary.meanRmse(:), ...
+    caseResult.twoSource.summary.meanRmse(:), ...
+    caseResult.threeSource.summary.meanRmse(:)];
+resolvedValues = [caseResult.singleSource.summary.meanResolvedRate(:), ...
+    caseResult.twoSource.summary.meanResolvedRate(:), ...
+    caseResult.threeSource.summary.meanResolvedRate(:)];
+
+fig = figure('Visible', 'off', 'Position', [120 120 1180 520]);
+bar(categorical(methodLabels), rmseValues);
+grid on;
+ylabel('Mean RMSE (deg)');
+title('Case 12: Core 1/2/3-source RMSE', 'FontWeight', 'bold');
+legend({'1 source', '2 sources', '3 sources'}, 'Location', 'bestoutside');
+set(gca, 'TickLabelInterpreter', 'none');
+save_figure(fig, fullfile(outDir, 'core_rmse_summary.png'));
+
+fig = figure('Visible', 'off', 'Position', [120 120 1180 520]);
+bar(categorical(methodLabels), resolvedValues);
+grid on;
+ylim([0 1]);
+ylabel('Resolved rate');
+title('Case 12: Core 1/2/3-source resolved rate', 'FontWeight', 'bold');
+legend({'1 source', '2 sources', '3 sources'}, 'Location', 'bestoutside');
+set(gca, 'TickLabelInterpreter', 'none');
+save_figure(fig, fullfile(outDir, 'core_resolved_summary.png'));
+end
+
+function local_plot_case12_representative_spectra(caseResult, outDir)
+local_plot_case12_spectrum(caseResult.twoSource, 'Case 12: two-source representative spectrum', ...
+    fullfile(outDir, 'core_two_source_spectrum.png'));
+local_plot_case12_three_source_spectrum(caseResult.threeSource, ...
+    fullfile(outDir, 'core_three_source_spectrum.png'));
+end
+
+function local_plot_case12_paper_figures(caseResult, outDir)
+methodLabels = local_case11_display_labels(caseResult.methodLabels);
+rmseValues = [caseResult.singleSource.summary.meanRmse(:), ...
+    caseResult.twoSource.summary.meanRmse(:), ...
+    caseResult.threeSource.summary.meanRmse(:)];
+resolvedValues = [caseResult.singleSource.summary.meanResolvedRate(:), ...
+    caseResult.twoSource.summary.meanResolvedRate(:), ...
+    caseResult.threeSource.summary.meanResolvedRate(:)];
+
+local_plot_case12_paper_metric(methodLabels, caseResult.methodNames, rmseValues, ...
+    'Mean RMSE (deg)', 'Case 12: core RMSE by source count', ...
+    fullfile(outDir, 'paper_core_rmse_ranked.png'), []);
+local_plot_case12_paper_metric(methodLabels, caseResult.methodNames, resolvedValues, ...
+    'Resolved rate', 'Case 12: core resolved rate by source count', ...
+    fullfile(outDir, 'paper_core_resolved_ranked.png'), [0 1]);
+local_plot_case12_paper_three_source_spectrum(caseResult.threeSource, ...
+    fullfile(outDir, 'paper_three_source_spectrum.png'));
+end
+
+function local_plot_case12_paper_metric(methodLabels, methodNames, values, ylabelText, titleText, filePath, yLimits)
+fig = figure('Visible', 'off', 'Position', [120 120 1180 560]);
+hold on;
+sourceLabels = {'1 source', '2 sources', '3 sources'};
+markers = {'o', 's', '^'};
+lineStyles = {'-', '--', '-.'};
+xBase = 1:numel(methodLabels);
+xOffsets = [-0.12, 0, 0.12];
+colors = lines(3);
+for sourceIdx = 1:3
+    plot(xBase + xOffsets(sourceIdx), values(:, sourceIdx), ...
+        'LineStyle', lineStyles{sourceIdx}, 'Marker', markers{sourceIdx}, ...
+        'LineWidth', 1.8, 'MarkerSize', 7, 'Color', colors(sourceIdx, :));
+end
+grid on;
+xlim([0.5, numel(methodLabels) + 0.5]);
+if ~isempty(yLimits)
+    ylim(yLimits);
+else
+    ylim([0, max(values(:)) * 1.08]);
+end
+set(gca, 'XTick', xBase, 'XTickLabel', methodLabels, 'TickLabelInterpreter', 'none');
+xtickangle(25);
+ylabel(ylabelText);
+title(titleText, 'FontWeight', 'bold');
+legend(sourceLabels, 'Location', 'bestoutside');
+local_annotate_case12_metric_values(xBase, xOffsets, values, methodNames);
+save_figure(fig, filePath);
+end
+
+function local_annotate_case12_metric_values(xBase, xOffsets, values, methodNames)
+v3Idx = find(strcmp(methodNames, 'proposed_v3'), 1, 'first');
+oracleIdx = find(strcmp(methodNames, 'oracle'), 1, 'first');
+excluded = strcmp(methodNames, 'ideal') | strcmp(methodNames, 'oracle');
+isRatePlot = all(values(:) >= 0) && all(values(:) <= 1);
+for sourceIdx = 1:size(values, 2)
+    candidates = values(:, sourceIdx);
+    candidates(excluded(:)) = NaN;
+    if isRatePlot
+        [~, bestIdx] = max(candidates);
+    else
+        [~, bestIdx] = min(candidates);
+    end
+    annotateIdx = unique([v3Idx, oracleIdx, bestIdx], 'stable');
+    annotateIdx = annotateIdx(~isnan(annotateIdx) & annotateIdx > 0);
+    for idx = reshape(annotateIdx, 1, [])
+        value = values(idx, sourceIdx);
+        if ~isfinite(value)
+            continue;
+        end
+        text(xBase(idx) + xOffsets(sourceIdx), value, sprintf(' %.3g', value), ...
+            'FontSize', 8, 'Rotation', 35, 'VerticalAlignment', 'bottom', ...
+            'HorizontalAlignment', 'left');
+    end
+end
+end
+
+function local_plot_case12_spectrum(sourceResult, titleText, filePath)
+fig = figure('Visible', 'off', 'Position', [120 120 1080 560]);
+hold on;
+trueAngles = sort(sourceResult.trueAngleSetsDeg(1, :));
+for methodIdx = 1:numel(sourceResult.methodLabels)
+    spectrum = sourceResult.representative(methodIdx).spectrum;
+    if isempty(spectrum)
+        continue;
+    end
+    spectrumDb = 10 * log10(real(spectrum) ./ max(real(spectrum)));
+    plot(sourceResult.backendCfg.scanAnglesDeg, spectrumDb, 'LineWidth', 1.5);
+end
+local_plot_case12_truth_lines(trueAngles);
+grid on;
+xlabel('Angle (deg)');
+ylabel('Normalized MUSIC spectrum (dB)');
+title(titleText, 'FontWeight', 'bold');
+legend(local_case11_display_labels(sourceResult.methodLabels), ...
+    'Location', 'bestoutside', 'Interpreter', 'none');
+ylim([-40 1]);
+save_figure(fig, filePath);
+end
+
+function local_plot_case12_three_source_spectrum(sourceResult, filePath)
+fig = figure('Visible', 'off', 'Position', [120 120 1180 720]);
+layout = tiledlayout(2, 1, 'Padding', 'compact', 'TileSpacing', 'compact');
+trueAngles = sort(sourceResult.trueAngleSetsDeg(1, :));
+colors = lines(numel(sourceResult.methodLabels));
+
+nexttile;
+hold on;
+for methodIdx = 1:numel(sourceResult.methodLabels)
+    spectrum = sourceResult.representative(methodIdx).spectrum;
+    if isempty(spectrum)
+        continue;
+    end
+    spectrumDb = 10 * log10(real(spectrum) ./ max(real(spectrum)));
+    plot(sourceResult.backendCfg.scanAnglesDeg, spectrumDb, 'LineWidth', 1.5, ...
+        'Color', colors(methodIdx, :));
+    local_plot_case12_estimated_markers(sourceResult.representative(methodIdx).estAnglesDeg, ...
+        colors(methodIdx, :), -38, methodIdx);
+end
+local_plot_case12_truth_lines(trueAngles);
+grid on;
+xlabel('Angle (deg)');
+ylabel('Normalized MUSIC spectrum (dB)');
+ylim([-40 1]);
+title('MUSIC pseudo-spectrum', 'FontWeight', 'bold');
+
+nexttile;
+hold on;
+for methodIdx = 1:numel(sourceResult.methodLabels)
+    diagnostics = sourceResult.representative(methodIdx).diagnostics;
+    if ~isfield(diagnostics, 'marginalAnglesDeg') || ...
+            ~isfield(diagnostics, 'marginalConfidence')
+        continue;
+    end
+    marginalConfidence = diagnostics.marginalConfidence(:).';
+    plot(diagnostics.marginalAnglesDeg, marginalConfidence, ...
+        'o-', 'LineWidth', 1.5, 'MarkerSize', 4, 'Color', colors(methodIdx, :));
+    finiteConfidence = marginalConfidence(isfinite(marginalConfidence));
+    if isempty(finiteConfidence)
+        markerY = NaN;
+    else
+        markerY = min(finiteConfidence);
+    end
+    local_plot_case12_estimated_markers(sourceResult.representative(methodIdx).estAnglesDeg, ...
+        colors(methodIdx, :), markerY, methodIdx);
+end
+local_plot_case12_truth_lines(trueAngles);
+grid on;
+xlabel('Angle (deg)');
+ylabel('Triplet marginal confidence');
+title('Triplet-grid backend marginal confidence', 'FontWeight', 'bold');
+
+legend(local_case11_display_labels(sourceResult.methodLabels), ...
+    'Location', 'bestoutside', 'Interpreter', 'none');
+title(layout, 'Case 12: three-source MUSIC spectrum + triplet-grid backend marginal score', ...
+    'FontWeight', 'bold');
+save_figure(fig, filePath);
+end
+
+function local_plot_case12_paper_three_source_spectrum(sourceResult, filePath)
+selectedNames = {'ard', 'proposed_v3', 'oracle', 'ideal'};
+selectedIdx = local_case12_method_indices(sourceResult.methodNames, selectedNames);
+fig = figure('Visible', 'off', 'Position', [120 120 1180 720]);
+layout = tiledlayout(2, 1, 'Padding', 'compact', 'TileSpacing', 'compact');
+trueAngles = sort(sourceResult.trueAngleSetsDeg(1, :));
+xWindow = [max(min(sourceResult.backendCfg.scanAnglesDeg), min(trueAngles) - 10), ...
+    min(max(sourceResult.backendCfg.scanAnglesDeg), max(trueAngles) + 10)];
+[colors, lineStyles, markers] = local_case12_paper_styles(numel(selectedIdx));
+
+nexttile;
+hold on;
+for plotIdx = 1:numel(selectedIdx)
+    methodIdx = selectedIdx(plotIdx);
+    spectrum = sourceResult.representative(methodIdx).spectrum;
+    if isempty(spectrum)
+        continue;
+    end
+    spectrumDb = 10 * log10(real(spectrum) ./ max(real(spectrum)));
+    spectrumDb = local_case12_smooth_vector(spectrumDb, 5);
+    plot(sourceResult.backendCfg.scanAnglesDeg, spectrumDb, ...
+        'LineStyle', lineStyles{plotIdx}, 'Marker', 'none', 'LineWidth', 2.0, ...
+        'Color', colors(plotIdx, :));
+    local_plot_case12_estimated_markers(sourceResult.representative(methodIdx).estAnglesDeg, ...
+        colors(plotIdx, :), -34, plotIdx);
+end
+local_plot_case12_truth_lines(trueAngles);
+grid on;
+xlim(xWindow);
+ylim([-36 1]);
+xlabel('Angle (deg)');
+ylabel('Smoothed MUSIC spectrum (dB)');
+title('Display-smoothed MUSIC pseudo-spectrum', 'FontWeight', 'bold');
+
+nexttile;
+hold on;
+for plotIdx = 1:numel(selectedIdx)
+    methodIdx = selectedIdx(plotIdx);
+    diagnostics = sourceResult.representative(methodIdx).diagnostics;
+    if ~isfield(diagnostics, 'marginalAnglesDeg') || ...
+            ~isfield(diagnostics, 'marginalConfidence')
+        continue;
+    end
+    marginalConfidence = diagnostics.marginalConfidence(:).';
+    plot(diagnostics.marginalAnglesDeg, marginalConfidence, ...
+        'LineStyle', lineStyles{plotIdx}, 'Marker', markers{plotIdx}, ...
+        'LineWidth', 2.0, 'MarkerSize', 5, 'Color', colors(plotIdx, :));
+    finiteConfidence = marginalConfidence(isfinite(marginalConfidence));
+    if isempty(finiteConfidence)
+        markerY = NaN;
+    else
+        markerY = min(finiteConfidence);
+    end
+    local_plot_case12_estimated_markers(sourceResult.representative(methodIdx).estAnglesDeg, ...
+        colors(plotIdx, :), markerY, plotIdx);
+end
+local_plot_case12_truth_lines(trueAngles);
+grid on;
+xlim(xWindow);
+xlabel('Angle (deg)');
+ylabel('Triplet marginal confidence');
+title('Backend-consistent triplet marginal confidence', 'FontWeight', 'bold');
+
+legend(local_case11_display_labels(sourceResult.methodLabels(selectedIdx)), ...
+    'Location', 'bestoutside', 'Interpreter', 'none');
+title(layout, 'Case 12: paper-readable three-source spectrum diagnostic', ...
+    'FontWeight', 'bold');
+save_figure(fig, filePath);
+end
+
+function selectedIdx = local_case12_method_indices(methodNames, selectedNames)
+selectedIdx = zeros(1, 0);
+for nameIdx = 1:numel(selectedNames)
+    matchIdx = find(strcmp(methodNames, selectedNames{nameIdx}), 1, 'first');
+    if ~isempty(matchIdx)
+        selectedIdx(end+1) = matchIdx; %#ok<AGROW>
+    end
+end
+end
+
+function [colors, lineStyles, markers] = local_case12_paper_styles(numSeries)
+baseColors = [ ...
+    0.0000 0.4470 0.7410; ...
+    0.8500 0.3250 0.0980; ...
+    0.4660 0.6740 0.1880; ...
+    0.4940 0.1840 0.5560];
+colors = baseColors(1:numSeries, :);
+lineStyles = {'-', '--', '-.', ':'};
+markers = {'o', 's', '^', 'd'};
+end
+
+function smoothed = local_case12_smooth_vector(values, windowLength)
+values = values(:).';
+if windowLength <= 1 || numel(values) < windowLength
+    smoothed = values;
+    return;
+end
+kernel = ones(1, windowLength) / windowLength;
+smoothed = conv(values, kernel, 'same');
+end
+
+function local_plot_case12_truth_lines(trueAngles)
+for angleIdx = 1:numel(trueAngles)
+    xline(trueAngles(angleIdx), '--k', 'LineWidth', 1.0, 'HandleVisibility', 'off');
+end
+end
+
+function local_plot_case12_estimated_markers(estAnglesDeg, colorValue, yValue, methodIdx)
+if isempty(estAnglesDeg) || ~isfinite(yValue)
+    return;
+end
+estAnglesDeg = sort(estAnglesDeg(:).');
+yOffset = 0.03 * methodIdx;
+for angleIdx = 1:numel(estAnglesDeg)
+    plot(estAnglesDeg(angleIdx), yValue + yOffset, 'v', ...
+        'Color', colorValue, 'MarkerFaceColor', colorValue, ...
+        'MarkerSize', 5, 'HandleVisibility', 'off');
+end
+end
+
 function outDir = local_case_output_dir(cfg, caseFolderName)
 if cfg.run.useTraceableDirs
     if ~isfield(cfg.run, 'runId') || isempty(cfg.run.runId)
@@ -1481,6 +2149,34 @@ fprintf(fid, '- Case 9 separation sweep: `%s`\n\n', mat2str(cfg.case9.separation
 fprintf(fid, '- Case 9 discriminative minimum separation deg: `%.12g`\n\n', ...
     cfg.case9.discriminativeMinSeparationDeg);
 fprintf(fid, '- MUSIC snapshot policy: `common_truth_snapshots_across_methods`\n\n');
+if isfield(cfg, 'core')
+    fprintf(fid, '## Case 12 Core 1/2/3-Source Mainline\n\n');
+    fprintf(fid, '- Enabled blocks: `%s`\n', local_config_list_text(cfg.core.enabledCases));
+    fprintf(fid, '- Monte Carlo: `%d`\n', cfg.core.monteCarlo);
+    fprintf(fid, '- Snapshots: `%d`\n', cfg.core.snapshots);
+    fprintf(fid, '- Evaluation SNR dB: `%.12g`\n', cfg.core.evalSNRDb);
+    fprintf(fid, '- Two-source backend: `%s`\n', cfg.core.backendName);
+    fprintf(fid, '- Three-source backend: `%s`\n', cfg.core.threeSourceBackendName);
+    fprintf(fid, '- Candidate angle stride deg: `%.12g`\n', cfg.core.backendCandidateAngleStrideDeg);
+    if isfield(cfg.core, 'threeSourceCandidateAngleStrideDeg')
+        fprintf(fid, '- Three-source candidate angle stride deg: `%.12g`\n', ...
+            cfg.core.threeSourceCandidateAngleStrideDeg);
+    end
+    fprintf(fid, '- Caveat: `Case 12 is a compact structure diagnostic for RMSE and spectra, not a full paper-profile run.`\n\n');
+end
+if isfield(cfg, 'case11')
+    fprintf(fid, '## Case 11 Backend Diagnostic\n\n');
+    fprintf(fid, '- Source pairs deg: `%s`\n', mat2str(cfg.case11.sourcePairsDeg));
+    fprintf(fid, '- Monte Carlo: `%d`\n', cfg.case11.monteCarlo);
+    fprintf(fid, '- Backend names: `%s`\n', local_config_list_text(cfg.case11.backendNames));
+    fprintf(fid, '- Method keys: `%s`\n', local_config_list_text(cfg.case11.methodKeys));
+    fprintf(fid, '- Candidate peak count: `%d`\n', cfg.case11.candidatePeakCount);
+    fprintf(fid, '- Candidate angle stride deg: `%.12g`\n', cfg.case11.candidateAngleStrideDeg);
+    fprintf(fid, '- Minimum separation deg: `%.12g`\n', cfg.case11.minimumSeparationDeg);
+    fprintf(fid, '- Maximum separation deg: `%.12g`\n', cfg.case11.maximumSeparationDeg);
+    fprintf(fid, '- Top candidate count: `%d`\n', cfg.case11.topCandidateCount);
+    fprintf(fid, '- Caveat: `Case 11 is diagnostic-only backend screening evidence, not final paper-profile evidence unless stated.`\n\n');
+end
 if isfield(cfg, 'model') && isfield(cfg.model, 'ard')
     fprintf(fid, '- ARD enabled: `%d`\n', logical(cfg.model.ard.enabled));
     fprintf(fid, '- ARD method: `%s`\n', cfg.model.ard.method);
@@ -1511,16 +2207,32 @@ fprintf(fid, '- Proposed V3 stable score mode: `%s`\n', cfg.model.v3.stableScore
 fprintf(fid, '- Proposed V3 stable background mode: `%s`\n', cfg.model.v3.stableBackgroundMode);
 fprintf(fid, '- Proposed V3 note: `V3.3 case9-aligned global stable-pair residual; screening result, not final full paper-profile evidence unless stated.`\n\n');
 end
-if isfield(cfg, 'case9') && isfield(cfg.case9, 'gpAnmFallback')
-fprintf(fid, '- Case 9 GP-ANM fallback enabled: `%d`\n', logical(cfg.case9.gpAnmFallback.enabled));
-fprintf(fid, '- Case 9 GP diagonal proxy enabled: `%d`\n', logical(cfg.case9.gpAnmFallback.addDiagonalProxy));
-fprintf(fid, '- Case 9 GP-ANM fallback max pairs: `%d`\n', cfg.case9.gpAnmFallback.maxPairs);
-fprintf(fid, '- Case 9 GP-ANM fallback Monte Carlo: `%d`\n', cfg.case9.gpAnmFallback.monteCarlo);
-fprintf(fid, '- Case 9 GP-ANM error radius: `%.12g`\n', cfg.case9.gpAnmFallback.errorRadius);
-fprintf(fid, '- Case 9 GP-ANM tau eta: `%.12g`\n\n', cfg.case9.gpAnmFallback.tauEta);
-end
 fprintf(fid, '## Git Status Short\n\n');
 fprintf(fid, '```text\n%s\n```\n', cfg.run.gitStatusShort);
+end
+
+function text = local_config_list_text(values)
+if iscell(values)
+    parts = cell(size(values));
+    for idx = 1:numel(values)
+        parts{idx} = local_config_scalar_text(values{idx});
+    end
+    text = strjoin(parts(:).', ', ');
+elseif isstring(values)
+    text = strjoin(cellstr(values(:).'), ', ');
+elseif ischar(values)
+    text = values;
+else
+    text = mat2str(values);
+end
+end
+
+function text = local_config_scalar_text(value)
+if isstring(value) || ischar(value)
+    text = char(value);
+else
+    text = mat2str(value);
+end
 end
 
 function local_write_manifest(cfg, completedCaseFolders, selectedCases)
@@ -1689,14 +2401,6 @@ if isfield(cfg, 'case9')
     cfg.case9 = local_set_default_field(cfg.case9, 'biasedToleranceDeg', 2);
     cfg.case9 = local_set_default_field(cfg.case9, 'marginalToleranceDeg', 5);
     cfg.case9 = local_set_default_field(cfg.case9, 'pairSelectionMode', 'research_coverage');
-    cfg.case9 = local_set_default_field(cfg.case9, 'gpAnmFallback', struct());
-    cfg.case9.gpAnmFallback = local_set_default_field(cfg.case9.gpAnmFallback, 'enabled', false);
-    cfg.case9.gpAnmFallback = local_set_default_field(cfg.case9.gpAnmFallback, 'addDiagonalProxy', false);
-    cfg.case9.gpAnmFallback = local_set_default_field(cfg.case9.gpAnmFallback, 'maxPairs', 4);
-    cfg.case9.gpAnmFallback = local_set_default_field(cfg.case9.gpAnmFallback, 'monteCarlo', 1);
-    cfg.case9.gpAnmFallback = local_set_default_field(cfg.case9.gpAnmFallback, 'errorRadius', 0.5);
-    cfg.case9.gpAnmFallback = local_set_default_field(cfg.case9.gpAnmFallback, 'tauEta', 1);
-    cfg.case9.gpAnmFallback = local_set_default_field(cfg.case9.gpAnmFallback, 'label', 'GP-ANM fallback');
 end
 if isfield(cfg, 'case7')
     cfg.case7 = local_set_default_field(cfg.case7, 'toleranceDeg', 0.5);
@@ -1781,8 +2485,10 @@ function nearestAngle = local_nearest_angle_from_set(queryAngle, availableAngles
 nearestAngle = availableAngles(nearestIdx);
 end
 
-function local_add_truth_scan_sgtitle(mainTitle)
-subtitle = 'HFSS truth snapshots; MUSIC scan uses the listed estimator manifolds';
+function local_add_truth_scan_sgtitle(mainTitle, subtitle)
+if nargin < 2 || isempty(subtitle)
+    subtitle = 'HFSS truth snapshots; MUSIC scan uses the listed estimator manifolds';
+end
 if exist('sgtitle', 'file') == 2
     sgtitle({mainTitle, subtitle}, 'FontWeight', 'bold');
 else
@@ -1831,7 +2537,7 @@ end
 
 function [sourcePairs, pairSelection] = local_case4_source_pairs(caseCfg, ctx, calAnglesDeg)
 if isfield(caseCfg, 'separationSweepDeg') && ~isempty(caseCfg.separationSweepDeg)
-    [sourcePairs, pairSelection] = local_case9_source_pairs(caseCfg, ctx, calAnglesDeg);
+    [sourcePairs, pairSelection] = case09_helpers('source_pairs', caseCfg, ctx, calAnglesDeg);
     pairSelection.mode = ['case4_' pairSelection.mode];
     return;
 end
@@ -1840,9 +2546,9 @@ if ~isfield(caseCfg, 'sourcePairsDeg') || isempty(caseCfg.sourcePairsDeg)
     error('Case 4 requires either separationSweepDeg or sourcePairsDeg.');
 end
 
-sourcePairs = local_filter_pairs(caseCfg.sourcePairsDeg, ctx.thetaDeg, calAnglesDeg);
+sourcePairs = case09_helpers('filter_pairs', caseCfg.sourcePairsDeg, ctx.thetaDeg, calAnglesDeg);
 if isempty(sourcePairs)
-    sourcePairs = local_filter_pairs(caseCfg.sourcePairsDeg, ctx.thetaDeg);
+    sourcePairs = case09_helpers('filter_pairs', caseCfg.sourcePairsDeg, ctx.thetaDeg);
 end
 
 pairSelection = struct();
@@ -1934,41 +2640,6 @@ function method = local_method(name, label, manifold)
 method = struct('name', name, 'label', label, 'manifold', manifold);
 end
 
-function gpAnmCfg = local_case9_gp_anm_fallback_config(caseCfg)
-gpAnmCfg = struct();
-if isfield(caseCfg, 'gpAnmFallback') && ~isempty(caseCfg.gpAnmFallback)
-    gpAnmCfg = caseCfg.gpAnmFallback;
-end
-gpAnmCfg = local_set_default_field(gpAnmCfg, 'enabled', false);
-gpAnmCfg = local_set_default_field(gpAnmCfg, 'addDiagonalProxy', false);
-gpAnmCfg = local_set_default_field(gpAnmCfg, 'maxPairs', 4);
-gpAnmCfg = local_set_default_field(gpAnmCfg, 'monteCarlo', 1);
-gpAnmCfg = local_set_default_field(gpAnmCfg, 'errorRadius', 0.5);
-gpAnmCfg = local_set_default_field(gpAnmCfg, 'tauEta', 1);
-gpAnmCfg = local_set_default_field(gpAnmCfg, 'label', 'GP-ANM fallback');
-end
-
-function [manifold, diagnostics] = local_gain_phase_diag_proxy(ctx, calIdx)
-calRatio = ctx.AH(:, calIdx) ./ max(abs(ctx.AI(:, calIdx)), eps) .* exp(-1i * angle(ctx.AI(:, calIdx)));
-diagGain = mean(calRatio, 2);
-manifold = local_normalize_columns(diagGain .* ctx.AI);
-
-testIdx = setdiff(1:numel(ctx.thetaDeg), calIdx);
-if isempty(testIdx)
-    testIdx = 1:numel(ctx.thetaDeg);
-end
-idealMetrics = compute_manifold_metrics(ctx.AH(:, testIdx), ctx.AI(:, testIdx));
-proxyMetrics = compute_manifold_metrics(ctx.AH(:, testIdx), manifold(:, testIdx));
-
-diagnostics = struct();
-diagnostics.model = 'single common diagonal gain-phase correction fitted on calibration angles';
-diagnostics.calibrationAnglesDeg = ctx.thetaDeg(calIdx);
-diagnostics.diagGain = diagGain;
-diagnostics.meanIdealRelativeError = mean(idealMetrics.relativeError);
-diagnostics.meanProxyRelativeError = mean(proxyMetrics.relativeError);
-diagnostics.meanRelativeErrorDelta = diagnostics.meanProxyRelativeError - diagnostics.meanIdealRelativeError;
-end
-
 function methods = local_named_methods(ctx, models, methodKeys)
 methods = repmat(struct('name', '', 'label', '', 'manifold', []), 1, numel(methodKeys));
 
@@ -2034,73 +2705,6 @@ colNorm(colNorm < eps) = 1;
 manifold = manifold ./ colNorm;
 end
 
-function validPairs = local_filter_pairs(candidatePairs, thetaGrid, calAnglesDeg)
-tolDeg = local_angle_tolerance_from_grid(thetaGrid);
-snappedPairs = zeros(size(candidatePairs));
-availableMask = false(size(candidatePairs, 1), 1);
-
-for pairIdx = 1:size(candidatePairs, 1)
-    [leftDistance, leftIdx] = min(abs(thetaGrid - candidatePairs(pairIdx, 1)));
-    [rightDistance, rightIdx] = min(abs(thetaGrid - candidatePairs(pairIdx, 2)));
-    if leftDistance <= tolDeg && rightDistance <= tolDeg
-        snappedPairs(pairIdx, :) = [thetaGrid(leftIdx), thetaGrid(rightIdx)];
-        availableMask(pairIdx) = true;
-    end
-end
-
-validPairs = snappedPairs(availableMask, :);
-
-if nargin >= 3 && ~isempty(calAnglesDeg)
-    unseenMask = true(size(validPairs, 1), 1);
-    for pairIdx = 1:size(validPairs, 1)
-        touchesCal = any(abs(calAnglesDeg - validPairs(pairIdx, 1)) <= tolDeg) || ...
-            any(abs(calAnglesDeg - validPairs(pairIdx, 2)) <= tolDeg);
-        unseenMask(pairIdx) = ~touchesCal;
-    end
-    if any(unseenMask)
-        validPairs = validPairs(unseenMask, :);
-    end
-end
-end
-
-function [sourcePairs, pairSelection] = local_case9_source_pairs(caseCfg, ctx, calAnglesDeg)
-thetaGrid = ctx.thetaDeg;
-if isfield(caseCfg, 'sourcePairsDeg') && ~isempty(caseCfg.sourcePairsDeg)
-    candidatePairs = caseCfg.sourcePairsDeg;
-else
-    candidatePairs = local_case9_generate_pairs(thetaGrid, caseCfg.separationSweepDeg);
-end
-
-sourcePairs = local_filter_pairs(candidatePairs, thetaGrid, calAnglesDeg);
-if isempty(sourcePairs)
-    sourcePairs = local_filter_pairs(candidatePairs, thetaGrid);
-end
-
-sourcePairs = sort(sourcePairs, 2);
-sourcePairs = unique(sourcePairs, 'rows', 'stable');
-separationDeg = sourcePairs(:, 2) - sourcePairs(:, 1);
-pairCenterDeg = mean(sourcePairs, 2);
-sourcePairs = sortrows([sourcePairs, separationDeg, pairCenterDeg], [3 4 1 2]);
-sourcePairs = sourcePairs(:, 1:2);
-preLimitPairs = sourcePairs;
-
-if isfield(caseCfg, 'maxPairsPerSeparation') && ~isempty(caseCfg.maxPairsPerSeparation) && ...
-        isfinite(caseCfg.maxPairsPerSeparation) && caseCfg.maxPairsPerSeparation > 0
-    selectionMode = local_optional_case9_field(caseCfg, 'pairSelectionMode', 'research_coverage');
-    [sourcePairs, selectedIdx] = local_case9_limit_pairs_per_separation( ...
-        sourcePairs, caseCfg.maxPairsPerSeparation, ctx, calAnglesDeg, selectionMode);
-else
-    selectionMode = 'none';
-    selectedIdx = 1:size(sourcePairs, 1);
-end
-
-pairSelection = local_case9_score_pairs(preLimitPairs, ctx, calAnglesDeg);
-pairSelection.mode = selectionMode;
-pairSelection.preLimitPairCount = size(preLimitPairs, 1);
-pairSelection.selectedOriginalIndex = selectedIdx(:);
-pairSelection = local_case9_subset_pair_selection(pairSelection, selectedIdx);
-end
-
 function [taskPairsDeg, v2TaskPairsDeg, v3TaskPairsDeg] = local_task_pairs_from_models(models)
 v2TaskPairsDeg = local_diagnostic_task_pairs(models, 'v2Diagnostics');
 v3TaskPairsDeg = local_diagnostic_task_pairs(models, 'v3Diagnostics');
@@ -2117,428 +2721,6 @@ if isfield(models, diagnosticField)
     if isfield(diagnostic, 'taskPairsDeg') && ~isempty(diagnostic.taskPairsDeg)
         taskPairsDeg = unique(sort(round(diagnostic.taskPairsDeg, 10), 2), 'rows', 'stable');
     end
-end
-end
-
-function [sourcePairs, pairSelection, excludedCount] = local_exclude_task_pairs_from_case9( ...
-    sourcePairs, pairSelection, taskPairsDeg)
-excludedCount = 0;
-if isempty(taskPairsDeg) || isempty(sourcePairs)
-    return;
-end
-
-taskPairsDeg = sort(round(taskPairsDeg, 10), 2);
-sourceRounded = sort(round(sourcePairs, 10), 2);
-keepMask = true(size(sourcePairs, 1), 1);
-for pairIdx = 1:size(sourceRounded, 1)
-    overlaps = all(abs(taskPairsDeg - sourceRounded(pairIdx, :)) < 1e-9, 2);
-    if any(overlaps)
-        keepMask(pairIdx) = false;
-        excludedCount = excludedCount + 1;
-    end
-end
-
-sourcePairs = sourcePairs(keepMask, :);
-pairSelection = local_case9_filter_pair_selection_by_mask(pairSelection, keepMask);
-end
-
-function overlapCount = local_count_task_eval_overlap(sourcePairs, taskPairsDeg)
-overlapCount = 0;
-if isempty(taskPairsDeg) || isempty(sourcePairs)
-    return;
-end
-
-taskPairsDeg = sort(round(taskPairsDeg, 10), 2);
-sourceRounded = sort(round(sourcePairs, 10), 2);
-for pairIdx = 1:size(sourceRounded, 1)
-    overlaps = all(abs(taskPairsDeg - sourceRounded(pairIdx, :)) < 1e-9, 2);
-    if any(overlaps)
-        overlapCount = overlapCount + 1;
-    end
-end
-end
-
-function pairSelection = local_case9_filter_pair_selection_by_mask(pairSelection, keepMask)
-fieldsToFilter = {'sourcePairsDeg', 'pairMismatchScore', 'edgeScore', ...
-    'calDistanceScore', 'combinedScore', 'selectedOriginalIndex'};
-for fieldIdx = 1:numel(fieldsToFilter)
-    fieldName = fieldsToFilter{fieldIdx};
-    if isfield(pairSelection, fieldName)
-        values = pairSelection.(fieldName);
-        if size(values, 1) == numel(keepMask)
-            pairSelection.(fieldName) = values(keepMask, :);
-        end
-    end
-end
-pairSelection.taskExcludedCount = sum(~keepMask);
-end
-
-function candidatePairs = local_case9_generate_pairs(thetaGrid, separationSweepDeg)
-candidatePairs = zeros(0, 2);
-tolDeg = local_angle_tolerance_from_grid(thetaGrid);
-
-for sepDeg = reshape(separationSweepDeg, 1, [])
-    for angleIdx = 1:numel(thetaGrid)
-        partnerAngle = thetaGrid(angleIdx) + sepDeg;
-        [distance, partnerIdx] = min(abs(thetaGrid - partnerAngle));
-        if distance <= tolDeg
-            candidatePairs(end+1, :) = [thetaGrid(angleIdx), thetaGrid(partnerIdx)]; %#ok<AGROW>
-        end
-    end
-end
-end
-
-function [limitedPairs, selectedIdx] = local_case9_limit_pairs_per_separation( ...
-    sourcePairs, maxPairsPerSeparation, ctx, calAnglesDeg, selectionMode)
-separationDeg = sourcePairs(:, 2) - sourcePairs(:, 1);
-uniqueSep = unique(round(separationDeg, 10), 'sorted');
-limitedPairs = zeros(0, 2);
-selectedIdx = zeros(0, 1);
-useResearchCoverage = strcmpi(selectionMode, 'research_coverage');
-if useResearchCoverage
-    scores = local_case9_score_pairs(sourcePairs, ctx, calAnglesDeg);
-end
-
-for sepIdx = 1:numel(uniqueSep)
-    pairIdx = find(abs(separationDeg - uniqueSep(sepIdx)) < 1e-9);
-    if numel(pairIdx) > maxPairsPerSeparation
-        if useResearchCoverage
-            pairIdx = local_case9_research_coverage_indices(pairIdx, scores, sourcePairs, maxPairsPerSeparation);
-        else
-            pickLocal = unique(round(linspace(1, numel(pairIdx), maxPairsPerSeparation)));
-            pairIdx = pairIdx(pickLocal);
-        end
-    end
-    limitedPairs = [limitedPairs; sourcePairs(pairIdx, :)]; %#ok<AGROW>
-    selectedIdx = [selectedIdx; pairIdx(:)]; %#ok<AGROW>
-end
-end
-
-function pairSelection = local_case9_score_pairs(sourcePairs, ctx, calAnglesDeg)
-leftIdx = local_angle_indices(ctx.thetaDeg, sourcePairs(:, 1));
-rightIdx = local_angle_indices(ctx.thetaDeg, sourcePairs(:, 2));
-leftMetrics = compute_manifold_metrics(ctx.AH(:, leftIdx), ctx.AI(:, leftIdx));
-rightMetrics = compute_manifold_metrics(ctx.AH(:, rightIdx), ctx.AI(:, rightIdx));
-
-maxAbsAngle = max(abs(ctx.thetaDeg));
-if maxAbsAngle <= 0
-    maxAbsAngle = 1;
-end
-
-pairMismatchScore = (leftMetrics.relativeError(:) + rightMetrics.relativeError(:)) / 2;
-edgeScore = max(abs(sourcePairs), [], 2) / maxAbsAngle;
-
-if nargin < 3 || isempty(calAnglesDeg)
-    calDistanceScore = ones(size(pairMismatchScore));
-else
-    calDistance = zeros(size(pairMismatchScore));
-    for pairIdx = 1:size(sourcePairs, 1)
-        leftDistance = min(abs(calAnglesDeg(:) - sourcePairs(pairIdx, 1)));
-        rightDistance = min(abs(calAnglesDeg(:) - sourcePairs(pairIdx, 2)));
-        calDistance(pairIdx) = min(leftDistance, rightDistance);
-    end
-    calDistanceScore = min(calDistance / maxAbsAngle, 1);
-end
-
-combinedScore = 0.55 * pairMismatchScore + 0.30 * edgeScore + 0.15 * calDistanceScore;
-
-pairSelection = struct();
-pairSelection.mode = 'research_coverage';
-pairSelection.sourcePairsDeg = sourcePairs;
-pairSelection.pairMismatchScore = pairMismatchScore;
-pairSelection.edgeScore = edgeScore;
-pairSelection.calDistanceScore = calDistanceScore;
-pairSelection.combinedScore = combinedScore;
-pairSelection.weights = [0.55 0.30 0.15];
-end
-
-function subsetSelection = local_case9_subset_pair_selection(pairSelection, selectedIdx)
-subsetSelection = pairSelection;
-fieldsToSubset = {'sourcePairsDeg', 'pairMismatchScore', 'edgeScore', ...
-    'calDistanceScore', 'combinedScore'};
-for fieldIdx = 1:numel(fieldsToSubset)
-    fieldName = fieldsToSubset{fieldIdx};
-    values = pairSelection.(fieldName);
-    if size(values, 1) == numel(pairSelection.combinedScore)
-        subsetSelection.(fieldName) = values(selectedIdx, :);
-    end
-end
-end
-
-function selectedIdx = local_case9_research_coverage_indices(pairIdx, scores, sourcePairs, maxPairsPerSeparation)
-selectedIdx = zeros(0, 1);
-
-[~, combinedOrder] = sort(scores.combinedScore(pairIdx), 'descend');
-combinedPick = pairIdx(combinedOrder(1:min(9, min(maxPairsPerSeparation, numel(combinedOrder)))));
-selectedIdx = local_append_unique_indices(selectedIdx, combinedPick);
-
-remainingSlots = maxPairsPerSeparation - numel(selectedIdx);
-if remainingSlots > 0
-    [~, edgeOrder] = sort(scores.edgeScore(pairIdx), 'descend');
-    edgePick = pairIdx(edgeOrder(1:min(6, min(remainingSlots, numel(edgeOrder)))));
-    selectedIdx = local_append_unique_indices(selectedIdx, edgePick);
-end
-
-while numel(selectedIdx) < maxPairsPerSeparation
-    remaining = setdiff(pairIdx(:), selectedIdx(:), 'stable');
-    if isempty(remaining)
-        break;
-    end
-    nextIdx = local_case9_next_farthest_center_idx(remaining, selectedIdx, sourcePairs, scores);
-    selectedIdx = local_append_unique_indices(selectedIdx, nextIdx);
-end
-
-selectedIdx = sort(selectedIdx(:));
-end
-
-function selectedIdx = local_append_unique_indices(selectedIdx, newIdx)
-for idx = reshape(newIdx, 1, [])
-    if ~ismember(idx, selectedIdx)
-        selectedIdx(end+1, 1) = idx; %#ok<AGROW>
-    end
-end
-end
-
-function nextIdx = local_case9_next_farthest_center_idx(remaining, selectedIdx, sourcePairs, scores)
-centers = mean(sourcePairs, 2);
-if isempty(selectedIdx)
-    [~, localIdx] = max(scores.combinedScore(remaining));
-    nextIdx = remaining(localIdx);
-    return;
-end
-
-selectedCenters = centers(selectedIdx);
-minDistance = zeros(numel(remaining), 1);
-for idx = 1:numel(remaining)
-    minDistance(idx) = min(abs(centers(remaining(idx)) - selectedCenters));
-end
-
-tieBreaker = scores.combinedScore(remaining);
-rankScore = minDistance + 1e-3 * tieBreaker;
-[~, localIdx] = max(rankScore);
-nextIdx = remaining(localIdx);
-end
-
-function pairLabels = local_case9_pair_labels(sourcePairs)
-pairLabels = arrayfun(@(rowIdx) sprintf('[%g,%g]', sourcePairs(rowIdx, 1), sourcePairs(rowIdx, 2)), ...
-    1:size(sourcePairs, 1), 'UniformOutput', false);
-end
-
-function [uniqueSep, meanMetric, stdMetric] = local_case9_group_metric(separationDeg, metricMatrix)
-separationDeg = round(separationDeg, 10);
-uniqueSep = unique(separationDeg, 'sorted');
-meanMetric = zeros(numel(uniqueSep), size(metricMatrix, 2));
-stdMetric = zeros(numel(uniqueSep), size(metricMatrix, 2));
-
-for sepIdx = 1:numel(uniqueSep)
-    pairMask = abs(separationDeg - uniqueSep(sepIdx)) < 1e-9;
-    meanMetric(sepIdx, :) = mean(metricMatrix(pairMask, :), 1);
-    stdMetric(sepIdx, :) = std(metricMatrix(pairMask, :), 0, 1);
-end
-end
-
-function [deltaResolution, deltaStable] = local_case9_v3_delta_from_ard(methods, resolutionMean, stableMean)
-deltaResolution = [];
-deltaStable = [];
-ardIdx = find(strcmp({methods.name}, 'ard'), 1, 'first');
-v3Idx = find(strcmp({methods.name}, 'proposed_v3'), 1, 'first');
-if isempty(ardIdx) || isempty(v3Idx)
-    return;
-end
-deltaResolution = resolutionMean(:, v3Idx) - resolutionMean(:, ardIdx);
-deltaStable = stableMean(:, v3Idx) - stableMean(:, ardIdx);
-end
-
-function summary = local_case9_subset_summary(methods, pairMask, resolutionProb, stableRate, ...
-    pairRmse, marginalRate, biasedRate, unresolvedRate)
-pairMask = pairMask(:);
-summary = struct();
-summary.methodLabels = {methods.label};
-summary.pairCount = sum(pairMask);
-summary.meanResolution = NaN(1, numel(methods));
-summary.meanStable = NaN(1, numel(methods));
-summary.meanPairRmse = NaN(1, numel(methods));
-summary.meanMarginal = NaN(1, numel(methods));
-summary.meanBiased = NaN(1, numel(methods));
-summary.meanUnresolved = NaN(1, numel(methods));
-if ~any(pairMask)
-    return;
-end
-summary.meanResolution = mean(resolutionProb(pairMask, :), 1);
-summary.meanStable = mean(stableRate(pairMask, :), 1);
-summary.meanPairRmse = mean(pairRmse(pairMask, :), 1);
-summary.meanMarginal = mean(marginalRate(pairMask, :), 1);
-summary.meanBiased = mean(biasedRate(pairMask, :), 1);
-summary.meanUnresolved = mean(unresolvedRate(pairMask, :), 1);
-end
-
-function diagnostics = local_case9_v1_experience_diagnostics(methods, overallSummary, ...
-    discriminativeSummary, uniqueSep, resolutionMean, stableMean)
-diagnostics = struct();
-diagnostics.note = ['Proposed V1 remains a useful reference because its low-order global ' ...
-    'phase residual can improve two-source peak selection without task-specific leakage.'];
-diagnostics.uniqueSeparationDeg = uniqueSep;
-diagnostics.v1Idx = find(strcmp({methods.name}, 'proposed_v1'), 1, 'first');
-diagnostics.ardIdx = find(strcmp({methods.name}, 'ard'), 1, 'first');
-diagnostics.v3Idx = find(strcmp({methods.name}, 'proposed_v3'), 1, 'first');
-diagnostics.v1MinusArdStableBySeparation = [];
-diagnostics.v3MinusV1StableBySeparation = [];
-diagnostics.v1MinusArdResolutionBySeparation = [];
-diagnostics.v3MinusV1ResolutionBySeparation = [];
-diagnostics.overallV1MinusArdStable = NaN;
-diagnostics.discriminativeV1MinusArdStable = NaN;
-diagnostics.overallV3MinusV1Stable = NaN;
-diagnostics.discriminativeV3MinusV1Stable = NaN;
-if isempty(diagnostics.v1Idx) || isempty(diagnostics.ardIdx)
-    return;
-end
-
-diagnostics.v1MinusArdStableBySeparation = ...
-    stableMean(:, diagnostics.v1Idx) - stableMean(:, diagnostics.ardIdx);
-diagnostics.v1MinusArdResolutionBySeparation = ...
-    resolutionMean(:, diagnostics.v1Idx) - resolutionMean(:, diagnostics.ardIdx);
-diagnostics.overallV1MinusArdStable = ...
-    overallSummary.meanStable(diagnostics.v1Idx) - overallSummary.meanStable(diagnostics.ardIdx);
-diagnostics.discriminativeV1MinusArdStable = ...
-    discriminativeSummary.meanStable(diagnostics.v1Idx) - discriminativeSummary.meanStable(diagnostics.ardIdx);
-
-if isempty(diagnostics.v3Idx)
-    return;
-end
-diagnostics.v3MinusV1StableBySeparation = ...
-    stableMean(:, diagnostics.v3Idx) - stableMean(:, diagnostics.v1Idx);
-diagnostics.v3MinusV1ResolutionBySeparation = ...
-    resolutionMean(:, diagnostics.v3Idx) - resolutionMean(:, diagnostics.v1Idx);
-diagnostics.overallV3MinusV1Stable = ...
-    overallSummary.meanStable(diagnostics.v3Idx) - overallSummary.meanStable(diagnostics.v1Idx);
-diagnostics.discriminativeV3MinusV1Stable = ...
-    discriminativeSummary.meanStable(diagnostics.v3Idx) - discriminativeSummary.meanStable(diagnostics.v1Idx);
-end
-
-function histInfo = local_case9_pair_stratum_hist(pairAnglesDeg, centerBinDeg)
-histInfo = struct();
-histInfo.centerBinDeg = centerBinDeg;
-histInfo.keys = zeros(0, 2);
-histInfo.counts = zeros(0, 1);
-if isempty(pairAnglesDeg)
-    return;
-end
-pairAnglesDeg = sort(round(pairAnglesDeg, 10), 2);
-separationDeg = round(pairAnglesDeg(:, 2) - pairAnglesDeg(:, 1), 10);
-centerBin = round(mean(pairAnglesDeg, 2) / max(centerBinDeg, eps));
-[keys, ~, binId] = unique([separationDeg(:), centerBin(:)], 'rows');
-histInfo.keys = keys;
-histInfo.counts = accumarray(binId, 1, [size(keys, 1), 1], @sum, 0);
-histInfo.centerDegApprox = keys(:, 2) * centerBinDeg;
-end
-
-function diagnostics = local_v3_stable_pair_diagnostics_from_models(models)
-diagnostics = struct();
-if isfield(models, 'v3Diagnostics') && ...
-        isfield(models.v3Diagnostics, 'stablePairDiagnostics')
-    diagnostics = models.v3Diagnostics.stablePairDiagnostics;
-end
-end
-
-function [exampleIdx, reason] = local_case9_select_example_pair( ...
-    bench, methods, separationDeg, targetResolutionProb, pairSelection)
-primaryIdx = find(strcmp({methods.name}, 'proposed_v3'), 1, 'first');
-if isempty(primaryIdx)
-    primaryIdx = find(strcmp({methods.name}, 'proposed_v2'), 1, 'first');
-end
-if isempty(primaryIdx)
-    primaryIdx = find(strcmp({methods.name}, 'proposed'), 1, 'first');
-end
-if isempty(primaryIdx)
-    primaryIdx = find(strcmp({methods.name}, 'proposed_v1'), 1, 'first');
-end
-if isempty(primaryIdx)
-    primaryIdx = 1;
-end
-interpIdx = find(strcmp({methods.name}, 'interp'), 1, 'first');
-v1Idx = find(strcmp({methods.name}, 'proposed_v1'), 1, 'first');
-v2Idx = find(strcmp({methods.name}, 'proposed_v2'), 1, 'first');
-
-primary = bench.methods(primaryIdx);
-primaryLabel = methods(primaryIdx).label;
-stateMatrix = [ ...
-    primary.perTargetUnresolvedRate(:), ...
-    primary.perTargetMarginalRate(:), ...
-    primary.perTargetBiasedRate(:), ...
-    primary.perTargetStableRate(:)];
-stateEntropy = -sum(stateMatrix .* log(max(stateMatrix, eps)), 2);
-
-mixedMask = primary.perTargetResolutionRate > 0.05 & primary.perTargetResolutionRate < 0.98;
-mismatchScore = zeros(size(primary.perTargetResolutionRate(:)));
-if nargin >= 5 && isfield(pairSelection, 'combinedScore')
-    mismatchScore = pairSelection.combinedScore(:);
-    mismatchScore = mismatchScore / max(max(mismatchScore), eps);
-end
-
-baselineStable = [];
-baselineResolution = [];
-baselineLabels = {};
-if ~isempty(interpIdx)
-    baselineStable(:, end+1) = bench.methods(interpIdx).perTargetStableRate(:); %#ok<AGROW>
-    baselineResolution(:, end+1) = bench.methods(interpIdx).perTargetResolutionRate(:); %#ok<AGROW>
-    baselineLabels{end+1} = methods(interpIdx).label; %#ok<AGROW>
-end
-if ~isempty(v1Idx) && v1Idx ~= primaryIdx
-    baselineStable(:, end+1) = bench.methods(v1Idx).perTargetStableRate(:); %#ok<AGROW>
-    baselineResolution(:, end+1) = bench.methods(v1Idx).perTargetResolutionRate(:); %#ok<AGROW>
-    baselineLabels{end+1} = methods(v1Idx).label; %#ok<AGROW>
-end
-if ~isempty(v2Idx) && v2Idx ~= primaryIdx
-    baselineStable(:, end+1) = bench.methods(v2Idx).perTargetStableRate(:); %#ok<AGROW>
-    baselineResolution(:, end+1) = bench.methods(v2Idx).perTargetResolutionRate(:); %#ok<AGROW>
-    baselineLabels{end+1} = methods(v2Idx).label; %#ok<AGROW>
-end
-
-if ~isempty(baselineStable)
-    bestBaselineStable = max(baselineStable, [], 2);
-    bestBaselineResolution = max(baselineResolution, [], 2);
-    advantage = primary.perTargetStableRate(:) - bestBaselineStable + ...
-        0.5 * (primary.perTargetResolutionRate(:) - bestBaselineResolution);
-    candidateMask = mixedMask & advantage > 0.02;
-    if any(candidateMask)
-        candidateIdx = find(candidateMask);
-        score = advantage(candidateIdx) + 0.4 * stateEntropy(candidateIdx) ...
-            + 0.15 * mismatchScore(candidateIdx) - 0.02 * separationDeg(candidateIdx);
-        [~, bestLocalIdx] = max(score);
-        exampleIdx = candidateIdx(bestLocalIdx);
-        reason = sprintf(['Selected [%g, %g] deg because %s improves stable/resolution ' ...
-            'behavior over %s while remaining a mixed hard pair.'], ...
-            bench.trueAngleSetsDeg(exampleIdx, 1), bench.trueAngleSetsDeg(exampleIdx, 2), ...
-            primaryLabel, strjoin(baselineLabels, '/'));
-        return;
-    end
-end
-
-candidateMask = mixedMask;
-if ~any(candidateMask)
-    candidateMask = true(size(primary.perTargetResolutionRate));
-end
-
-candidateIdx = find(candidateMask);
-score = 0.45 * mismatchScore(candidateIdx) + 0.35 * stateEntropy(candidateIdx) ...
-    - abs(primary.perTargetResolutionRate(candidateIdx) - targetResolutionProb) ...
-    - 0.02 * separationDeg(candidateIdx);
-[~, bestLocalIdx] = max(score);
-exampleIdx = candidateIdx(bestLocalIdx);
-reason = sprintf(['Selected [%g, %g] deg as the hardest available high-mismatch pair; ' ...
-    'no stable %s-over-baseline advantage pair was found in this run.'], ...
-    bench.trueAngleSetsDeg(exampleIdx, 1), bench.trueAngleSetsDeg(exampleIdx, 2), primaryLabel);
-end
-
-function value = local_optional_case9_field(inputStruct, fieldName, defaultValue)
-value = local_optional_struct_field(inputStruct, fieldName, defaultValue);
-end
-
-function value = local_optional_struct_field(inputStruct, fieldName, defaultValue)
-if isfield(inputStruct, fieldName) && ~isempty(inputStruct.(fieldName))
-    value = inputStruct.(fieldName);
-else
-    value = defaultValue;
 end
 end
 

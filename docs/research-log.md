@@ -18,6 +18,188 @@
 
 > Branch artifact policy: `codex/proposed_v3` 使用 version-first traceable results layout：`results/<version-hash>/<case-name>/`。2026-04-20 当前同步范围包括 `87d7f16` V3 screening、`71650f7` ARD Method 2 full run、`local-8e021ea7` Full V2 C-route full run、`2962bc3` V2-lite run，以及仅含失败启动日志的 `local-aa29a0fd`。
 
+### 2026-05-08：`local-8ed089e4` Case12 paper-readable plot set
+
+- Version hash: `local-8ed089e4`
+- Base HEAD: `unavailable-not-a-git-repo`
+- Worktree state: uncommitted code and documentation changes; this local directory did not expose a `.git` repository.
+- Change: added paper-readable Case12 metric plots and a focused three-source spectrum diagnostic.
+- Change: kept full diagnostic figures unchanged while adding cleaner figures for overlapping curves and near-equal metric values.
+- Change: paper metric plots use point/line series with x-offsets and selected numeric annotations; paper three-source spectrum limits methods to `ARD / Proposed V3.3 / HFSS Oracle / Ideal`, applies display-only MUSIC smoothing, and focuses on the true-DOA local window.
+- Affected cases: Case12 plotting only. Metrics, backend behavior, source sets, and snapshot policy are unchanged.
+- Validation: `matlab -batch "checkcode('default_config.m','run_project.m')"`; `matlab -batch "addpath(genpath(pwd)); run('tests/run_sanity_tests.m')"`; traceable default `run_project([],cfg)`.
+- Result path: `results/local-8ed089e4/`
+- Case outputs: `case12_core_1to3_source_mainline/`
+
+#### Case12 observations
+
+- Method order: `Ideal / Interpolation / ARD / Proposed V1 / Proposed V2 / Proposed V3.3 / HFSS Oracle`
+- Mean RMSE for 1 source: `3.0880 / 0.0328 / 0.0360 / 0.0408 / 0.0384 / 0.0360 / 0.0344`
+- Mean RMSE for 2 sources: `2.0766 / 0.3404 / 0.3307 / 0.3144 / 0.3399 / 0.3411 / 0.3079`
+- Mean RMSE for 3 sources: `2.3498 / 0.6367 / 0.6279 / 0.6387 / 0.7017 / 0.6975 / 0.6318`
+- Resolved rate for 1 source: `0.2000 / 1.0000 / 1.0000 / 1.0000 / 1.0000 / 1.0000 / 1.0000`
+- Resolved rate for 2 sources: `0.2333 / 0.9400 / 0.9600 / 0.9733 / 0.9800 / 0.9533 / 0.9533`
+- Resolved rate for 3 sources: `0 / 0.8200 / 0.8067 / 0.8000 / 0.7533 / 0.7933 / 0.8067`
+
+#### Interpretation
+
+- Use the new paper figures for presentation readability and the full figures for complete diagnostics.
+- The metric values are unchanged from the previous Case12 full run because this batch changes only plotting.
+- The three-source paper spectrum should still be described as a coarse triplet-grid diagnostic, not as proof of a final optimized three-source backend.
+
+#### Key images
+
+![case12 paper three-source spectrum](assets/case12-paper-three-source-spectrum-local-8ed089e4.png)
+
+![case12 paper rmse](assets/case12-paper-core-rmse-local-8ed089e4.png)
+
+![case12 paper resolved](assets/case12-paper-core-resolved-local-8ed089e4.png)
+
+### 2026-05-08：`local-12e2cc40` Case12 three-source backend-marginal spectrum
+
+- Version hash: `local-12e2cc40`
+- Base HEAD: `unavailable-not-a-git-repo`
+- Worktree state: uncommitted code and documentation changes; this local directory did not expose a `.git` repository.
+- Change: added backend-consistent triplet marginal confidence diagnostics to `triplet_grid_ml`.
+- Change: changed Case12 three-source spectrum output to a two-panel MUSIC plus triplet-grid marginal confidence figure.
+- Change: saved sorted candidate triplet indices/scores/angles in the representative backend diagnostics so the plotted lower panel is derived from the same covariance-fit scores used by the estimator.
+- Affected cases: Case12 figure/diagnostics only. RMSE, resolved-rate, source sets, and snapshot policy are unchanged.
+- Validation: `matlab -batch "addpath(genpath(pwd)); run('tests/run_sanity_tests.m')"`; `checkcode default_config.m run_project.m src/doa_backend_triplet_grid_ml.m tests/run_sanity_tests.m`; traceable default `run_project([],cfg)`.
+- Result path: `results/local-12e2cc40/`
+- Case outputs: `case12_core_1to3_source_mainline/`
+
+#### Case12 observations
+
+- Method order: `Ideal / Interpolation / ARD / Proposed V1 / Proposed V2 / Proposed V3.3 / HFSS Oracle`
+- Mean RMSE for 1 source: `3.0880 / 0.0328 / 0.0360 / 0.0408 / 0.0384 / 0.0360 / 0.0344`
+- Mean RMSE for 2 sources: `2.0766 / 0.3404 / 0.3307 / 0.3144 / 0.3399 / 0.3411 / 0.3079`
+- Mean RMSE for 3 sources: `2.3498 / 0.6367 / 0.6279 / 0.6387 / 0.7017 / 0.6975 / 0.6318`
+- Representative ideal three-source backend diagnostics contain `6967` candidate triplet scores and `52` marginal confidence angles.
+
+#### Interpretation
+
+- The updated three-source figure separates two facts that were previously conflated: MUSIC gives the familiar single-angle pseudo-spectrum, while triplet marginal confidence shows the actual backend decision evidence.
+- RMSE and resolved-rate values match the prior full Case12 run because the estimator and random seed path are unchanged.
+- This improves the three-source evidence display, but `triplet_grid_ml` remains a coarse-grid diagnostic backend rather than a final optimized three-source estimator.
+
+#### Key images
+
+![case12 three-source backend marginal](assets/case12-three-source-backend-marginal-local-12e2cc40.png)
+
+![case12 core rmse summary](assets/case12-core-rmse-summary-local-12e2cc40.png)
+
+### 2026-05-08：`local-d6d1df44` Case12 default-only full mainline run
+
+- Version hash: `local-d6d1df44`
+- Base HEAD: `unavailable-not-a-git-repo`
+- Worktree state: uncommitted code and documentation changes; this local directory did not expose a `.git` repository.
+- Change: changed `run_project()` default behavior to run only Case12. Older cases remain callable by explicit case ids, e.g. `run_project(1:12,cfg)`.
+- Change: increased default Case12 evidence scale from smoke settings to `monteCarlo = 50` and `snapshots = 1000`.
+- Change: kept the three-source candidate stride at `2 deg` to keep the current exhaustive triplet covariance-fit backend runnable as a default full diagnostic.
+- Affected cases: Case12 default/mainline execution path; older cases are disabled only from the default run path.
+- Validation: `matlab -batch "addpath(genpath(pwd)); run('tests/run_sanity_tests.m')"`; `checkcode default_config.m run_project.m src/benchmark_core_sources.m src/doa_backend_triplet_grid_ml.m tests/run_sanity_tests.m`; traceable default `run_project([],cfg)`.
+- Result path: `results/local-d6d1df44/`
+- Case outputs: `case12_core_1to3_source_mainline/`
+
+#### Case12 full default observations
+
+- Method order: `Ideal / Interpolation / ARD / Proposed V1 / Proposed V2 / Proposed V3.3 / HFSS Oracle`
+- Mean RMSE for 1 source: `3.0880 / 0.0328 / 0.0360 / 0.0408 / 0.0384 / 0.0360 / 0.0344`
+- Mean RMSE for 2 sources: `2.0766 / 0.3404 / 0.3307 / 0.3144 / 0.3399 / 0.3411 / 0.3079`
+- Mean RMSE for 3 sources: `2.3498 / 0.6367 / 0.6279 / 0.6387 / 0.7017 / 0.6975 / 0.6318`
+- Resolved rate for 1 source: `0.2000 / 1.0000 / 1.0000 / 1.0000 / 1.0000 / 1.0000 / 1.0000`
+- Resolved rate for 2 sources: `0.2333 / 0.9400 / 0.9600 / 0.9733 / 0.9800 / 0.9533 / 0.9533`
+- Resolved rate for 3 sources: `0 / 0.8200 / 0.8067 / 0.8000 / 0.7533 / 0.7933 / 0.8067`
+- Backend ablation mean resolution by backend rows `MUSIC / MUSIC pair-rescore / Pairwise grid ML`: `0.8667 0.9467 0.9933 0.9400 0.7200 0.9933 0.9933`; `0.8733 0.9467 0.9933 0.9400 0.7200 0.9933 0.9933`; `0.9200 1.0000 1.0000 1.0000 1.0000 1.0000 1.0000`.
+
+#### Interpretation
+
+- This is the current default Case12 evidence run, not a small smoke. The higher MC/snapshot settings make the 1/2-source conclusions more stable than `local-803b388e`.
+- The two-source backend ablation again supports `pairwise_grid_ml` as the default backend over plain MUSIC / pair-rescore.
+- The three-source result is improved and useful for reporting structure, but it is still bounded by a coarse exhaustive `triplet_grid_ml` backend; do not present it as a final optimized 3-source estimator.
+
+#### Key images
+
+![case12 full core rmse summary](assets/case12-core-rmse-summary-local-d6d1df44.png)
+
+![case12 full core two-source spectrum](assets/case12-core-two-source-spectrum-local-d6d1df44.png)
+
+![case12 full core three-source spectrum](assets/case12-core-three-source-spectrum-local-d6d1df44.png)
+
+### 2026-05-08：`local-803b388e` Core 1/2/3-source Case12 structure diagnostic
+
+- Version hash: `local-803b388e`
+- Base HEAD: `unavailable-not-a-git-repo`
+- Worktree state: uncommitted code and documentation changes; this local directory did not expose a `.git` repository.
+- Change: added Case12 as a compact core evidence path focused on 1/2/3-source RMSE, resolved rate, and representative spectra instead of expanding the older case list further.
+- Change: added `benchmark_core_sources` with common HFSS-truth snapshots across methods, a two-source `pairwise_grid_ml` backend, and a three-source `triplet_grid_ml` covariance-fit backend.
+- Change: added sanity coverage for the new core config, common-snapshot policy, core benchmark shapes, and high-SNR triplet recovery.
+- Affected cases: new Case12 only; Case9 remains the current two-source pairwise-backend mainline.
+- Validation: `matlab -batch "addpath(genpath(pwd)); run('tests/run_sanity_tests.m')"`; `checkcode default_config.m run_project.m src/benchmark_core_sources.m src/doa_backend_triplet_grid_ml.m tests/run_sanity_tests.m`; traceable `run_project(12,cfg)`.
+- Result path: `results/local-803b388e/`
+- Case outputs: `case12_core_1to3_source_mainline/`
+
+#### Case12 smoke observations
+
+- Method order: `Ideal / Interpolation / ARD / Proposed V1 / Proposed V2 / Proposed V3.3 / HFSS Oracle`
+- Mean RMSE for 1 source: `3.1240 / 0.0760 / 0.0680 / 0.0880 / 0.0760 / 0.0720 / 0.0760`
+- Mean RMSE for 2 sources: `1.9567 / 0.5386 / 0.5053 / 0.4956 / 0.5859 / 0.5053 / 0.5386`
+- Mean RMSE for 3 sources: `2.6346 / 1.0291 / 1.1170 / 1.1149 / 0.9626 / 1.1170 / 0.9847`
+- Resolved rate for 1 source: `0.2000 / 1.0000 / 1.0000 / 1.0000 / 1.0000 / 1.0000 / 1.0000`
+- Resolved rate for 2 sources: `0.3333 / 0.8667 / 0.8667 / 0.9000 / 0.9000 / 0.8667 / 0.8667`
+- Resolved rate for 3 sources: `0 / 0.6000 / 0.6000 / 0.5667 / 0.6667 / 0.6000 / 0.6333`
+- Backend ablation mean resolution by backend rows `MUSIC / MUSIC pair-rescore / Pairwise grid ML`: `0.6333 0.6667 0.9333 0.6667 0.5667 0.9333 0.9333`; `0.6333 0.6667 0.9333 0.6667 0.5667 0.9333 0.9333`; `0.9333 1.0000 1.0000 1.0000 1.0000 1.0000 1.0000`.
+
+#### Interpretation
+
+- Case12 gives a cleaner core presentation path for the current research question: manifold quality plus 1/2/3-source RMSE and spectra.
+- The two-source backend ablation again supports replacing plain MUSIC peak picking with pairwise covariance-fit ML for current two-source evidence.
+- The three-source numbers are useful as a smoke/proof-of-structure diagnostic only. The `triplet_grid_ml` backend is still a coarse grid covariance-fit backend and should not yet be treated as a final 3-source algorithmic claim.
+
+#### Key images
+
+![case12 core rmse summary](assets/case12-core-rmse-summary-local-803b388e.png)
+
+![case12 core two-source spectrum](assets/case12-core-two-source-spectrum-local-803b388e.png)
+
+![case12 core three-source spectrum](assets/case12-core-three-source-spectrum-local-803b388e.png)
+
+### 2026-05-08：`local-93b97e7f` Case9 pairwise backend mainline diagnostic
+
+- Version hash: `local-93b97e7f`
+- Base HEAD: `not-a-git-repo`
+- Worktree state: uncommitted code and documentation changes; this local directory did not expose a `.git` repository.
+- Change: promoted `pairwise_grid_ml` from a diagnostic backend to the Case9 mainline backend. The intended Case9 method definition is now `calibrated estimator manifold + pairwise covariance-fit ML backend`.
+- Change: synchronized README, simulation notes, and V3.3 algorithm documentation so MUSIC peak picking is described as backend ablation / spectrum diagnostic, not the primary Case9 result path.
+- Change: wrote the brainstorming design and implementation plan under `docs/superpowers/`.
+- Affected cases: Case9 mainline interpretation; Case11 remains backend ablation.
+- Validation: `matlab -batch "addpath(genpath(pwd)); run_sanity_tests"`; `checkcode default_config.m run_project.m src/doa_backend_pairwise_grid_ml.m src/benchmark_music.m tests/run_sanity_tests.m`; traceable `run_project(9,cfg)`.
+- Result path: `results/local-93b97e7f/`
+- Case outputs: `case09_two_source_resolution/`
+
+#### Case9 mainline diagnostic observations
+
+- Source pairs: `[-12.2 -4.2; 23.8 31.8; 6.8 16.8]`
+- Monte Carlo: `20`
+- Backend: `pairwise_grid_ml`
+- Candidate pair count: `1991`
+- Method order: `Ideal / Interpolation / ARD / Proposed V1 / Proposed V2 / Proposed V3.3 / HFSS Oracle`
+- Overall mean resolution: `0.883300 / 1.000000 / 1.000000 / 1.000000 / 1.000000 / 1.000000 / 1.000000`
+- Overall mean stable rate: `0.016700 / 0.533300 / 0.433300 / 0.533300 / 0.466700 / 0.450000 / 0.416700`
+- Overall mean pair RMSE: `2.162100 / 0.478200 / 0.592700 / 0.468500 / 0.547000 / 0.544800 / 0.580200`
+- Overall mean separation-collapse rate: `0.000000 / 0.000000 / 0.000000 / 0.000000 / 0.000000 / 0.000000 / 0.000000`
+
+#### Interpretation
+
+- This run resolves the previous result/log mismatch by creating a fresh traceable result directory for the current pairwise-backend mainline.
+- The result supports moving Case9 away from plain MUSIC peak picking: all calibrated/manifold methods reach `1.0` resolution in this medium diagnostic, and separation collapse is zero.
+- Proposed V3.3 has competitive pair RMSE (`0.544800`) but stable rate (`0.450000`) is not the best among calibrated baselines in this diagnostic. The result should be presented as a mainline backend correction plus calibrated-manifold comparison, not as a final V3.3 victory claim.
+- This is still a medium Case9 diagnostic, not a full paper-profile benchmark.
+
+#### Key image
+
+![case09 pairwise backend mainline](assets/case09-pairwise-mainline-local-93b97e7f.png)
+
 ### 2026-05-08：`local-345786ed` Batched pairwise-grid backend and middle-pair Case9 run
 
 - Version hash: `local-345786ed`

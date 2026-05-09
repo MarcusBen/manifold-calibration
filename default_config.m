@@ -204,24 +204,22 @@ cfg.case8.toleranceDeg = 0.5;
 cfg.case9 = struct();
 cfg.case9.evalSNRDb = 5;
 cfg.case9.snapshots = 500;
-cfg.case9.monteCarlo = 80;
+cfg.case9.monteCarlo = 20;
 cfg.case9.toleranceDeg = 0.6;
 cfg.case9.biasedToleranceDeg = 2;
 cfg.case9.marginalToleranceDeg = 5;
 cfg.case9.separationSweepDeg = [1 2 3 4 5 6 8 10];
 cfg.case9.discriminativeMinSeparationDeg = 6;
-cfg.case9.maxPairsPerSeparation = 21;
+cfg.case9.maxPairsPerSeparation = 5;
 cfg.case9.pairSelectionMode = 'research_coverage';
-cfg.case9.sourcePairsDeg = [];
+cfg.case9.sourcePairsDeg = [-12.2 -4.2; 6.8 16.8; 23.8 31.8];
 cfg.case9.exampleTargetResolutionProb = 0.5;
-cfg.case9.gpAnmFallback = struct();
-cfg.case9.gpAnmFallback.enabled = false;
-cfg.case9.gpAnmFallback.addDiagonalProxy = false;
-cfg.case9.gpAnmFallback.maxPairs = 4;
-cfg.case9.gpAnmFallback.monteCarlo = 1;
-cfg.case9.gpAnmFallback.errorRadius = 0.5;
-cfg.case9.gpAnmFallback.tauEta = 1;
-cfg.case9.gpAnmFallback.label = 'GP-ANM fallback';
+cfg.case9.backendName = 'pairwise_grid_ml';
+cfg.case9.backendCandidateAngleStrideDeg = 1;
+cfg.case9.backendMinimumSeparationDeg = 2;
+cfg.case9.backendMaximumSeparationDeg = 30;
+cfg.case9.backendCandidatePeakCount = 12;
+cfg.case9.backendTopCandidateCount = 8;
 
 cfg.case10 = struct();
 cfg.case10.l = 9;
@@ -230,6 +228,41 @@ cfg.case10.evalSNRDb = 10;
 cfg.case10.snapshots = 500;
 cfg.case10.monteCarlo = 40;
 cfg.case10.toleranceDeg = 1;
+
+cfg.case11 = struct();
+cfg.case11.sourcePairsDeg = [23.8 31.8; 35.8 45.8];
+cfg.case11.evalSNRDb = cfg.case9.evalSNRDb;
+cfg.case11.snapshots = cfg.case9.snapshots;
+cfg.case11.monteCarlo = 20;
+cfg.case11.toleranceDeg = cfg.case9.toleranceDeg;
+cfg.case11.biasedToleranceDeg = cfg.case9.biasedToleranceDeg;
+cfg.case11.marginalToleranceDeg = cfg.case9.marginalToleranceDeg;
+cfg.case11.methodKeys = {'ard', 'proposed_v1', 'proposed_v3', 'oracle'};
+cfg.case11.backendNames = {'music', 'music_pair_rescore', 'pairwise_grid_ml'};
+cfg.case11.candidatePeakCount = 12;
+cfg.case11.minimumSeparationDeg = 2;
+cfg.case11.maximumSeparationDeg = 30;
+cfg.case11.candidateAngleStrideDeg = 1;
+cfg.case11.topCandidateCount = 8;
+
+cfg.core = struct();
+cfg.core.enabledCases = {'manifold_sanity', 'single_source', 'two_source', ...
+    'three_source', 'backend_ablation'};
+cfg.core.evalSNRDb = 5;
+cfg.core.snapshots = 1000;
+cfg.core.monteCarlo = 50;
+cfg.core.methodKeys = {'ideal', 'interp', 'ard', 'proposed_v1', ...
+    'proposed_v2', 'proposed_v3', 'oracle'};
+cfg.core.singleSourceAnglesDeg = [-42.2 -20.2 0 18.8 42.8];
+cfg.core.twoSourcePairsDeg = [-12.2 -4.2; 6.8 16.8; 23.8 31.8];
+cfg.core.threeSourceSetsDeg = [-18.2 -7.2 8.8; -10.2 4.8 19.8; 12.8 24.8 36.8];
+cfg.core.backendName = 'pairwise_grid_ml';
+cfg.core.threeSourceBackendName = 'triplet_grid_ml';
+cfg.core.backendCandidateAngleStrideDeg = 1;
+cfg.core.threeSourceCandidateAngleStrideDeg = 2;
+cfg.core.backendMinimumSeparationDeg = 2;
+cfg.core.backendMaximumSeparationDeg = 35;
+cfg.core.topCandidateCount = 8;
 
 cfg = local_apply_profile(cfg, profileName);
 end
@@ -244,6 +277,7 @@ switch lower(strtrim(profileName))
         cfg.case7.monteCarlo = 200;
         cfg.case8.monteCarlo = 200;
         cfg.case9.monteCarlo = 300;
+        cfg.case11.monteCarlo = 80;
         cfg.model.v2.numSpsaIterations = 24;
         cfg.model.v3.numSpsaIterations = 12;
     otherwise

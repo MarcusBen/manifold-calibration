@@ -4,6 +4,8 @@ function result = benchmark_music(ctx, methods, evalCfg)
 modeName = lower(strtrim(evalCfg.mode));
 collectSpectrum = isfield(evalCfg, 'collectRepresentativeSpectrum') && evalCfg.collectRepresentativeSpectrum;
 doubleStateCfg = local_double_state_config(evalCfg);
+backendName = local_optional_field(evalCfg, 'backendName', 'music');
+backendCfg = local_optional_field(evalCfg, 'backendCfg', struct());
 
 switch modeName
     case 'single'
@@ -45,11 +47,13 @@ for methodIdx = 1:numMethods
     result.methods(methodIdx).marginalRate = NaN;
     result.methods(methodIdx).biasedRate = NaN;
     result.methods(methodIdx).stableRate = NaN;
+    result.methods(methodIdx).separationCollapseRate = NaN;
     result.methods(methodIdx).perTargetResolutionRate = NaN(numTargets, 1);
     result.methods(methodIdx).perTargetMarginalRate = NaN(numTargets, 1);
     result.methods(methodIdx).perTargetBiasedRate = NaN(numTargets, 1);
     result.methods(methodIdx).perTargetStableRate = NaN(numTargets, 1);
     result.methods(methodIdx).perTargetUnresolvedRate = NaN(numTargets, 1);
+    result.methods(methodIdx).perTargetSeparationCollapseRate = NaN(numTargets, 1);
     result.methods(methodIdx).representativeSpectrum = [];
     result.methods(methodIdx).representativeEstAnglesDeg = [];
     result.methods(methodIdx).representativeResolutionState = '';
@@ -77,13 +81,15 @@ for methodIdx = 1:numMethods
     trialMarginal = false(numTargets, evalCfg.monteCarlo);
     trialBiased = false(numTargets, evalCfg.monteCarlo);
     trialStable = false(numTargets, evalCfg.monteCarlo);
+    trialSeparationCollapse = false(numTargets, evalCfg.monteCarlo);
 
     for targetIdx = 1:numTargets
         trueAngles = trueAngleSets(targetIdx, :);
 
         for mcIdx = 1:evalCfg.monteCarlo
             x = snapshotsByTarget{targetIdx, mcIdx};
-            [estAngles, spectrum] = local_estimate_music(x, methods(methodIdx).manifold, ctx.thetaDeg, numSources);
+            [estAngles, spectrum] = local_estimate_doa(x, methods(methodIdx).manifold, ...
+                ctx.thetaDeg, numSources, backendName, backendCfg, modeName);
 
             if strcmp(modeName, 'single')
                 trialErrors(targetIdx, mcIdx) = estAngles(1) - trueAngles(1);
@@ -98,6 +104,8 @@ for methodIdx = 1:numMethods
                 trialMarginal(targetIdx, mcIdx) = state.isMarginal;
                 trialBiased(targetIdx, mcIdx) = state.isBiased;
                 trialStable(targetIdx, mcIdx) = state.isStable;
+                trialSeparationCollapse(targetIdx, mcIdx) = ...
+                    local_is_separation_collapsed(estAngles, trueAngles);
             end
 
             if collectSpectrum && targetIdx == 1 && mcIdx == 1
@@ -125,16 +133,29 @@ for methodIdx = 1:numMethods
         result.methods(methodIdx).marginalRate = mean(trialMarginal(:));
         result.methods(methodIdx).biasedRate = mean(trialBiased(:));
         result.methods(methodIdx).stableRate = mean(trialStable(:));
+        result.methods(methodIdx).separationCollapseRate = mean(trialSeparationCollapse(:));
         result.methods(methodIdx).perTargetResolutionRate = mean(trialResolution, 2);
         result.methods(methodIdx).perTargetMarginalRate = mean(trialMarginal, 2);
         result.methods(methodIdx).perTargetBiasedRate = mean(trialBiased, 2);
         result.methods(methodIdx).perTargetStableRate = mean(trialStable, 2);
         result.methods(methodIdx).perTargetUnresolvedRate = 1 - mean(trialResolution, 2);
+        result.methods(methodIdx).perTargetSeparationCollapseRate = mean(trialSeparationCollapse, 2);
     end
 
     result.methods(methodIdx).successRate = mean(trialSuccess(:));
     result.methods(methodIdx).perTargetSuccess = mean(trialSuccess, 2);
 end
+end
+
+function isCollapsed = local_is_separation_collapsed(estAngles, trueAngles)
+if numel(estAngles) ~= 2 || numel(trueAngles) ~= 2
+    isCollapsed = false;
+    return;
+end
+
+trueSeparation = abs(diff(sort(trueAngles(:).')));
+estimatedSeparation = abs(diff(sort(estAngles(:).')));
+isCollapsed = estimatedSeparation < 0.5 * trueSeparation;
 end
 
 function value = local_percentile(values, percentile)
@@ -202,6 +223,31 @@ function [estAngles, spectrum] = local_estimate_music(x, scanManifold, scanAngle
 covariance = (x * x') / size(x, 2);
 spectrum = local_music_spectrum(covariance, scanManifold, numSources);
 estAngles = local_pick_top_k_peaks(spectrum, scanAngles, numSources);
+end
+
+function [estAngles, spectrum] = local_estimate_doa(x, scanManifold, scanAngles, ...
+    numSources, backendName, backendCfg, modeName)
+if strcmp(modeName, 'single') || strcmpi(strtrim(backendName), 'music')
+    [estAngles, spectrum] = local_estimate_music(x, scanManifold, scanAngles, numSources);
+    return;
+end
+
+backendCfg.numSources = numSources;
+switch lower(strtrim(backendName))
+    case 'music_pair_rescore'
+        backendResult = doa_backend_music_pair_rescore(x, scanManifold, scanAngles, backendCfg);
+    case 'pairwise_grid_ml'
+        backendResult = doa_backend_pairwise_grid_ml(x, scanManifold, scanAngles, backendCfg);
+    otherwise
+        error('Unsupported benchmark backend: %s', backendName);
+end
+
+estAngles = backendResult.estAnglesDeg;
+spectrum = backendResult.spectrum;
+if isempty(spectrum)
+    covariance = (x * x') / size(x, 2);
+    spectrum = local_music_spectrum(covariance, scanManifold, numSources);
+end
 end
 
 function spectrum = local_music_spectrum(covariance, scanManifold, numSources)
