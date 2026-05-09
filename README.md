@@ -9,7 +9,7 @@
 
 ## 最新摘要
 
-截至 2026-05-08，当前本地主线已经切换为 `Proposed V3.3 manifold calibration + pairwise covariance-fit ML backend`。当前可发布结果批次是 `local-12e2cc40`，它把 Case 12 三源谱图改成 MUSIC pseudo-spectrum 加 triplet-grid marginal confidence 的 backend-consistent 展示；Case 9 的主结果后端已从 MUSIC peak picking 改为联合双源协方差拟合，Case 11 保留为后端消融，用来解释 MUSIC、MUSIC pair-rescore 与 pairwise-grid ML 的差异。
+截至 2026-05-08，当前本地主线已经切换为 `Proposed V3.3 manifold calibration + pairwise covariance-fit ML backend`。当前可发布结果批次是 `aa42472`，它把 Case 12 三源谱图改成 MUSIC pseudo-spectrum 加 triplet-grid marginal confidence 的 backend-consistent 展示；Case 9 的主结果后端已从 MUSIC peak picking 改为联合双源协方差拟合，Case 11 保留为后端消融，用来解释 MUSIC、MUSIC pair-rescore 与 pairwise-grid ML 的差异。
 
 - 当前代码默认仍是 Proposed V3.3，保留 ARD anchor、held-out guard 和 global-stable pair surrogate；GP-ANM 已作为离线诊断评估，不属于当前主线。
 - Case 9 当前默认后端是 `pairwise_grid_ml`，默认诊断 pair 为 `[-12.2 -4.2; 6.8 16.8; 23.8 31.8]`，`monteCarlo = 20`。这是一条中等规模诊断主线，不是完整 paper-profile full run。
@@ -55,7 +55,7 @@
 - Latest local Case 9 separation-collapse rate is `0` for all methods.
 - Latest complete local Case 12 core diagnostic: `results/aa42472/`, with `monteCarlo = 50`, `snapshots = 1000`, 1/2/3-source mean RMSE, backend-marginal three-source spectrum, and full diagnostic figures in `case12_core_1to3_source_mainline/`.
 - Current result claims must be read as pairwise-backend diagnostics unless a full paper-profile run is explicitly cited.
-- The full `case12_results.mat` for `local-12e2cc40` remains available only in the local workspace unless a standard git push path is available.
+- The full `case12_results.mat` for `aa42472` remains available only in the local workspace unless a standard git push path is available.
 - Historical MUSIC-backend numbers remain useful as ablation/background, not as current Case 9 mainline evidence.
 
 ## Reminder: comments and current code are not hash-aligned
