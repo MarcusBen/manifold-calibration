@@ -15,7 +15,7 @@
 - Case 9 当前默认后端是 `pairwise_grid_ml`，默认诊断 pair 为 `[-12.2 -4.2; 6.8 16.8; 23.8 31.8]`，`monteCarlo = 20`。这是一条中等规模诊断主线，不是完整 paper-profile full run。
 - Case 12 当前默认使用 `monteCarlo = 50`、`snapshots = 1000`，1/2/3-source 共用 HFSS-truth snapshots across methods；双源后端是 `pairwise_grid_ml`，三源后端是粗网格 `triplet_grid_ml`，三源结果仍应按 coarse-grid diagnostic 解读。
 - `local-8ed089e4` paper-readable figure assets are present in `docs/assets/`, but the corresponding local result folder is not present after local cleanup; treat `local-12e2cc40` as the current complete publishable result folder for this sync.
-- Large artifact note: `results/local-12e2cc40/case12_core_1to3_source_mainline/case12_results.mat` is about 40 MB and remains local-only when syncing through the GitHub REST path; published GitHub evidence includes code, docs, run metadata, and PNG figures.
+- Large artifact note: `results/aa42472/case12_core_1to3_source_mainline/case12_results.mat` is about 40 MB and remains local-only when syncing through the GitHub REST path; published GitHub evidence includes code, docs, run metadata, and PNG figures.
 - 2026-05-06 先做了 `local-2f83ff50` GP-ANM offline diagnostic smoke。由于本地没有 CVX/SDP solver，真正 GP-ANM SDP 被跳过；固定 diagonal proxy 基本不能解释 HFSS-vs-ideal manifold gap，也没有解决两源 pair。
 - `602158e` Case 9 common-snapshot rerun 是旧 MUSIC-backend 证据，仍可用于解释历史问题，但不能与当前 pairwise-backend 主线数字直接混用。
 - `fadea59` 是旧文档同步批次，不包含当前后端主线实验输出。
@@ -25,9 +25,9 @@
 
 ## Version Trace
 
-- Pending local hash: `local-12e2cc40`
-- Git code commit hash: pending until upload finalization
-- Current local core 1/2/3-source result folder: `results/local-12e2cc40/`
+- Former pending local hash: `local-12e2cc40`
+- Git code commit hash: `aa42472`
+- Current local core 1/2/3-source result folder: `results/aa42472/`
 - Previous finalized documentation hash: `fadea59`
 - Previous finalized documentation folder: `results/fadea59/`
 - Prior local pairwise-backend result reference: `results/local-93b97e7f/`
@@ -37,8 +37,8 @@
 - Base HEAD for current local batch: `not-a-git-repo`
 - Working branch: `codex/proposed_v3`
 - Latest reviewed comments hash: `a5a22d2`
-- Review status: comments do not match the current pending local hash; treat comments as background only for this version.
-- Hash finalization metadata: this branch will replace `local-12e2cc40` with the Git code commit hash after upload. Earlier finalized/local records such as `fadea59`, `602158e`, and `local-2f83ff50` are left as trace entries.
+- Review status: comments do not match the current Git code commit; treat comments as background only for this version.
+- Hash finalization metadata: this branch includes the follow-up metadata commit that replaces `local-12e2cc40` with `aa42472` for the current Case 12 backend-consistent diagnostic batch. Earlier finalized/local records such as `fadea59`, `602158e`, and `local-2f83ff50` are left as trace entries.
 - Published branch: `origin/codex/proposed_v3`
 - Published branch tip: see remote branch after push
 - Historical result archive policy: older remote `results/` folders are retained as published history; local cleanup deletions are not part of ordinary sync unless explicitly requested.
@@ -53,21 +53,21 @@
 - Latest local Case 9 mean stable rate: `Ideal 0.0167 / Interpolation 0.5333 / ARD 0.4333 / Proposed V1 0.5333 / Proposed V2 0.4667 / Proposed V3.3 0.4500 / HFSS Oracle 0.4167`.
 - Latest local Case 9 mean pair RMSE: `Ideal 2.1621 / Interpolation 0.4782 / ARD 0.5927 / Proposed V1 0.4685 / Proposed V2 0.5470 / Proposed V3.3 0.5448 / HFSS Oracle 0.5802`.
 - Latest local Case 9 separation-collapse rate is `0` for all methods.
-- Latest complete local Case 12 core diagnostic: `results/local-12e2cc40/`, with `monteCarlo = 50`, `snapshots = 1000`, 1/2/3-source mean RMSE, backend-marginal three-source spectrum, and full diagnostic figures in `case12_core_1to3_source_mainline/`.
+- Latest complete local Case 12 core diagnostic: `results/aa42472/`, with `monteCarlo = 50`, `snapshots = 1000`, 1/2/3-source mean RMSE, backend-marginal three-source spectrum, and full diagnostic figures in `case12_core_1to3_source_mainline/`.
 - Current result claims must be read as pairwise-backend diagnostics unless a full paper-profile run is explicitly cited.
 - The full `case12_results.mat` for `local-12e2cc40` remains available only in the local workspace unless a standard git push path is available.
 - Historical MUSIC-backend numbers remain useful as ablation/background, not as current Case 9 mainline evidence.
 
 ## Reminder: comments and current code are not hash-aligned
 
-- `docs/comments.md` 最新评阅针对 `a5a22d2` V3-Revised；当前 pending 批次是 `local-12e2cc40`，因此不能把旧 comments 直接当作当前版本评价。
-- 当前 README 只把 comments 用作背景；当前版本的直接证据来自 `docs/research-log.md`、`algorithms/proposed_algorithm_v3_3.md` 和 `results/local-12e2cc40/`。
+- `docs/comments.md` 最新评阅针对 `a5a22d2` V3-Revised；当前 Git code commit 批次是 `aa42472`，因此不能把旧 comments 直接当作当前版本评价。
+- 当前 README 只把 comments 用作背景；当前版本的直接证据来自 `docs/research-log.md`、`algorithms/proposed_algorithm_v3_3.md` 和 `results/aa42472/`。
 - `docs/comments.md` 没有包含 `local-12e2cc40`，本次 hash finalization 不应改写 comments。
 - 如果后续要评阅当前 V3.3 common-snapshot 版本，应以本次上传产生的 Git code commit hash 为 review target。
 
 ## 仍需保留的边界
 
-- `local-12e2cc40` 是 Case 12 backend-consistent plotting/diagnostic batch，不是完整 paper-profile full run；`602158e` 是旧 MUSIC-backend Case 9 screening rerun。
+- `aa42472` 是 Case 12 backend-consistent plotting/diagnostic batch，不是完整 paper-profile full run；`602158e` 是旧 MUSIC-backend Case 9 screening rerun。
 - Current pairwise-backend evidence should be reported separately from older MUSIC-backend evidence.
 - GP-ANM is retained only as an offline diagnostic / possible future expensive baseline; it is not an active V3.3 fallback path.
 - 下一步应优先补齐 pairwise-backend Case 9 的 traceable medium run 和 backend ablation explanation，而不是只根据单张代表谱图做结论。

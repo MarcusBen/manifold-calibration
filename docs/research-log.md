@@ -55,9 +55,10 @@
 
 ![case12 paper resolved](assets/case12-paper-core-resolved-local-8ed089e4.png)
 
-### 2026-05-08：`local-12e2cc40` Case12 three-source backend-marginal spectrum
+### 2026-05-08：`aa42472` Case12 three-source backend-marginal spectrum
 
-- Version hash: `local-12e2cc40`
+- Version hash: `aa42472`
+- Former pending local hash: `local-12e2cc40`
 - Base HEAD: `unavailable-not-a-git-repo`
 - Worktree state: uncommitted code and documentation changes; this local directory did not expose a `.git` repository.
 - Change: added backend-consistent triplet marginal confidence diagnostics to `triplet_grid_ml`.
@@ -65,7 +66,7 @@
 - Change: saved sorted candidate triplet indices/scores/angles in the representative backend diagnostics so the plotted lower panel is derived from the same covariance-fit scores used by the estimator.
 - Affected cases: Case12 figure/diagnostics only. RMSE, resolved-rate, source sets, and snapshot policy are unchanged.
 - Validation: `matlab -batch "addpath(genpath(pwd)); run('tests/run_sanity_tests.m')"`; `checkcode default_config.m run_project.m src/doa_backend_triplet_grid_ml.m tests/run_sanity_tests.m`; traceable default `run_project([],cfg)`.
-- Result path: `results/local-12e2cc40/`
+- Result path: `results/aa42472/`
 - Case outputs: `case12_core_1to3_source_mainline/`
 
 #### Case12 observations
@@ -84,9 +85,9 @@
 
 #### Key images
 
-![case12 three-source backend marginal](assets/case12-three-source-backend-marginal-local-12e2cc40.png)
+![case12 three-source backend marginal](assets/case12-three-source-backend-marginal-aa42472.png)
 
-![case12 core rmse summary](assets/case12-core-rmse-summary-local-12e2cc40.png)
+![case12 core rmse summary](assets/case12-core-rmse-summary-aa42472.png)
 
 ### 2026-05-08：`local-d6d1df44` Case12 default-only full mainline run
 

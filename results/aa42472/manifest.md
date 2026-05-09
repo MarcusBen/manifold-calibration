@@ -1,6 +1,7 @@
 # Results manifest
 
-- Version hash: `local-12e2cc40`
+- Version hash: `aa42472`
+- Former pending local hash: `local-12e2cc40`
 - Base HEAD: `unavailable-not-a-git-repo`
 - Worktree state: uncommitted code changes recorded in `RUN_NOTES.md`
 - Command: `matlab -batch addpath/genpath; cfg=default_config(pwd); run_project([],cfg)`

@@ -1,9 +1,10 @@
 # Run Notes
 
 - Timestamp: `2026-05-08 20:03:18`
-- Pending local hash: `local-12e2cc40`
+- Git code commit hash: `aa42472`
+- Former pending local hash: `local-12e2cc40`
 - Base HEAD: `unavailable-not-a-git-repo`
-- Run id: `local-12e2cc40`
+- Run id: `aa42472`
 - Command: `matlab -batch addpath/genpath; cfg=default_config(pwd); run_project([],cfg)`
 - Notes: `Case12 three-source spectrum now includes triplet-grid backend marginal confidence.`
 
