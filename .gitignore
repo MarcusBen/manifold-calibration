@@ -1,0 +1,23 @@
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# MATLAB temporary/generated files
+*.asv
+*.m~
+*.autosave
+*.slxc
+*.slxc/*
+*.mdl.r*
+*.slx.r*
+*.mex*
+*.log
+slprj/
+codegen/

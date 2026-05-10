@@ -1,0 +1,62 @@
+<h2>Case 结构精简方向</h2>
+<p class="subtitle">目标：减少冗余，把证据集中到 1-3 源 DOA 的 RMSE、谱函数和后端表现。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A. 最小整理</div>
+        <div class="mockup-body">
+          <div class="placeholder">Case 1: mismatch / calibration sanity</div>
+          <div class="placeholder">Case 7/8: single-source RMSE + spectra</div>
+          <div class="placeholder">Case 9: two-source RMSE + spectra</div>
+          <div class="placeholder">Case 11: backend ablation</div>
+          <div class="placeholder" style="opacity:.45">Case 2/4/5/6/10 kept as appendix</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. 保留现有编号，弱化冗余</h3>
+      <p>改动小，最快收口；但主线仍显得分散，历史包袱还在。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B. 推荐：1-3 源主线重组</div>
+        <div class="mockup-body">
+          <div class="placeholder">Core A: manifold reconstruction sanity</div>
+          <div class="placeholder">Core B: 1-source RMSE + spectrum floor</div>
+          <div class="placeholder">Core C: 2-source RMSE + spectrum + backend</div>
+          <div class="placeholder">Core D: 3-source RMSE + spectrum stress</div>
+          <div class="placeholder" style="opacity:.45">Appendix: sampling / splits / old ablations</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. 重组为 1-3 源证据链</h3>
+      <p>论文叙事最清楚：单源、双源、三源逐级加难；RMSE 和谱函数成为统一主指标。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C. 激进裁剪</div>
+        <div class="mockup-body">
+          <div class="placeholder">Case A: 1-source benchmark</div>
+          <div class="placeholder">Case B: 2-source benchmark</div>
+          <div class="placeholder">Case C: 3-source benchmark</div>
+          <div class="placeholder">Case D: backend ablation</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. 大幅砍掉旧 case</h3>
+      <p>最干净，但风险最大：会丢掉 calibration count、random split 等防御性证据。</p>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle">我的初步推荐是 B：主线聚焦 1-3 源，旧 case 降级为 appendix/diagnostic。</p>
