@@ -1,4 +1,0 @@
-calibrationCount,snrDb,numSources,stratum,difficulty,bestBaselineName,v33Rmse,ardRmse,bestBaselineRmse,oracleRmse,deltaRmseV33MinusArd,deltaRmseV33MinusBestBaseline,deltaRmseV33MinusOracle,deltaResolvedV33MinusArd,deltaResolvedV33MinusBestBaseline,v33VsArdLabel,v33VsBestBaselineLabel
-5,0,1,center,medium,interp,0,0,0,0,0,0,0,0,0,neutral,neutral
-5,0,2,center,medium,interp,0,0,0,0,0,0,0,0,0,neutral,neutral
-5,0,3,center,medium,interp,0.115470053837925,0.115470053837925,0.115470053837925,0.115470053837925,0,0,0,0,0,neutral,neutral

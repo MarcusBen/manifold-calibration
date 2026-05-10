@@ -21,3 +21,7 @@ Desktop.ini
 *.log
 slprj/
 codegen/
+
+# Nested/reference repositories and local smoke scratch outputs
+reference/test/
+results/_tmp_case13_check/
