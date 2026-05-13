@@ -91,16 +91,7 @@ result.summary = local_summary(result);
 end
 
 function backendResult = local_run_backend(backendName, x, scanManifold, scanAnglesDeg, backendCfg)
-switch lower(strtrim(backendName))
-    case 'music'
-        backendResult = doa_backend_music_baseline(x, scanManifold, scanAnglesDeg, backendCfg);
-    case 'music_pair_rescore'
-        backendResult = doa_backend_music_pair_rescore(x, scanManifold, scanAnglesDeg, backendCfg);
-    case 'pairwise_grid_ml'
-        backendResult = doa_backend_pairwise_grid_ml(x, scanManifold, scanAnglesDeg, backendCfg);
-    otherwise
-        error('Unknown DOA backend: %s', backendName);
-end
+backendResult = doa_backend_dispatch(backendName, x, scanManifold, scanAnglesDeg, backendCfg);
 end
 
 function collect = local_collect_representative(evalCfg)

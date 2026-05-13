@@ -23,6 +23,8 @@ local_test_music_backend_baseline(ctx);
 local_test_music_pair_rescore_backend(ctx);
 local_test_spice_backend(ctx);
 local_test_spice_plus_backend(ctx);
+local_test_doa_backend_dispatch_spice(ctx);
+local_test_backend_benchmark_accepts_spice(ctx);
 local_test_pairwise_grid_ml_backend(ctx);
 local_test_pairwise_grid_ml_preserves_covariance_objective(ctx);
 local_test_triplet_grid_ml_backend(ctx);
@@ -288,6 +290,37 @@ local_assert_true(all(abs(result.estAnglesDeg - [-18 14]) <= 0.8), ...
 local_assert_equal(result.name, 'spice_plus', 'SPICE+ backend name');
 local_assert_true(isfield(result.diagnostics, 'sigmaHat'), ...
     'SPICE+ backend sigma diagnostics');
+end
+
+function local_test_doa_backend_dispatch_spice(ctx)
+rng(93023, 'twister');
+idx = [local_angle_index(ctx.thetaDeg, -18), local_angle_index(ctx.thetaDeg, 14)];
+x = local_simulate_snapshots(ctx.AH(:, idx), 35, 1200);
+backendCfg = struct('numSources', 2, 'minimumSeparationDeg', 3, ...
+    'maxIterations', 60, 'tolerance', 1e-5, 'diagonalLoading', 1e-8);
+result = doa_backend_dispatch('spice_plus', x, ctx.AH, ctx.thetaDeg, backendCfg);
+local_assert_equal(result.name, 'spice_plus', 'dispatcher SPICE+ backend name');
+local_assert_true(all(abs(result.estAnglesDeg - [-18 14]) <= 0.8), ...
+    'dispatcher SPICE+ recovers high-SNR oracle pair');
+end
+
+function local_test_backend_benchmark_accepts_spice(ctx)
+rng(93024, 'twister');
+methods = struct('name', 'oracle', 'label', 'HFSS Oracle', 'manifold', ctx.AH);
+evalCfg = local_backend_test_eval_cfg();
+evalCfg.trueAngles = [-18 14];
+evalCfg.monteCarlo = 1;
+backendCfg = local_backend_test_backend_cfg(ctx);
+backendCfg.backendNames = {'music', 'spice_plus', 'pairwise_grid_ml'};
+backendCfg.maxIterations = 40;
+backendCfg.tolerance = 1e-5;
+backendCfg.diagonalLoading = 1e-8;
+backendCfg.minimumSeparationDeg = 3;
+bench = benchmark_doa_backends(ctx, methods, evalCfg, backendCfg);
+local_assert_equal(bench.backendNames, backendCfg.backendNames, ...
+    'backend benchmark preserves SPICE backend names');
+local_assert_equal(size(bench.rmse, 1), 3, ...
+    'backend benchmark has three backend rows');
 end
 
 function local_test_pairwise_grid_ml_backend(ctx)

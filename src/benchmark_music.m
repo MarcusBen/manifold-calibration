@@ -234,10 +234,8 @@ end
 
 backendCfg.numSources = numSources;
 switch lower(strtrim(backendName))
-    case 'music_pair_rescore'
-        backendResult = doa_backend_music_pair_rescore(x, scanManifold, scanAngles, backendCfg);
-    case 'pairwise_grid_ml'
-        backendResult = doa_backend_pairwise_grid_ml(x, scanManifold, scanAngles, backendCfg);
+    case {'music_pair_rescore', 'spice', 'spice_plus', 'pairwise_grid_ml'}
+        backendResult = doa_backend_dispatch(backendName, x, scanManifold, scanAngles, backendCfg);
     otherwise
         error('Unsupported benchmark backend: %s', backendName);
 end
