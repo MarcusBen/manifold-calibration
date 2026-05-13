@@ -381,8 +381,8 @@ end
 if opts.tolerance <= 0 || ~isfinite(opts.tolerance)
     error('spice_spectrum:InvalidOptions', 'tolerance must be positive and finite.');
 end
-if opts.diagonalLoading < 0 || ~isfinite(opts.diagonalLoading)
-    error('spice_spectrum:InvalidOptions', 'diagonalLoading must be nonnegative and finite.');
+if opts.diagonalLoading <= 0 || ~isfinite(opts.diagonalLoading)
+    error('spice_spectrum:InvalidOptions', 'diagonalLoading must be positive and finite.');
 end
 end
 

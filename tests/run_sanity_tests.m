@@ -181,6 +181,8 @@ covariance = (x * x') / size(x, 2);
 alg = struct('maxIterations', 60, 'tolerance', 1e-5, 'diagonalLoading', 1e-8);
 [spiceSpectrum, spiceInfo] = doa_backend_utils('spice_spectrum', covariance, ctx.AH, alg);
 [spicePlusSpectrum, spicePlusInfo] = doa_backend_utils('spice_plus_spectrum', covariance, ctx.AH, alg);
+spicePeakAngles = sort(ctx.thetaDeg(doa_backend_utils('pick_local_peaks', spiceSpectrum, 2)));
+spicePlusPeakAngles = sort(ctx.thetaDeg(doa_backend_utils('pick_local_peaks', spicePlusSpectrum, 2)));
 local_assert_equal(numel(spiceSpectrum), numel(ctx.thetaDeg), ...
     'SPICE spectrum length');
 local_assert_equal(numel(spicePlusSpectrum), numel(ctx.thetaDeg), ...
@@ -189,12 +191,22 @@ local_assert_true(all(isfinite(spiceSpectrum)) && all(spiceSpectrum >= 0), ...
     'SPICE spectrum finite nonnegative');
 local_assert_true(all(isfinite(spicePlusSpectrum)) && all(spicePlusSpectrum >= 0), ...
     'SPICE+ spectrum finite nonnegative');
+local_assert_true(all(abs(spicePeakAngles - [-18 14]) <= 0.8), ...
+    'SPICE spectrum peaks recover source angles');
+local_assert_true(all(abs(spicePlusPeakAngles - [-18 14]) <= 0.8), ...
+    'SPICE+ spectrum peaks recover source angles');
 local_assert_true(isfield(spiceInfo, 'iterations') && spiceInfo.iterations > 0, ...
     'SPICE iteration diagnostics');
 local_assert_true(isfield(spicePlusInfo, 'iterations') && spicePlusInfo.iterations > 0, ...
     'SPICE+ iteration diagnostics');
 local_assert_true(isfield(spicePlusInfo, 'sigmaHat') && isfinite(spicePlusInfo.sigmaHat), ...
     'SPICE+ sigma diagnostics');
+zeroLoadingAlg = alg;
+zeroLoadingAlg.diagonalLoading = 0;
+local_assert_error(@() doa_backend_utils('spice_spectrum', covariance, ctx.AH, zeroLoadingAlg), ...
+    'spice_spectrum:InvalidOptions', 'SPICE rejects zero diagonal loading');
+local_assert_error(@() doa_backend_utils('spice_plus_spectrum', covariance, ctx.AH, zeroLoadingAlg), ...
+    'spice_spectrum:InvalidOptions', 'SPICE+ rejects zero diagonal loading');
 end
 
 function local_test_backend_utils_classification()
@@ -509,4 +521,14 @@ end
 function local_assert_close(actual, expected, tolerance, message)
 condition = all(abs(actual(:) - expected(:)) <= tolerance);
 local_assert_true(condition, message);
+end
+
+function local_assert_error(callback, expectedIdentifier, message)
+try
+    callback();
+catch err
+    local_assert_true(strcmp(err.identifier, expectedIdentifier), message);
+    return;
+end
+error('Sanity test failed: %s', message);
 end
