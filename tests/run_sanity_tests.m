@@ -17,6 +17,7 @@ local_test_music_double_oracle(ctx);
 local_test_music_benchmark_pairwise_grid_backend(ctx);
 local_test_common_snapshot_policy(ctx);
 local_test_backend_utils_covariance_fit(ctx);
+local_test_backend_utils_spice_spectra(ctx);
 local_test_backend_utils_classification();
 local_test_music_backend_baseline(ctx);
 local_test_music_pair_rescore_backend(ctx);
@@ -170,6 +171,30 @@ covariance = aPair * diag(sourcePower) * aPair' + noisePower * eye(ctx.numElemen
 local_assert_true(score < 1e-10, sprintf('backend covariance fit score=%g', score));
 local_assert_close(fit.sourcePower(:), sourcePower, 1e-8, 'backend covariance source powers');
 local_assert_close(fit.noisePower, noisePower, 1e-8, 'backend covariance noise power');
+end
+
+function local_test_backend_utils_spice_spectra(ctx)
+rng(93011, 'twister');
+idx = [local_angle_index(ctx.thetaDeg, -18), local_angle_index(ctx.thetaDeg, 14)];
+x = local_simulate_snapshots(ctx.AH(:, idx), 35, 1200);
+covariance = (x * x') / size(x, 2);
+alg = struct('maxIterations', 60, 'tolerance', 1e-5, 'diagonalLoading', 1e-8);
+[spiceSpectrum, spiceInfo] = doa_backend_utils('spice_spectrum', covariance, ctx.AH, alg);
+[spicePlusSpectrum, spicePlusInfo] = doa_backend_utils('spice_plus_spectrum', covariance, ctx.AH, alg);
+local_assert_equal(numel(spiceSpectrum), numel(ctx.thetaDeg), ...
+    'SPICE spectrum length');
+local_assert_equal(numel(spicePlusSpectrum), numel(ctx.thetaDeg), ...
+    'SPICE+ spectrum length');
+local_assert_true(all(isfinite(spiceSpectrum)) && all(spiceSpectrum >= 0), ...
+    'SPICE spectrum finite nonnegative');
+local_assert_true(all(isfinite(spicePlusSpectrum)) && all(spicePlusSpectrum >= 0), ...
+    'SPICE+ spectrum finite nonnegative');
+local_assert_true(isfield(spiceInfo, 'iterations') && spiceInfo.iterations > 0, ...
+    'SPICE iteration diagnostics');
+local_assert_true(isfield(spicePlusInfo, 'iterations') && spicePlusInfo.iterations > 0, ...
+    'SPICE+ iteration diagnostics');
+local_assert_true(isfield(spicePlusInfo, 'sigmaHat') && isfinite(spicePlusInfo.sigmaHat), ...
+    'SPICE+ sigma diagnostics');
 end
 
 function local_test_backend_utils_classification()

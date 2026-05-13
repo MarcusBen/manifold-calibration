@@ -6,6 +6,10 @@ switch lower(strtrim(action))
         [varargout{1:nargout}] = local_covariance_score(varargin{:});
     case 'music_spectrum'
         varargout{1} = local_music_spectrum(varargin{:});
+    case 'spice_spectrum'
+        [varargout{1:nargout}] = local_spice_spectrum(varargin{:});
+    case 'spice_plus_spectrum'
+        [varargout{1:nargout}] = local_spice_plus_spectrum(varargin{:});
     case 'pick_local_peaks'
         varargout{1} = local_pick_local_peaks(varargin{:});
     case 'snap_angle_sets'
@@ -87,6 +91,112 @@ projection = noiseSubspace' * scanManifold;
 denominator = sum(abs(projection) .^ 2, 1);
 denominator(denominator < eps) = eps;
 spectrum = real(1 ./ denominator);
+end
+
+function [p, info] = local_spice_spectrum(covariance, scanManifold, alg)
+if nargin < 3 || isempty(alg)
+    alg = struct();
+end
+local_validate_spice_inputs(covariance, scanManifold, 'spice_spectrum');
+opts = local_spice_options(alg);
+[p, ~] = local_periodogram_spectrum(covariance, scanManifold);
+p = max(real(p), eps);
+numSensors = size(scanManifold, 1);
+sigma = max(real(diag(covariance)).' / 10, eps);
+dictionary = [scanManifold, eye(numSensors)];
+pAll = [p, sigma];
+weightedCovariance = covariance + opts.diagonalLoading * eye(numSensors);
+weights = real(sum(conj(dictionary) .* (weightedCovariance \ dictionary), 1)) / numSensors;
+weights = max(weights, eps);
+deltaHistory = zeros(1, opts.maxIterations);
+iterations = 0;
+for iter = 1:opts.maxIterations
+    modelCovariance = (dictionary .* reshape(pAll, 1, [])) * dictionary' + ...
+        opts.diagonalLoading * eye(numSensors);
+    projectedDictionary = modelCovariance \ dictionary;
+    columnNorm = sqrt(max(real(sum(conj(projectedDictionary) .* ...
+        (covariance * projectedDictionary), 1)), eps));
+    rho = max(sum(sqrt(weights) .* pAll .* columnNorm), eps);
+    pNew = pAll .* columnNorm ./ (sqrt(weights) .* rho);
+    pNew(~isfinite(pNew)) = eps;
+    pNew = max(real(pNew), eps);
+    delta = norm(pNew - pAll, 1) / max(norm(pAll, 1), eps);
+    deltaHistory(iter) = delta;
+    iterations = iter;
+    pAll = pNew;
+    if delta < opts.tolerance
+        break;
+    end
+end
+p = reshape(pAll(1:size(scanManifold, 2)), 1, []);
+info = struct();
+info.iterations = iterations;
+info.deltaHistory = deltaHistory(1:iterations);
+info.noisePowers = reshape(pAll(size(scanManifold, 2)+1:end), 1, []);
+end
+
+function [p, info] = local_spice_plus_spectrum(covariance, scanManifold, alg)
+if nargin < 3 || isempty(alg)
+    alg = struct();
+end
+local_validate_spice_inputs(covariance, scanManifold, 'spice_plus_spectrum');
+opts = local_spice_options(alg);
+[p, ~] = local_periodogram_spectrum(covariance, scanManifold);
+p = max(real(p), eps);
+numSensors = size(scanManifold, 1);
+numGridPoints = size(scanManifold, 2);
+sortedP = sort(p);
+numNoiseSeeds = min(numSensors, numel(sortedP));
+sigmaHat = max(mean(sortedP(1:numNoiseSeeds)) * numSensors, eps);
+dictionary = [scanManifold, eye(numSensors)];
+weightedCovariance = covariance + opts.diagonalLoading * eye(numSensors);
+wSignal = real(sum(conj(scanManifold) .* (weightedCovariance \ scanManifold), 1)) / numSensors;
+wNoise = real(sum(conj(eye(numSensors)) .* ...
+    (weightedCovariance \ eye(numSensors)), 1)) / numSensors;
+wSignal = max(wSignal, eps);
+wNoise = max(wNoise, eps);
+gamma = max(sum(wNoise), eps);
+deltaHistory = zeros(1, opts.maxIterations);
+iterations = 0;
+for iter = 1:opts.maxIterations
+    pAll = [p, sigmaHat * ones(1, numSensors)];
+    modelCovariance = (dictionary .* reshape(pAll, 1, [])) * dictionary' + ...
+        opts.diagonalLoading * eye(numSensors);
+    projectedSignal = modelCovariance \ scanManifold;
+    cSignalNorm = sqrt(max(real(sum(conj(projectedSignal) .* ...
+        (covariance * projectedSignal), 1)), eps));
+    projectedNoise = modelCovariance \ eye(numSensors);
+    cNoiseNorm = sqrt(max(real(trace(projectedNoise' * projectedNoise * covariance)), eps));
+    rho = max(sum(sqrt(wSignal) .* p .* cSignalNorm) + ...
+        sqrt(gamma) * sigmaHat * cNoiseNorm, eps);
+    pNew = p .* cSignalNorm ./ (sqrt(wSignal) .* rho);
+    pNew(~isfinite(pNew)) = eps;
+    pNew = max(real(pNew), eps);
+    sigmaNew = sigmaHat * cNoiseNorm / (sqrt(gamma) * rho);
+    if ~isfinite(sigmaNew)
+        sigmaNew = eps;
+    end
+    sigmaNew = max(real(sigmaNew), eps);
+    delta = norm([pNew, sigmaNew] - [p, sigmaHat], 1) / ...
+        max(norm([p, sigmaHat], 1), eps);
+    deltaHistory(iter) = delta;
+    iterations = iter;
+    p = pNew;
+    sigmaHat = sigmaNew;
+    if delta < opts.tolerance
+        break;
+    end
+end
+p = reshape(p(1:numGridPoints), 1, []);
+info = struct();
+info.iterations = iterations;
+info.deltaHistory = deltaHistory(1:iterations);
+info.sigmaHat = sigmaHat;
+end
+
+function [spectrum, beamPower] = local_periodogram_spectrum(covariance, scanManifold)
+beamPower = real(sum(conj(scanManifold) .* (covariance * scanManifold), 1));
+spectrum = max(beamPower, 0);
 end
 
 function peakIdx = local_pick_local_peaks(spectrum, maxPeaks)
@@ -237,5 +347,49 @@ if numel(thetaDeg) > 1
     tolDeg = median(diff(sort(thetaDeg))) / 2 + 1e-9;
 else
     tolDeg = 1e-9;
+end
+end
+
+function local_validate_spice_inputs(covariance, scanManifold, callerName)
+if ~isnumeric(scanManifold) || ndims(scanManifold) ~= 2 || isempty(scanManifold)
+    error('%s:InvalidSteeringMatrix', callerName);
+end
+if ~isnumeric(covariance) || ndims(covariance) ~= 2 || isempty(covariance) || ...
+        size(covariance, 1) ~= size(covariance, 2)
+    error('%s:InvalidCovariance', callerName);
+end
+if size(scanManifold, 1) ~= size(covariance, 1)
+    error('%s:DimensionMismatch', callerName);
+end
+if any(~isfinite(scanManifold(:))) || any(~isfinite(covariance(:)))
+    error('%s:InvalidInput', callerName);
+end
+hermitianTolerance = 1e-10 * max(1, norm(covariance, 'fro'));
+if norm(covariance - covariance', 'fro') > hermitianTolerance
+    error('%s:NonHermitianCovariance', callerName);
+end
+end
+
+function opts = local_spice_options(alg)
+opts = struct();
+opts.maxIterations = local_optional_field(alg, 'maxIterations', 100);
+opts.tolerance = local_optional_field(alg, 'tolerance', 1e-4);
+opts.diagonalLoading = local_optional_field(alg, 'diagonalLoading', 1e-8);
+if opts.maxIterations <= 0 || opts.maxIterations ~= floor(opts.maxIterations)
+    error('spice_spectrum:InvalidOptions', 'maxIterations must be a positive integer.');
+end
+if opts.tolerance <= 0 || ~isfinite(opts.tolerance)
+    error('spice_spectrum:InvalidOptions', 'tolerance must be positive and finite.');
+end
+if opts.diagonalLoading < 0 || ~isfinite(opts.diagonalLoading)
+    error('spice_spectrum:InvalidOptions', 'diagonalLoading must be nonnegative and finite.');
+end
+end
+
+function value = local_optional_field(inputStruct, fieldName, defaultValue)
+if isstruct(inputStruct) && isfield(inputStruct, fieldName) && ~isempty(inputStruct.(fieldName))
+    value = inputStruct.(fieldName);
+else
+    value = defaultValue;
 end
 end
