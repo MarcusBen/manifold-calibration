@@ -1,6 +1,7 @@
 # Results manifest
 
-- Version hash: `local-1816bb57`
+- Version hash: `4cfa7eb`
+- Former pending local hash: `local-1816bb57`
 - Base HEAD: `b4e3a32`
 - Worktree state: clean before validation metadata; uncommitted validation metadata/results after smoke.
 - Validation scope: parallel backend family plumbing smoke only.

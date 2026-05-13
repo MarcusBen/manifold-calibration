@@ -1,7 +1,8 @@
 # Run Notes
 
 - Timestamp: `2026-05-13 18:46:37 CST`
-- Pending local hash: `local-1816bb57`
+- Version hash: `4cfa7eb`
+- Former pending local hash: `local-1816bb57`
 - Base HEAD: `b4e3a32`
 - Worktree state before validation metadata: clean (`git status --short` printed no entries)
 - Worktree state after smoke before docs edits: `?? results/local-1816bb57/`
@@ -11,7 +12,7 @@
 ## Validation Commands
 
 - Pending hash command: `python3 .codex/skills/project-code-change-log/scripts/new_local_hash.py`
-  - Result: `local-1816bb57`
+  - Result before GitHub-sync finalization: `local-1816bb57`
 - Base/status command: `git rev-parse --short HEAD && git status --short`
   - Result: base HEAD `b4e3a32`; no status entries before metadata generation.
 - Required static command: `checkcode default_config.m run_project.m src/*.m tests/*.m`
@@ -48,10 +49,10 @@ addpath(genpath(pwd));
 cfg = default_config(pwd);
 cfg.run.useTraceableDirs = true;
 cfg.run.resultRoot = fullfile(pwd, 'results');
-cfg.run.runId = 'local-1816bb57';
-cfg.run.pendingLocalHash = 'local-1816bb57';
+cfg.run.runId = '4cfa7eb';
+cfg.run.pendingLocalHash = '4cfa7eb';
 cfg.run.baseHead = 'b4e3a32';
-cfg.run.command = 'matlab -batch addpath(genpath(pwd)); cfg=default_config(pwd); cfg.run.useTraceableDirs=true; cfg.run.runId=local-1816bb57; cfg.core.monteCarlo=1; cfg.core.snapshots=200; cfg.core.methodKeys={ideal,oracle}; cfg.core.singleSourceAnglesDeg=0; cfg.core.twoSourcePairsDeg=[-12.2 -4.2]; cfg.core.threeSourceSetsDeg=[-18.2 -7.2 8.8]; run_project(12,cfg)';
+cfg.run.command = 'matlab -batch addpath(genpath(pwd)); cfg=default_config(pwd); cfg.run.useTraceableDirs=true; cfg.run.runId=4cfa7eb; cfg.core.monteCarlo=1; cfg.core.snapshots=200; cfg.core.methodKeys={ideal,oracle}; cfg.core.singleSourceAnglesDeg=0; cfg.core.twoSourcePairsDeg=[-12.2 -4.2]; cfg.core.threeSourceSetsDeg=[-18.2 -7.2 8.8]; run_project(12,cfg)';
 cfg.run.notes = 'Task 7 smoke validation only; not a final performance conclusion.';
 cfg.core.monteCarlo = 1;
 cfg.core.snapshots = 200;
@@ -67,7 +68,7 @@ run_project(12, cfg);
 
 ## Config Overrides
 
-- Traceable root: `results/local-1816bb57/`
+- Traceable root: `results/4cfa7eb/`
 - Case: `12`
 - Methods: `ideal`, `oracle`
 - Monte Carlo: `1`
