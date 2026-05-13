@@ -18,6 +18,24 @@
 
 > Branch artifact policy: `codex/proposed_v3` 使用 version-first traceable results layout：`results/<version-hash>/<case-name>/`。2026-04-20 当前同步范围包括 `87d7f16` V3 screening、`71650f7` ARD Method 2 full run、`local-8e021ea7` Full V2 C-route full run、`2962bc3` V2-lite run，以及仅含失败启动日志的 `local-aa29a0fd`。
 
+### 2026-05-13: `local-1816bb57` parallel backend family plumbing validation
+
+- Version hash: `local-1816bb57`
+- Base HEAD: `b4e3a32`
+- Worktree state: clean before validation metadata; after smoke/docs generation the worktree contains only Task 7 docs/results metadata changes.
+- Change summary: recorded final validation metadata for the parallel backend family implementation without changing MATLAB behavior. The smoke keeps the existing source-count backend family plumbing visible for one-, two-, and three-source Case12 paths.
+- Affected cases: Case12 smoke only. No Case9, Case11, Case13, paper-profile, or full benchmark run was executed.
+- Validation:
+  - `checkcode default_config.m run_project.m src/*.m tests/*.m`: standalone shell command unavailable (`zsh:1: command not found: checkcode`).
+  - MATLAB `checkcode` over the same file set: completed; existing analyzer/style messages only. Messages include `datestr`/`now` guidance in `run_project.m`, a `STRCMPI` suggestion, stale suppressions, and `ISMATRIX` suggestions in backend utilities.
+  - `matlab -batch "addpath(genpath(pwd)); run('tests/run_sanity_tests.m')"`: PASS; `All sanity tests PASS.`
+  - Traceable smoke `run_project(12,cfg)`: PASS with `cfg.run.useTraceableDirs=true`, `cfg.run.runId='local-1816bb57'`, `cfg.core.monteCarlo=1`, `cfg.core.snapshots=200`, methods `ideal/oracle`, one target set for each source count, `4 deg` candidate strides, and `cfg.core.spice.maxIterations=20`.
+- Result path: `results/local-1816bb57/`
+- Case outputs: `case12_core_1to3_source_mainline/`
+- Case output files: `case12_results.mat`, `core_rmse_summary.png`, `core_resolved_summary.png`, `core_two_source_spectrum.png`, `core_three_source_spectrum.png`, `paper_core_rmse_ranked.png`, `paper_core_resolved_ranked.png`, `paper_three_source_spectrum.png`.
+- Remaining risk: the smoke uses only `ideal` and `oracle` methods, one Monte Carlo trial, reduced snapshots, sparse target coverage, coarser candidate strides, and reduced SPICE iterations. It validates wiring and output traceability, not statistical quality.
+- Explicit note: smoke validation only, not a new performance conclusion.
+
 ### 2026-05-09：`local-ee2e48be` Case13 backend-switched advantage audit smoke
 
 - Version hash: `local-ee2e48be`
