@@ -14,6 +14,8 @@ end
 numTargets = size(trueAngleSets, 1);
 numMethods = numel(methods);
 numMonteCarlo = evalCfg.monteCarlo;
+backendNames = local_backend_names(numSources, evalCfg);
+numBackends = numel(backendNames);
 
 snapshotsByTarget = cell(numTargets, numMonteCarlo);
 for targetIdx = 1:numTargets
@@ -24,37 +26,41 @@ for targetIdx = 1:numTargets
     end
 end
 
-trialRmse = zeros(numTargets, numMethods, numMonteCarlo);
-trialResolved = false(numTargets, numMethods, numMonteCarlo);
-trialWorstAbsError = zeros(numTargets, numMethods, numMonteCarlo);
-backendDiagnostics = cell(numTargets, numMethods, numMonteCarlo);
+trialRmse = zeros(numTargets, numMethods, numBackends, numMonteCarlo);
+trialResolved = false(numTargets, numMethods, numBackends, numMonteCarlo);
+trialWorstAbsError = zeros(numTargets, numMethods, numBackends, numMonteCarlo);
+backendDiagnostics = cell(numTargets, numMethods, numBackends, numMonteCarlo);
 representative = repmat(struct('estAnglesDeg', [], 'spectrum', [], ...
-    'diagnostics', []), 1, numMethods);
+    'diagnostics', []), numBackends, numMethods);
 
 for methodIdx = 1:numMethods
     for targetIdx = 1:numTargets
         trueAngles = sort(trueAngleSets(targetIdx, :));
         for mcIdx = 1:numMonteCarlo
             x = snapshotsByTarget{targetIdx, mcIdx};
-            backendResult = local_run_core_backend(x, methods(methodIdx).manifold, ...
-                ctx.thetaDeg, numSources, evalCfg, backendCfg);
-            estAngles = sort(backendResult.estAnglesDeg(:).');
-            if numel(estAngles) == numSources
-                absError = abs(estAngles - trueAngles);
-                trialRmse(targetIdx, methodIdx, mcIdx) = sqrt(mean(absError .^ 2));
-                trialWorstAbsError(targetIdx, methodIdx, mcIdx) = max(absError);
-                trialResolved(targetIdx, methodIdx, mcIdx) = ...
-                    all(absError <= evalCfg.toleranceDeg);
-            else
-                trialRmse(targetIdx, methodIdx, mcIdx) = Inf;
-                trialWorstAbsError(targetIdx, methodIdx, mcIdx) = Inf;
-                trialResolved(targetIdx, methodIdx, mcIdx) = false;
-            end
-            backendDiagnostics{targetIdx, methodIdx, mcIdx} = backendResult.diagnostics;
-            if targetIdx == 1 && mcIdx == 1
-                representative(methodIdx).estAnglesDeg = estAngles;
-                representative(methodIdx).spectrum = backendResult.spectrum;
-                representative(methodIdx).diagnostics = backendResult.diagnostics;
+            for backendIdx = 1:numBackends
+                backendResult = local_run_core_backend(backendNames{backendIdx}, x, ...
+                    methods(methodIdx).manifold, ctx.thetaDeg, numSources, backendCfg);
+                estAngles = sort(backendResult.estAnglesDeg(:).');
+                if numel(estAngles) == numSources
+                    absError = abs(estAngles - trueAngles);
+                    trialRmse(targetIdx, methodIdx, backendIdx, mcIdx) = ...
+                        sqrt(mean(absError .^ 2));
+                    trialWorstAbsError(targetIdx, methodIdx, backendIdx, mcIdx) = max(absError);
+                    trialResolved(targetIdx, methodIdx, backendIdx, mcIdx) = ...
+                        all(absError <= evalCfg.toleranceDeg);
+                else
+                    trialRmse(targetIdx, methodIdx, backendIdx, mcIdx) = Inf;
+                    trialWorstAbsError(targetIdx, methodIdx, backendIdx, mcIdx) = Inf;
+                    trialResolved(targetIdx, methodIdx, backendIdx, mcIdx) = false;
+                end
+                backendDiagnostics{targetIdx, methodIdx, backendIdx, mcIdx} = ...
+                    backendResult.diagnostics;
+                if targetIdx == 1 && mcIdx == 1
+                    representative(backendIdx, methodIdx).estAnglesDeg = estAngles;
+                    representative(backendIdx, methodIdx).spectrum = backendResult.spectrum;
+                    representative(backendIdx, methodIdx).diagnostics = backendResult.diagnostics;
+                end
             end
         end
     end
@@ -62,51 +68,80 @@ end
 
 result = struct();
 result.numSources = numSources;
-result.snapshotPolicy = 'common_truth_snapshots_across_methods';
+if numBackends > 1
+    result.snapshotPolicy = 'common_truth_snapshots_across_backends_and_methods';
+else
+    result.snapshotPolicy = 'common_truth_snapshots_across_methods';
+end
 result.methodLabels = {methods.label};
 result.methodNames = {methods.name};
 result.requestedAngleSetsDeg = evalCfg.trueAngles;
 result.trueAngleSetsDeg = trueAngleSets;
-result.backendName = local_backend_name(numSources, evalCfg);
-result.perTargetRmse = mean(trialRmse, 3);
-result.perTargetResolvedRate = mean(trialResolved, 3);
-result.perTargetWorstAbsError = mean(trialWorstAbsError, 3);
-result.backendDiagnostics = backendDiagnostics;
+result.backendName = backendNames{1};
+result.backendNames = backendNames;
+result.perTargetRmse = mean(trialRmse, 4);
+result.perTargetResolvedRate = mean(trialResolved, 4);
+result.perTargetWorstAbsError = mean(trialWorstAbsError, 4);
+if numBackends == 1
+    result.perTargetRmse = result.perTargetRmse(:, :, 1);
+    result.perTargetResolvedRate = result.perTargetResolvedRate(:, :, 1);
+    result.perTargetWorstAbsError = result.perTargetWorstAbsError(:, :, 1);
+    result.backendDiagnostics = local_single_backend_diagnostics( ...
+        backendDiagnostics, numTargets, numMethods, numMonteCarlo);
+else
+    result.backendDiagnostics = backendDiagnostics;
+end
 result.representative = representative;
 result.summary = struct();
-result.summary.meanRmse = mean(result.perTargetRmse, 1);
-result.summary.meanResolvedRate = mean(result.perTargetResolvedRate, 1);
-result.summary.meanWorstAbsError = mean(result.perTargetWorstAbsError, 1);
+if numBackends == 1
+    result.summary.meanRmse = mean(result.perTargetRmse, 1);
+    result.summary.meanResolvedRate = mean(result.perTargetResolvedRate, 1);
+    result.summary.meanWorstAbsError = mean(result.perTargetWorstAbsError, 1);
+else
+    result.summary.meanRmse = local_mean_over_targets(result.perTargetRmse, ...
+        numMethods, numBackends);
+    result.summary.meanResolvedRate = local_mean_over_targets( ...
+        result.perTargetResolvedRate, numMethods, numBackends);
+    result.summary.meanWorstAbsError = local_mean_over_targets( ...
+        result.perTargetWorstAbsError, numMethods, numBackends);
+end
 end
 
-function backendResult = local_run_core_backend(x, scanManifold, scanAnglesDeg, ...
-    numSources, evalCfg, backendCfg)
+function backendResult = local_run_core_backend(backendName, x, scanManifold, scanAnglesDeg, ...
+    numSources, backendCfg)
 covariance = (x * x') / size(x, 2);
 spectrum = doa_backend_utils('music_spectrum', covariance, scanManifold, numSources);
-switch numSources
-    case 1
-        peakIdx = doa_backend_utils('pick_local_peaks', spectrum, 1);
-        backendResult = struct();
-        backendResult.name = 'music';
-        backendResult.estAnglesDeg = scanAnglesDeg(peakIdx);
-        backendResult.spectrum = spectrum;
-        backendResult.diagnostics = struct('peakIndex', peakIdx);
-    case 2
-        pairCfg = backendCfg;
-        pairCfg.numSources = 2;
-        pairCfg.scanAnglesDeg = scanAnglesDeg;
-        backendResult = doa_backend_pairwise_grid_ml(x, scanManifold, scanAnglesDeg, pairCfg);
-        backendResult.spectrum = spectrum;
-    case 3
-        tripletCfg = backendCfg;
-        tripletCfg.numSources = 3;
-        tripletCfg.scanAnglesDeg = scanAnglesDeg;
-        backendResult = doa_backend_triplet_grid_ml(x, scanManifold, scanAnglesDeg, tripletCfg);
-        backendResult.spectrum = spectrum;
-    otherwise
-        error('Unsupported numSources=%d.', numSources);
+backendCfg.numSources = numSources;
+backendCfg.scanAnglesDeg = scanAnglesDeg;
+backendResult = doa_backend_dispatch(backendName, x, scanManifold, scanAnglesDeg, backendCfg);
+if ~isfield(backendResult, 'spectrum') || isempty(backendResult.spectrum)
+    backendResult.spectrum = spectrum;
 end
-backendResult.diagnostics.backendName = local_backend_name(numSources, evalCfg);
+backendResult.diagnostics.backendName = backendName;
+end
+
+function values = local_mean_over_targets(metric, numMethods, numBackends)
+values = reshape(mean(metric, 1), [numMethods, numBackends]);
+end
+
+function diagnostics = local_single_backend_diagnostics(backendDiagnostics, ...
+    numTargets, numMethods, numMonteCarlo)
+diagnostics = cell(numTargets, numMethods, numMonteCarlo);
+for mcIdx = 1:numMonteCarlo
+    diagnostics(:, :, mcIdx) = backendDiagnostics(:, :, 1, mcIdx);
+end
+end
+
+function names = local_backend_names(numSources, evalCfg)
+if isfield(evalCfg, 'backendNames') && ~isempty(evalCfg.backendNames)
+    names = evalCfg.backendNames;
+    if ischar(names) || isstring(names)
+        names = cellstr(names);
+    end
+    names = reshape(names, 1, []);
+else
+    names = {local_backend_name(numSources, evalCfg)};
+end
 end
 
 function name = local_backend_name(numSources, evalCfg)
