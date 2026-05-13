@@ -21,6 +21,8 @@ local_test_backend_utils_spice_spectra(ctx);
 local_test_backend_utils_classification();
 local_test_music_backend_baseline(ctx);
 local_test_music_pair_rescore_backend(ctx);
+local_test_spice_backend(ctx);
+local_test_spice_plus_backend(ctx);
 local_test_pairwise_grid_ml_backend(ctx);
 local_test_pairwise_grid_ml_preserves_covariance_objective(ctx);
 local_test_triplet_grid_ml_backend(ctx);
@@ -254,6 +256,38 @@ local_assert_true(isfield(result.diagnostics, 'topCandidatePairsDeg'), ...
     'pair-rescore backend saves top candidates');
 local_assert_true(size(result.diagnostics.topCandidatePairsDeg, 2) == 2, ...
     'pair-rescore candidate pairs have two columns');
+end
+
+function local_test_spice_backend(ctx)
+rng(93021, 'twister');
+idx = [local_angle_index(ctx.thetaDeg, -18), local_angle_index(ctx.thetaDeg, 14)];
+x = local_simulate_snapshots(ctx.AH(:, idx), 35, 1200);
+backendCfg = struct('numSources', 2, 'variant', 'spice', ...
+    'maxIterations', 60, 'tolerance', 1e-5, 'diagonalLoading', 1e-8, ...
+    'minimumSeparationDeg', 3);
+result = doa_backend_spice(x, ctx.AH, ctx.thetaDeg, backendCfg);
+local_assert_true(all(abs(result.estAnglesDeg - [-18 14]) <= 0.8), ...
+    'SPICE backend recovers high-SNR oracle pair');
+local_assert_equal(result.name, 'spice', 'SPICE backend name');
+local_assert_equal(numel(result.spectrum), numel(ctx.thetaDeg), ...
+    'SPICE backend spectrum length');
+local_assert_true(isfield(result.diagnostics, 'iterations'), ...
+    'SPICE backend iteration diagnostics');
+end
+
+function local_test_spice_plus_backend(ctx)
+rng(93022, 'twister');
+idx = [local_angle_index(ctx.thetaDeg, -18), local_angle_index(ctx.thetaDeg, 14)];
+x = local_simulate_snapshots(ctx.AH(:, idx), 35, 1200);
+backendCfg = struct('numSources', 2, 'variant', 'spice_plus', ...
+    'maxIterations', 60, 'tolerance', 1e-5, 'diagonalLoading', 1e-8, ...
+    'minimumSeparationDeg', 3);
+result = doa_backend_spice(x, ctx.AH, ctx.thetaDeg, backendCfg);
+local_assert_true(all(abs(result.estAnglesDeg - [-18 14]) <= 0.8), ...
+    'SPICE+ backend recovers high-SNR oracle pair');
+local_assert_equal(result.name, 'spice_plus', 'SPICE+ backend name');
+local_assert_true(isfield(result.diagnostics, 'sigmaHat'), ...
+    'SPICE+ backend sigma diagnostics');
 end
 
 function local_test_pairwise_grid_ml_backend(ctx)
