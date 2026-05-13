@@ -1286,7 +1286,7 @@ end
 grid on;
 xlabel('Scan angle (deg)');
 ylabel('Pseudo-spectrum (dB)');
-title(sprintf('Case 9: representative MUSIC spectrum at [%g, %g] deg', ...
+title(sprintf('Case 9: representative backend spectrum at [%g, %g] deg', ...
     examplePair(1), examplePair(2)));
 legend({methods.label}, 'Location', 'best');
 local_add_truth_scan_sgtitle('Case 9: near-threshold two-source resolution', ...
@@ -1632,8 +1632,12 @@ for labelIdx = 1:numel(labels)
             labelText = 'MUSIC';
         case 'music_pair_rescore'
             labelText = 'MUSIC pair rescore';
+        case 'spice_plus'
+            labelText = 'SPICE+';
         case 'pairwise_grid_ml'
             labelText = 'Pairwise grid ML';
+        case 'triplet_grid_ml'
+            labelText = 'Triplet grid ML';
         case 'proposed_v3'
             labelText = 'Proposed V3.3';
         case 'proposed_v1'
@@ -1811,10 +1815,51 @@ evalCfg.monteCarlo = cfg.core.monteCarlo;
 evalCfg.toleranceDeg = 1.0;
 evalCfg.backendName = cfg.core.backendName;
 evalCfg.threeSourceBackendName = cfg.core.threeSourceBackendName;
+evalCfg.backendNames = local_backend_names_for_source_count(cfg.core, numSources);
 
 backendCfg = local_core_backend_cfg(cfg.core, ctx.thetaDeg, trueAngleSetsDeg, numSources);
 result = benchmark_core_sources(ctx, methods, evalCfg, backendCfg);
 result.backendCfg = backendCfg;
+result.primaryBackendName = local_primary_backend_name_for_source_count(cfg.core, numSources);
+end
+
+function backendNames = local_backend_names_for_source_count(coreCfg, numSources)
+if ~isfield(coreCfg, 'backendNamesBySource')
+    switch numSources
+        case 1
+            backendNames = {'music'};
+        case 2
+            backendNames = {coreCfg.backendName};
+        case 3
+            backendNames = {coreCfg.threeSourceBackendName};
+        otherwise
+            error('Unsupported source count: %d', numSources);
+    end
+    return;
+end
+switch numSources
+    case 1
+        backendNames = coreCfg.backendNamesBySource.single;
+    case 2
+        backendNames = coreCfg.backendNamesBySource.double;
+    case 3
+        backendNames = coreCfg.backendNamesBySource.triple;
+    otherwise
+        error('Unsupported source count: %d', numSources);
+end
+end
+
+function backendName = local_primary_backend_name_for_source_count(coreCfg, numSources)
+switch numSources
+    case 1
+        backendName = 'music';
+    case 2
+        backendName = coreCfg.backendName;
+    case 3
+        backendName = coreCfg.threeSourceBackendName;
+    otherwise
+        error('Unsupported source count: %d', numSources);
+end
 end
 
 function backendCfg = local_core_backend_cfg(coreCfg, thetaDeg, angleSetsDeg, numSources)
@@ -1839,6 +1884,11 @@ backendCfg.maximumSeparationDeg = coreCfg.backendMaximumSeparationDeg;
 backendCfg.topCandidateCount = coreCfg.topCandidateCount;
 backendCfg.numSources = numSources;
 backendCfg.scanAnglesDeg = thetaDeg;
+backendCfg.maxIterations = coreCfg.spice.maxIterations;
+backendCfg.tolerance = coreCfg.spice.tolerance;
+backendCfg.diagonalLoading = coreCfg.spice.diagonalLoading;
+backendCfg.minimumSeparationDeg = max(backendCfg.minimumSeparationDeg, ...
+    coreCfg.spice.minimumSeparationDeg);
 end
 
 function value = local_optional_config_value(inputStruct, fieldName, defaultValue)
@@ -1869,12 +1919,8 @@ end
 
 function local_plot_case12_core_summary(caseResult, outDir)
 methodLabels = local_case11_display_labels(caseResult.methodLabels);
-rmseValues = [caseResult.singleSource.summary.meanRmse(:), ...
-    caseResult.twoSource.summary.meanRmse(:), ...
-    caseResult.threeSource.summary.meanRmse(:)];
-resolvedValues = [caseResult.singleSource.summary.meanResolvedRate(:), ...
-    caseResult.twoSource.summary.meanResolvedRate(:), ...
-    caseResult.threeSource.summary.meanResolvedRate(:)];
+rmseValues = local_case12_primary_metric_matrix(caseResult, 'meanRmse');
+resolvedValues = local_case12_primary_metric_matrix(caseResult, 'meanResolvedRate');
 
 fig = figure('Visible', 'off', 'Position', [120 120 1180 520]);
 bar(categorical(methodLabels), rmseValues);
@@ -1905,12 +1951,8 @@ end
 
 function local_plot_case12_paper_figures(caseResult, outDir)
 methodLabels = local_case11_display_labels(caseResult.methodLabels);
-rmseValues = [caseResult.singleSource.summary.meanRmse(:), ...
-    caseResult.twoSource.summary.meanRmse(:), ...
-    caseResult.threeSource.summary.meanRmse(:)];
-resolvedValues = [caseResult.singleSource.summary.meanResolvedRate(:), ...
-    caseResult.twoSource.summary.meanResolvedRate(:), ...
-    caseResult.threeSource.summary.meanResolvedRate(:)];
+rmseValues = local_case12_primary_metric_matrix(caseResult, 'meanRmse');
+resolvedValues = local_case12_primary_metric_matrix(caseResult, 'meanResolvedRate');
 
 local_plot_case12_paper_metric(methodLabels, caseResult.methodNames, rmseValues, ...
     'Mean RMSE (deg)', 'Case 12: core RMSE by source count', ...
@@ -1920,6 +1962,22 @@ local_plot_case12_paper_metric(methodLabels, caseResult.methodNames, resolvedVal
     fullfile(outDir, 'paper_core_resolved_ranked.png'), [0 1]);
 local_plot_case12_paper_three_source_spectrum(caseResult.threeSource, ...
     fullfile(outDir, 'paper_three_source_spectrum.png'));
+end
+
+function values = local_case12_primary_metric_matrix(caseResult, fieldName)
+values = [local_case12_primary_metric(caseResult.singleSource, fieldName), ...
+    local_case12_primary_metric(caseResult.twoSource, fieldName), ...
+    local_case12_primary_metric(caseResult.threeSource, fieldName)];
+end
+
+function values = local_case12_primary_metric(sourceResult, fieldName)
+metric = sourceResult.summary.(fieldName);
+backendIdx = local_case12_primary_backend_index(sourceResult);
+if ismatrix(metric) && size(metric, 1) == numel(sourceResult.methodLabels)
+    values = metric(:, backendIdx);
+else
+    values = metric(:);
+end
 end
 
 function local_plot_case12_paper_metric(methodLabels, methodNames, values, ylabelText, titleText, filePath, yLimits)
@@ -1983,8 +2041,9 @@ function local_plot_case12_spectrum(sourceResult, titleText, filePath)
 fig = figure('Visible', 'off', 'Position', [120 120 1080 560]);
 hold on;
 trueAngles = sort(sourceResult.trueAngleSetsDeg(1, :));
+representative = local_case12_primary_representative(sourceResult);
 for methodIdx = 1:numel(sourceResult.methodLabels)
-    spectrum = sourceResult.representative(methodIdx).spectrum;
+    spectrum = representative(methodIdx).spectrum;
     if isempty(spectrum)
         continue;
     end
@@ -1994,8 +2053,9 @@ end
 local_plot_case12_truth_lines(trueAngles);
 grid on;
 xlabel('Angle (deg)');
-ylabel('Normalized MUSIC spectrum (dB)');
-title(titleText, 'FontWeight', 'bold');
+ylabel('Normalized backend spectrum (dB)');
+title(sprintf('%s (%s)', titleText, local_case12_primary_backend_label(sourceResult)), ...
+    'FontWeight', 'bold');
 legend(local_case11_display_labels(sourceResult.methodLabels), ...
     'Location', 'bestoutside', 'Interpreter', 'none');
 ylim([-40 1]);
@@ -2007,31 +2067,33 @@ fig = figure('Visible', 'off', 'Position', [120 120 1180 720]);
 layout = tiledlayout(2, 1, 'Padding', 'compact', 'TileSpacing', 'compact');
 trueAngles = sort(sourceResult.trueAngleSetsDeg(1, :));
 colors = lines(numel(sourceResult.methodLabels));
+representative = local_case12_primary_representative(sourceResult);
 
 nexttile;
 hold on;
 for methodIdx = 1:numel(sourceResult.methodLabels)
-    spectrum = sourceResult.representative(methodIdx).spectrum;
+    spectrum = representative(methodIdx).spectrum;
     if isempty(spectrum)
         continue;
     end
     spectrumDb = 10 * log10(real(spectrum) ./ max(real(spectrum)));
     plot(sourceResult.backendCfg.scanAnglesDeg, spectrumDb, 'LineWidth', 1.5, ...
         'Color', colors(methodIdx, :));
-    local_plot_case12_estimated_markers(sourceResult.representative(methodIdx).estAnglesDeg, ...
+    local_plot_case12_estimated_markers(representative(methodIdx).estAnglesDeg, ...
         colors(methodIdx, :), -38, methodIdx);
 end
 local_plot_case12_truth_lines(trueAngles);
 grid on;
 xlabel('Angle (deg)');
-ylabel('Normalized MUSIC spectrum (dB)');
+ylabel('Normalized backend spectrum (dB)');
 ylim([-40 1]);
-title('MUSIC pseudo-spectrum', 'FontWeight', 'bold');
+title(sprintf('%s representative spectrum', ...
+    local_case12_primary_backend_label(sourceResult)), 'FontWeight', 'bold');
 
 nexttile;
 hold on;
 for methodIdx = 1:numel(sourceResult.methodLabels)
-    diagnostics = sourceResult.representative(methodIdx).diagnostics;
+    diagnostics = representative(methodIdx).diagnostics;
     if ~isfield(diagnostics, 'marginalAnglesDeg') || ...
             ~isfield(diagnostics, 'marginalConfidence')
         continue;
@@ -2045,7 +2107,7 @@ for methodIdx = 1:numel(sourceResult.methodLabels)
     else
         markerY = min(finiteConfidence);
     end
-    local_plot_case12_estimated_markers(sourceResult.representative(methodIdx).estAnglesDeg, ...
+    local_plot_case12_estimated_markers(representative(methodIdx).estAnglesDeg, ...
         colors(methodIdx, :), markerY, methodIdx);
 end
 local_plot_case12_truth_lines(trueAngles);
@@ -2056,7 +2118,7 @@ title('Triplet-grid backend marginal confidence', 'FontWeight', 'bold');
 
 legend(local_case11_display_labels(sourceResult.methodLabels), ...
     'Location', 'bestoutside', 'Interpreter', 'none');
-title(layout, 'Case 12: three-source MUSIC spectrum + triplet-grid backend marginal score', ...
+title(layout, 'Case 12: three-source backend spectrum + triplet-grid marginal score', ...
     'FontWeight', 'bold');
 save_figure(fig, filePath);
 end
@@ -2070,12 +2132,13 @@ trueAngles = sort(sourceResult.trueAngleSetsDeg(1, :));
 xWindow = [max(min(sourceResult.backendCfg.scanAnglesDeg), min(trueAngles) - 10), ...
     min(max(sourceResult.backendCfg.scanAnglesDeg), max(trueAngles) + 10)];
 [colors, lineStyles, markers] = local_case12_paper_styles(numel(selectedIdx));
+representative = local_case12_primary_representative(sourceResult);
 
 nexttile;
 hold on;
 for plotIdx = 1:numel(selectedIdx)
     methodIdx = selectedIdx(plotIdx);
-    spectrum = sourceResult.representative(methodIdx).spectrum;
+    spectrum = representative(methodIdx).spectrum;
     if isempty(spectrum)
         continue;
     end
@@ -2084,7 +2147,7 @@ for plotIdx = 1:numel(selectedIdx)
     plot(sourceResult.backendCfg.scanAnglesDeg, spectrumDb, ...
         'LineStyle', lineStyles{plotIdx}, 'Marker', 'none', 'LineWidth', 2.0, ...
         'Color', colors(plotIdx, :));
-    local_plot_case12_estimated_markers(sourceResult.representative(methodIdx).estAnglesDeg, ...
+    local_plot_case12_estimated_markers(representative(methodIdx).estAnglesDeg, ...
         colors(plotIdx, :), -34, plotIdx);
 end
 local_plot_case12_truth_lines(trueAngles);
@@ -2092,14 +2155,15 @@ grid on;
 xlim(xWindow);
 ylim([-36 1]);
 xlabel('Angle (deg)');
-ylabel('Smoothed MUSIC spectrum (dB)');
-title('Display-smoothed MUSIC pseudo-spectrum', 'FontWeight', 'bold');
+ylabel('Smoothed backend spectrum (dB)');
+title(sprintf('Display-smoothed %s spectrum', ...
+    local_case12_primary_backend_label(sourceResult)), 'FontWeight', 'bold');
 
 nexttile;
 hold on;
 for plotIdx = 1:numel(selectedIdx)
     methodIdx = selectedIdx(plotIdx);
-    diagnostics = sourceResult.representative(methodIdx).diagnostics;
+    diagnostics = representative(methodIdx).diagnostics;
     if ~isfield(diagnostics, 'marginalAnglesDeg') || ...
             ~isfield(diagnostics, 'marginalConfidence')
         continue;
@@ -2114,7 +2178,7 @@ for plotIdx = 1:numel(selectedIdx)
     else
         markerY = min(finiteConfidence);
     end
-    local_plot_case12_estimated_markers(sourceResult.representative(methodIdx).estAnglesDeg, ...
+    local_plot_case12_estimated_markers(representative(methodIdx).estAnglesDeg, ...
         colors(plotIdx, :), markerY, plotIdx);
 end
 local_plot_case12_truth_lines(trueAngles);
@@ -2129,6 +2193,31 @@ legend(local_case11_display_labels(sourceResult.methodLabels(selectedIdx)), ...
 title(layout, 'Case 12: paper-readable three-source spectrum diagnostic', ...
     'FontWeight', 'bold');
 save_figure(fig, filePath);
+end
+
+function representative = local_case12_primary_representative(sourceResult)
+backendIdx = local_case12_primary_backend_index(sourceResult);
+representative = sourceResult.representative(backendIdx, :);
+end
+
+function backendIdx = local_case12_primary_backend_index(sourceResult)
+if isfield(sourceResult, 'primaryBackendName') && ~isempty(sourceResult.primaryBackendName)
+    backendIdx = find(strcmp(sourceResult.backendNames, sourceResult.primaryBackendName), ...
+        1, 'first');
+    if ~isempty(backendIdx)
+        return;
+    end
+    error('run_project:MissingPrimaryBackend', ...
+        'Primary backend "%s" is not present in backendNames: %s.', ...
+        sourceResult.primaryBackendName, local_config_list_text(sourceResult.backendNames));
+end
+backendIdx = 1;
+end
+
+function backendLabel = local_case12_primary_backend_label(sourceResult)
+backendIdx = local_case12_primary_backend_index(sourceResult);
+backendLabel = local_case11_display_labels(sourceResult.backendNames(backendIdx));
+backendLabel = backendLabel{1};
 end
 
 function selectedIdx = local_case12_method_indices(methodNames, selectedNames)
@@ -2261,8 +2350,14 @@ if isfield(cfg, 'core')
     fprintf(fid, '- Monte Carlo: `%d`\n', cfg.core.monteCarlo);
     fprintf(fid, '- Snapshots: `%d`\n', cfg.core.snapshots);
     fprintf(fid, '- Evaluation SNR dB: `%.12g`\n', cfg.core.evalSNRDb);
-    fprintf(fid, '- Two-source backend: `%s`\n', cfg.core.backendName);
-    fprintf(fid, '- Three-source backend: `%s`\n', cfg.core.threeSourceBackendName);
+    fprintf(fid, '- Single-source backend family: `%s`\n', ...
+        local_config_list_text(local_backend_names_for_source_count(cfg.core, 1)));
+    fprintf(fid, '- Two-source backend family: `%s`\n', ...
+        local_config_list_text(local_backend_names_for_source_count(cfg.core, 2)));
+    fprintf(fid, '- Three-source backend family: `%s`\n', ...
+        local_config_list_text(local_backend_names_for_source_count(cfg.core, 3)));
+    fprintf(fid, '- Two-source headline backend: `%s`\n', cfg.core.backendName);
+    fprintf(fid, '- Three-source headline backend: `%s`\n', cfg.core.threeSourceBackendName);
     fprintf(fid, '- Candidate angle stride deg: `%.12g`\n', cfg.core.backendCandidateAngleStrideDeg);
     if isfield(cfg.core, 'threeSourceCandidateAngleStrideDeg')
         fprintf(fid, '- Three-source candidate angle stride deg: `%.12g`\n', ...
@@ -2297,8 +2392,18 @@ if isfield(cfg, 'case13')
         fprintf(fid, '- Smoke SNR dB: `%s`\n', mat2str(cfg.case13.auditSmokeSNRDb));
     end
     fprintf(fid, '- Full Monte Carlo: `%d`\n', cfg.case13.auditFullMonteCarlo);
-    fprintf(fid, '- Two-source backend: `%s`\n', cfg.case13.backendName);
-    fprintf(fid, '- Three-source backend: `%s`\n', cfg.case13.threeSourceBackendName);
+    fprintf(fid, '- Backend family mode: `%s`\n', cfg.case13.backendFamilyMode);
+    fprintf(fid, '- Parallel backend audit enabled: `%d`\n', cfg.case13.parallelBackendAudit);
+    if isfield(cfg.case13, 'backendNamesBySource')
+        fprintf(fid, '- Single-source backend family metadata: `%s`\n', ...
+            local_config_list_text(cfg.case13.backendNamesBySource.single));
+        fprintf(fid, '- Two-source backend family metadata: `%s`\n', ...
+            local_config_list_text(cfg.case13.backendNamesBySource.double));
+        fprintf(fid, '- Three-source backend family metadata: `%s`\n', ...
+            local_config_list_text(cfg.case13.backendNamesBySource.triple));
+    end
+    fprintf(fid, '- Two-source scalar audit backend: `%s`\n', cfg.case13.backendName);
+    fprintf(fid, '- Three-source scalar audit backend: `%s`\n', cfg.case13.threeSourceBackendName);
     fprintf(fid, '- Caveat: `Case 13 auditSmoke is evidence discovery, not final paper-profile evidence.`\n\n');
 end
 if isfield(cfg, 'model') && isfield(cfg.model, 'ard')
@@ -2526,6 +2631,24 @@ if isfield(cfg, 'case9')
     cfg.case9 = local_set_default_field(cfg.case9, 'marginalToleranceDeg', 5);
     cfg.case9 = local_set_default_field(cfg.case9, 'pairSelectionMode', 'research_coverage');
 end
+if isfield(cfg, 'core')
+    if ~isfield(cfg.core, 'backendNamesBySource') || isempty(cfg.core.backendNamesBySource)
+        cfg.core.backendNamesBySource = struct();
+    end
+    cfg.core.backendNamesBySource = local_set_default_field( ...
+        cfg.core.backendNamesBySource, 'single', {'music', 'spice_plus'});
+    cfg.core.backendNamesBySource = local_set_default_field( ...
+        cfg.core.backendNamesBySource, 'double', {'music', 'spice_plus', 'pairwise_grid_ml'});
+    cfg.core.backendNamesBySource = local_set_default_field( ...
+        cfg.core.backendNamesBySource, 'triple', {'music', 'spice_plus', 'triplet_grid_ml'});
+    if ~isfield(cfg.core, 'spice') || isempty(cfg.core.spice)
+        cfg.core.spice = struct();
+    end
+    cfg.core.spice = local_set_default_field(cfg.core.spice, 'maxIterations', 80);
+    cfg.core.spice = local_set_default_field(cfg.core.spice, 'tolerance', 1e-5);
+    cfg.core.spice = local_set_default_field(cfg.core.spice, 'diagonalLoading', 1e-8);
+    cfg.core.spice = local_set_default_field(cfg.core.spice, 'minimumSeparationDeg', 2);
+end
 if isfield(cfg, 'case13')
     cfg.case13 = local_set_default_field(cfg.case13, 'profile', 'auditSmoke');
     cfg.case13 = local_set_default_field(cfg.case13, 'methodKeys', ...
@@ -2543,6 +2666,13 @@ if isfield(cfg, 'case13')
     cfg.case13 = local_set_default_field(cfg.case13, 'winToleranceRate', 0.05);
     cfg.case13 = local_set_default_field(cfg.case13, 'backendName', 'pairwise_grid_ml');
     cfg.case13 = local_set_default_field(cfg.case13, 'threeSourceBackendName', 'triplet_grid_ml');
+    if isfield(cfg, 'core') && isfield(cfg.core, 'backendNamesBySource')
+        cfg.case13 = local_set_default_field(cfg.case13, 'backendNamesBySource', ...
+            cfg.core.backendNamesBySource);
+    end
+    cfg.case13 = local_set_default_field(cfg.case13, 'backendFamilyMode', ...
+        'metadata_only_scalar_audit');
+    cfg.case13 = local_set_default_field(cfg.case13, 'parallelBackendAudit', false);
     cfg.case13 = local_set_default_field(cfg.case13, 'backendCandidateAngleStrideDeg', 1);
     cfg.case13 = local_set_default_field(cfg.case13, 'threeSourceCandidateAngleStrideDeg', 2);
     cfg.case13 = local_set_default_field(cfg.case13, 'backendMinimumSeparationDeg', 2);

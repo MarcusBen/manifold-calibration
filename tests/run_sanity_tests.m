@@ -37,6 +37,7 @@ local_test_core_source_benchmark_common_snapshots(ctx);
 local_test_core_source_benchmark_parallel_backends(ctx);
 local_test_core_triplet_benchmark(ctx);
 local_test_case13_condition_construction(cfg);
+local_test_case13_backend_family_metadata(cfg);
 local_test_case13_delta_label();
 
 fprintf('All sanity tests PASS.\n');
@@ -474,6 +475,12 @@ local_assert_equal(size(cfg.core.twoSourcePairsDeg, 2), 2, ...
     'core two-source pairs have two columns');
 local_assert_equal(size(cfg.core.threeSourceSetsDeg, 2), 3, ...
     'core three-source sets have three columns');
+local_assert_true(isfield(cfg.core, 'backendNamesBySource'), ...
+    'core backend family defaults exist');
+local_assert_true(any(strcmp(cfg.core.backendNamesBySource.double, 'spice_plus')), ...
+    'core double-source backend family includes SPICE+');
+local_assert_true(any(strcmp(cfg.core.backendNamesBySource.triple, 'triplet_grid_ml')), ...
+    'core triple-source backend family includes triplet Grid ML');
 end
 
 function local_test_core_source_benchmark_common_snapshots(ctx)
@@ -545,6 +552,15 @@ local_assert_true(all(ismember([conditions.numSources], [1 2 3])), ...
 threeSourceIdx = find([conditions.numSources] == 3, 1, 'first');
 local_assert_true(numel(conditions(threeSourceIdx).targetAnglesDeg) == 3, ...
     'case13 three-source targets have three angles');
+end
+
+function local_test_case13_backend_family_metadata(cfg)
+local_assert_true(isfield(cfg.case13, 'backendNamesBySource'), ...
+    'case13 backend family metadata exists');
+local_assert_equal(cfg.case13.backendFamilyMode, 'metadata_only_scalar_audit', ...
+    'case13 backend family mode is metadata-only scalar audit');
+local_assert_equal(cfg.case13.parallelBackendAudit, false, ...
+    'case13 parallel backend audit remains disabled by default');
 end
 
 function local_test_case13_delta_label()
